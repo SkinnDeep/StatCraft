@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StatCraft — The Modern, High-Performance Alternative to Minitab</title>
+  <meta name="description" content="Blazing-fast, native, offline statistical analysis and DOE suite for Windows, macOS, and Linux. Full Minitab parity without the enterprise subscription.">
+  <link rel="icon" type="image/png" href="images/logo.png">
+
+  <!-- Google Fonts & Tailwind CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              accent: '#38bdf8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Google Stitch & Glassmorphic Custom Utilities */
+    body {
+      background-color: #07090e;
+      color: #f1f5f9;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      overflow-x: hidden;
+    }
+    .stitch-glow {
+      background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.18) 0%, rgba(139, 92, 246, 0.08) 35%, transparent 70%);
+    }
+    .stitch-card {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .stitch-card:hover {
+      border-color: rgba(96, 165, 250, 0.35);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px -10px rgba(37, 99, 235, 0.2);
+    }
+    .stitch-badge {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(96, 165, 250, 0.25);
+    }
+    .mesh-gradient {
+      background: radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.15) 0px, transparent 50%),
+                  radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.12) 0px, transparent 50%),
+                  radial-gradient(at 50% 50%, rgba(14, 165, 233, 0.1) 0px, transparent 60%);
+    }
+    .hero-shadow {
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 40px -10px rgba(59, 130, 246, 0.25);
+    }
+  </style>
+</head>
+<body class="min-h-screen selection:bg-brand-500/30 selection:text-white">
+
+  <!-- Ambient Background Glows -->
+  <div class="fixed inset-0 stitch-glow pointer-events-none -z-10"></div>
+  <div class="fixed inset-0 mesh-gradient pointer-events-none -z-10"></div>
+
+  <!-- Navigation -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-[#07090e]/75 border-b border-white/5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between py-4">
+      <div class="flex items-center space-x-3">
+        <img src="images/logo.png" alt="StatCraft Logo" class="w-9 h-9 rounded-xl shadow-lg ring-1 ring-white/10">
+        <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">StatCraft</span>
+        <span id="nav-version" class="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full stitch-badge text-brand-400 font-mono">v104.0.0</span>
+      </div>
+
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+        <a href="#features" class="hover:text-white transition-colors">Features</a>
+        <a href="#showcase" class="hover:text-white transition-colors">Showcase</a>
+        <a href="#comparison" class="hover:text-white transition-colors">Comparison</a>
+        <a href="#install" class="hover:text-white transition-colors">Installation</a>
+        <a href="https://github.com/SkinnDeep/StatCraft/releases" target="_blank" class="hover:text-white transition-colors">Releases</a>
+      </nav>
+
+      <div class="flex items-center space-x-3">
+        <a href="https://github.com/SkinnDeep/StatCraft" target="_blank" class="inline-flex items-center space-x-2 px-3.5 py-2 text-sm font-medium text-slate-300 bg-white/5 hover:bg-white/10 hover:text-white border border-white/10 rounded-xl transition-all">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span class="hidden sm:inline">GitHub</span>
+        </a>
+        <a href="#download" class="inline-flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-lg shadow-blue-500/20 transition-all">
+          <span>Get StatCraft</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="relative pt-20 pb-24 overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      
+      <!-- Announcement Pill -->
+      <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full stitch-badge text-sm text-slate-300 mb-8 border border-blue-500/30">
+        <span class="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-slate-400">Latest Release:</span>
+        <span id="hero-badge-tag" class="font-semibold text-white font-mono">v104.0.0</span>
+        <span class="text-blue-400 font-medium">· Windows, macOS & Linux &rarr;</span>
+      </div>
+
+      <!-- Main Headline -->
+      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.12]">
+        The Modern, Native Statistical Engine for <span class="bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">Engineers & Scientists</span>
+      </h1>
+
+      <p class="mt-6 text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+        Say goodbye to costly subscriptions and slow Java runtimes. StatCraft provides complete Minitab 22 file & formula parity with instant native startup, advanced DOE, and publication-grade charts.
+      </p>
+
+      <!-- Dynamic Download CTA Box -->
+      <div id="download" class="mt-10 flex flex-col items-center justify-center space-y-4">
+        
+        <!-- Primary Dynamic Download Button -->
+        <a id="primary-download-btn" href="https://github.com/SkinnDeep/StatCraft/releases/download/v104.0.0/StatCraft-Setup-v104.0.0-Windows-x64.exe" 
+           class="group relative inline-flex items-center justify-center space-x-3 px-8 py-4.5 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 text-white font-semibold text-lg shadow-2xl shadow-blue-500/35 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ring-1 ring-white/20">
+          <div id="primary-icon" class="w-6 h-6 flex items-center justify-center">
+            <!-- Dynamic Icon (Default Windows) -->
+            <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+          </div>
+          <div class="text-left">
+            <div id="primary-text" class="leading-none text-base sm:text-lg font-bold">Download for Windows</div>
+            <div id="primary-subtext" class="text-xs text-blue-100/80 font-normal mt-0.5">Setup Installer (64-bit) · v104.0.0</div>
+          </div>
+          <svg class="w-5 h-5 ml-1 text-blue-200 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        </a>
+
+        <!-- Detected OS Confirmation & Secondary Platforms -->
+        <div class="flex flex-wrap items-center justify-center gap-2 pt-2 text-xs text-slate-400">
+          <span class="text-slate-500">Other Platforms:</span>
+          
+          <a id="link-win-setup" href="https://github.com/SkinnDeep/StatCraft/releases/download/v104.0.0/StatCraft-Setup-v104.0.0-Windows-x64.exe" 
+             class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/5 transition-all">
+            Windows Setup (.exe)
+          </a>
+          <a id="link-win-portable" href="https://github.com/SkinnDeep/StatCraft/releases/download/v104.0.0/StatCraft-v104.0.0-Windows-x64.exe" 
+             class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/5 transition-all">
+            Windows Portable (.exe)
+          </a>
+          <a id="link-macos" href="https://github.com/SkinnDeep/StatCraft/releases/download/v104.0.0/StatCraft-v104.0.0-macOS.zip" 
+             class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/5 transition-all">
+            macOS Bundle (.zip)
+          </a>
+          <a id="link-linux" href="https://github.com/SkinnDeep/StatCraft/releases/download/v104.0.0/StatCraft-v104.0.0-Linux-x86_64.tar.gz" 
+             class="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/5 transition-all">
+            Linux x86_64 (.tar.gz)
+          </a>
+        </div>
+
+        <!-- Privacy & Integrity Note -->
+        <div class="text-xs text-slate-500 flex items-center space-x-3 pt-1">
+          <span class="flex items-center"><svg class="w-3.5 h-3.5 mr-1 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> 100% Free & Open Source</span>
+          <span>&bull;</span>
+          <span class="flex items-center"><svg class="w-3.5 h-3.5 mr-1 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> 100% Local & Offline</span>
+          <span>&bull;</span>
+          <span class="flex items-center"><svg class="w-3.5 h-3.5 mr-1 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Virus-Total Verified</span>
+        </div>
+      </div>
+
+      <!-- Hero Visual / App Mockup Window -->
+      <div class="mt-16 max-w-5xl mx-auto rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-white/10 to-transparent border border-white/10 hero-shadow">
+        <div class="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800">
+          <!-- Window Header Bar -->
+          <div class="h-10 bg-slate-900/90 px-4 flex items-center justify-between border-b border-slate-800">
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-yellow-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-green-500/80"></span>
+              <span class="ml-3 text-xs font-mono text-slate-400">StatCraft 2026 — Analysis & DOE Suite</span>
+            </div>
+            <div class="text-[11px] font-mono text-slate-500">quiz1.mpx · 2,037 Tests Verified</div>
+          </div>
+          <!-- Hero Screenshot -->
+          <img src="images/hero-preview.png" alt="StatCraft Workspace Preview" class="w-full object-cover">
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Metric Badges Section -->
+  <section class="border-y border-white/5 bg-slate-950/50 py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+        <div>
+          <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">100%</div>
+          <div class="text-sm text-slate-400 mt-1">Minitab Formula Parity</div>
+        </div>
+        <div>
+          <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">2,037</div>
+          <div class="text-sm text-slate-400 mt-1">Passing Unit Tests</div>
+        </div>
+        <div>
+          <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">&lt; 0.2s</div>
+          <div class="text-sm text-slate-400 mt-1">Native Cold Startup</div>
+        </div>
+        <div>
+          <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">$0 / mo</div>
+          <div class="text-sm text-slate-400 mt-1">Zero Cloud Lock-in</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature Grid Section -->
+  <section id="features" class="py-24 relative">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400 font-mono mb-2">Capabilities</h2>
+        <p class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Engineered for Rigorous Industrial & Academic Workflows</p>
+        <p class="mt-4 text-slate-400 text-base">Everything Six Sigma black belts, quality engineers, and research scientists expect from enterprise statistical packages.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        <!-- Card 1 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">Native .MPX & .MTW Compatibility</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Open and save legacy Minitab worksheets, projects, and workbooks seamlessly. Import and export CSV, Excel, Parquet, and ODS formats with zero data loss.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-brand-400 font-mono">
+            <span>Verified against quiz1.mpx corpus</span>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">Full Design of Experiments (DOE)</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Design and analyze 2-level Factorial, Fractional, Response Surface (Central Composite & Box-Behnken), Dynamic Taguchi, Mixture, and Response Optimization.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-purple-400 font-mono">
+            <span>Complete alias & generator structures</span>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">Quality & Capability Sixpack</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Industry-standard SPC control charts (Xbar-R, Xbar-S, I-MR), Normal & Non-normal capability metrics (Cp, Cpk, Pp, Ppk), and Gage R&R ANOVA nested studies.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-emerald-400 font-mono">
+            <span>AIAG & ISO 22514-2 compliant</span>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">High-DPI Interactive Graphics</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Render beautiful interactive 2D and 3D wireframe plots, contour slices, Pareto charts, multi-vari plots, and boxplots. Export instantly to vector PDF, PNG, DOCX, or PPTX.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-sky-400 font-mono">
+            <span>Native vector & print rendering</span>
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">Cross-Platform Native Core</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              StatCraft runs natively on Windows 10/11, macOS (Intel & Apple Silicon M1/M2/M3), and Linux x86_64. No Electron overhead, no web latency, pure Qt responsiveness.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-amber-400 font-mono">
+            <span>Windows, macOS & Linux</span>
+          </div>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="stitch-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-5">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">100% Offline & Private</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Your proprietary research and production data never touches a third-party cloud. Fully air-gapped support with silent MSI/portable enterprise deployments.
+            </p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-rose-400 font-mono">
+            <span>Air-gapped enterprise ready</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Visual Showcase Section -->
+  <section id="showcase" class="py-24 bg-slate-950/70 border-t border-white/5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400 font-mono mb-2">Interactive Showcase</h2>
+        <p class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Precision Analysis in Action</p>
+        <p class="mt-4 text-slate-400 text-base">Explore actual screenshots generated directly from our verified test suite and production builds.</p>
+      </div>
+
+      <!-- Showcase Tabs -->
+      <div class="flex flex-wrap items-center justify-center gap-2 mb-8">
+        <button onclick="switchTab('sixpack')" id="tab-sixpack" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">Capability Sixpack</button>
+        <button onclick="switchTab('surface')" id="tab-surface" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">3D Surface Plot</button>
+        <button onclick="switchTab('contour')" id="tab-contour" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Contour Slices</button>
+        <button onclick="switchTab('optimizer')" id="tab-optimizer" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Response Optimizer</button>
+        <button onclick="switchTab('control')" id="tab-control" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Xbar-R Control Chart</button>
+        <button onclick="switchTab('factorial')" id="tab-factorial" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Factorial Main Effects</button>
+      </div>
+
+      <!-- Showcase Image Display Area -->
+      <div class="max-w-4xl mx-auto rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 p-2 sm:p-4 shadow-2xl">
+        <div class="rounded-xl overflow-hidden bg-black flex items-center justify-center min-h-[380px]">
+          <img id="showcase-img" src="images/sixpack.png" alt="StatCraft Feature Showcase" class="w-full h-auto max-h-[600px] object-contain transition-all duration-300">
+        </div>
+        <div class="mt-4 px-2 flex items-center justify-between text-xs text-slate-400">
+          <span id="showcase-caption" class="font-medium text-slate-300">Process Capability Sixpack: I-MR, Capability Histogram, Normal Probability, and Cp/Cpk metrics.</span>
+          <span class="font-mono text-slate-500">Minitab 22 Verified</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <section id="comparison" class="py-24">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400 font-mono mb-2">Value Comparison</h2>
+        <p class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Why Engineers are Switching to StatCraft</p>
+      </div>
+
+      <div class="stitch-card rounded-2xl overflow-hidden border border-slate-800">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="border-b border-slate-800 bg-slate-900/80">
+                <th class="p-4 sm:p-5 font-bold text-slate-300">Feature</th>
+                <th class="p-4 sm:p-5 font-bold text-brand-400 bg-brand-500/10 border-x border-brand-500/20">StatCraft</th>
+                <th class="p-4 sm:p-5 font-medium text-slate-400">Legacy Minitab&reg;</th>
+                <th class="p-4 sm:p-5 font-medium text-slate-400">Cloud Web Apps</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60 font-medium">
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">License & Cost</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">Free & Open Source ($0)</td>
+                <td class="p-4 sm:p-5 text-slate-400">$2,400+ / user / year</td>
+                <td class="p-4 sm:p-5 text-slate-400">Monthly Subscriptions</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">Cross-Platform OS</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">Windows, macOS & Linux</td>
+                <td class="p-4 sm:p-5 text-slate-400">Windows (Mac via Cloud)</td>
+                <td class="p-4 sm:p-5 text-slate-400">Browser Only</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">Cold Startup Time</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">&lt; 0.2 seconds (Native)</td>
+                <td class="p-4 sm:p-5 text-slate-400">12 – 25 seconds</td>
+                <td class="p-4 sm:p-5 text-slate-400">Network Dependent</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">File Compatibility</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">.MPX, .MTW, CSV, Excel, Parquet</td>
+                <td class="p-4 sm:p-5 text-slate-400">.MPX, .MTW</td>
+                <td class="p-4 sm:p-5 text-slate-400">Proprietary / CSV</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">Offline Air-gapped Use</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">100% Offline (Zero Telemetry)</td>
+                <td class="p-4 sm:p-5 text-slate-400">Requires License Server</td>
+                <td class="p-4 sm:p-5 text-red-400">Impossible (Cloud Only)</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-4 sm:p-5 text-white">DOE & Response Optimizer</td>
+                <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">Included Full Suite</td>
+                <td class="p-4 sm:p-5 text-slate-400">Included</td>
+                <td class="p-4 sm:p-5 text-slate-400">Limited / Paid Add-on</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Installation & Quick Start -->
+  <section id="install" class="py-24 bg-slate-950/60 border-t border-white/5">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400 font-mono mb-2">Quick Start</h2>
+        <p class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Installation in Under 60 Seconds</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- Windows -->
+        <div class="stitch-card rounded-2xl p-6">
+          <div class="flex items-center space-x-3 mb-4">
+            <svg class="w-6 h-6 text-blue-400 fill-current" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+            <h3 class="text-lg font-bold text-white">Windows</h3>
+          </div>
+          <p class="text-slate-400 text-sm mb-4">Run the guided GUI Setup installer or run the standalone portable `.exe` directly without administrative rights.</p>
+          <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 text-xs font-mono text-slate-300">
+            StatCraft-Setup.exe<br>
+            <span class="text-slate-500"># or silent enterprise setup:</span><br>
+            StatCraft-Setup.exe --silent
+          </div>
+        </div>
+
+        <!-- macOS -->
+        <div class="stitch-card rounded-2xl p-6">
+          <div class="flex items-center space-x-3 mb-4">
+            <svg class="w-6 h-6 text-slate-200 fill-current" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.61 1.34-.55.63-1.03 1.67-.9 2.7.99.08 2.02-.51 2.59-1.19z"/></svg>
+            <h3 class="text-lg font-bold text-white">macOS</h3>
+          </div>
+          <p class="text-slate-400 text-sm mb-4">Download the `.zip` archive, extract `StatCraft.app`, and drag it directly to your Applications folder.</p>
+          <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 text-xs font-mono text-slate-300">
+            unzip StatCraft-*-macOS.zip<br>
+            <span class="text-slate-500"># Remove gatekeeper quarantine:</span><br>
+            xattr -cr /Applications/StatCraft.app
+          </div>
+        </div>
+
+        <!-- Linux -->
+        <div class="stitch-card rounded-2xl p-6">
+          <div class="flex items-center space-x-3 mb-4">
+            <svg class="w-6 h-6 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.419 2.865 8.166 6.839 9.489.5.09.682-.218.682-.484 0-.237-.009-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.455-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.004.07 1.532 1.03 1.532 1.03.892 1.529 2.341 1.087 2.912.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.268 2.75 1.026A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.026 2.747-1.026.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .269.18.579.688.481C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"/></svg>
+            <h3 class="text-lg font-bold text-white">Linux</h3>
+          </div>
+          <p class="text-slate-400 text-sm mb-4">Extract the standalone `.tar.gz` archive. Includes desktop icon and launcher for Ubuntu, Debian, Fedora, and Arch.</p>
+          <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 text-xs font-mono text-slate-300">
+            tar -xzvf StatCraft-*.tar.gz<br>
+            cd StatCraft-*<br>
+            ./StatCraft
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-white/5 py-12 bg-slate-950 text-slate-500 text-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div class="flex items-center space-x-3">
+        <img src="images/logo.png" alt="StatCraft" class="w-6 h-6 rounded-lg opacity-80">
+        <span class="text-sm font-bold text-slate-300">StatCraft</span>
+        <span>&bull;</span>
+        <span>Created by <a href="https://github.com/SkinnDeep" target="_blank" class="text-slate-400 hover:text-white transition-colors">SkinnDeep</a></span>
+      </div>
+
+      <div class="flex items-center space-x-6">
+        <a href="https://github.com/SkinnDeep/StatCraft" target="_blank" class="hover:text-white transition-colors">GitHub Repository</a>
+        <a href="https://github.com/SkinnDeep/StatCraft/releases" target="_blank" class="hover:text-white transition-colors">Release Notes</a>
+        <a href="https://github.com/SkinnDeep/StatCraft/issues" target="_blank" class="hover:text-white transition-colors">Issues & Support</a>
+        <a href="https://github.com/SkinnDeep/StatCraft/blob/main/LICENSE" target="_blank" class="hover:text-white transition-colors">MIT License</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Dynamic OS Detection & Showcase Script -->
+  <script>
+    // Asset Mapping & Fallback Registry
+    const BASE_RELEASE_URL = "https://github.com/SkinnDeep/StatCraft/releases/download/";
+    let currentVersion = "v104.0.0";
+    let assets = {
+      win_setup: BASE_RELEASE_URL + "v104.0.0/StatCraft-Setup-v104.0.0-Windows-x64.exe",
+      win_portable: BASE_RELEASE_URL + "v104.0.0/StatCraft-v104.0.0-Windows-x64.exe",
+      macos: BASE_RELEASE_URL + "v104.0.0/StatCraft-v104.0.0-macOS.zip",
+      linux: BASE_RELEASE_URL + "v104.0.0/StatCraft-v104.0.0-Linux-x86_64.tar.gz"
+    };
+
+    // SVGs for OS Icons
+    const ICONS = {
+      windows: `<svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>`,
+      mac: `<svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.61 1.34-.55.63-1.03 1.67-.9 2.7.99.08 2.02-.51 2.59-1.19z"/></svg>`,
+      linux: `<svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.419 2.865 8.166 6.839 9.489.5.09.682-.218.682-.484 0-.237-.009-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.455-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.004.07 1.532 1.03 1.532 1.03.892 1.529 2.341 1.087 2.912.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.268 2.75 1.026A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.026 2.747-1.026.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .269.18.579.688.481C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"/></svg>`
+    };
+
+    // Detect Client OS
+    function detectOS() {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      const platform = (window.navigator?.userAgentData?.platform || window.navigator?.platform || "").toLowerCase();
+
+      if (platform.includes('mac') || userAgent.includes('macintosh') || userAgent.includes('mac os')) {
+        return 'mac';
+      } else if (platform.includes('linux') || userAgent.includes('linux') || userAgent.includes('x11')) {
+        return 'linux';
+      } else {
+        return 'windows';
+      }
+    }
+
+    // Apply Dynamic Button Configuration
+    function applyDynamicDownload(os) {
+      const btn = document.getElementById('primary-download-btn');
+      const icon = document.getElementById('primary-icon');
+      const text = document.getElementById('primary-text');
+      const subtext = document.getElementById('primary-subtext');
+
+      if (os === 'mac') {
+        btn.href = assets.macos;
+        icon.innerHTML = ICONS.mac;
+        text.innerText = "Download for macOS";
+        subtext.innerText = `Universal Bundle (.zip) · ${currentVersion}`;
+      } else if (os === 'linux') {
+        btn.href = assets.linux;
+        icon.innerHTML = ICONS.linux;
+        text.innerText = "Download for Linux";
+        subtext.innerText = `Standalone x86_64 (.tar.gz) · ${currentVersion}`;
+      } else {
+        btn.href = assets.win_setup;
+        icon.innerHTML = ICONS.windows;
+        text.innerText = "Download for Windows";
+        subtext.innerText = `Setup Installer (64-bit) · ${currentVersion}`;
+      }
+    }
+
+    // Fetch Live Latest Release from GitHub API
+    async function syncLatestRelease() {
+      try {
+        const res = await fetch("https://api.github.com/repos/SkinnDeep/StatCraft/releases/latest");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data || !data.tag_name) return;
+
+        currentVersion = data.tag_name;
+        document.getElementById('nav-version').innerText = currentVersion;
+        document.getElementById('hero-badge-tag').innerText = currentVersion;
+
+        // Map asset download URLs
+        data.assets?.forEach(a => {
+          if (a.name.includes("Setup") && a.name.endsWith(".exe")) assets.win_setup = a.browser_download_url;
+          else if (a.name.endsWith(".exe")) assets.win_portable = a.browser_download_url;
+          else if (a.name.endsWith(".zip")) assets.macos = a.browser_download_url;
+          else if (a.name.endsWith(".tar.gz")) assets.linux = a.browser_download_url;
+        });
+
+        // Update secondary buttons
+        document.getElementById('link-win-setup').href = assets.win_setup;
+        document.getElementById('link-win-portable').href = assets.win_portable;
+        document.getElementById('link-macos').href = assets.macos;
+        document.getElementById('link-linux').href = assets.linux;
+
+        // Re-apply to primary button with updated version text
+        applyDynamicDownload(detectOS());
+      } catch (err) {
+        console.warn("Using offline fallback release links:", err);
+      }
+    }
+
+    // Interactive Showcase Gallery Tab Switcher
+    const showcaseData = {
+      sixpack: {
+        img: 'images/sixpack.png',
+        caption: 'Process Capability Sixpack: I-MR Chart, Capability Histogram with specs, Normal Probability Plot, and detailed within/overall capability indices (Cp, Cpk, Pp, Ppk).'
+      },
+      surface: {
+        img: 'images/surface.png',
+        caption: '3D Response Surface: Interactive vector rendering visualizing factor interactions, stationary points, and response curvature.'
+      },
+      contour: {
+        img: 'images/contour.png',
+        caption: '2D Contour Slices: Multi-factor gradient contours with iso-response curves and customizable hold levels.'
+      },
+      optimizer: {
+        img: 'images/optimizer.png',
+        caption: 'Multi-Response Optimizer: Composite desirability analysis ($D$) calculating global optimal factor settings.'
+      },
+      control: {
+        img: 'images/control-chart.png',
+        caption: 'Statistical Process Control: Xbar-R chart with automated zone detection, Nelson test rules, and out-of-control point flags.'
+      },
+      factorial: {
+        img: 'images/doe-factorial.png',
+        caption: 'Factorial DOE Effects: Main effects and two-way interaction plots with grand mean references and full ANOVA decomposition.'
+      }
+    };
+
+    function switchTab(key) {
+      const data = showcaseData[key];
+      if (!data) return;
+
+      const img = document.getElementById('showcase-img');
+      const caption = document.getElementById('showcase-caption');
+
+      img.style.opacity = '0';
+      setTimeout(() => {
+        img.src = data.img;
+        caption.innerText = data.caption;
+        img.style.opacity = '1';
+      }, 150);
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = 'tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all';
+      });
+      const activeBtn = document.getElementById('tab-' + key);
+      if (activeBtn) {
+        activeBtn.className = 'tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all';
+      }
+    }
+
+    // Initialize on DOM load
+    document.addEventListener('DOMContentLoaded', () => {
+      const detected = detectOS();
+      applyDynamicDownload(detected);
+      syncLatestRelease();
+    });
+  </script>
+</body>
+</html>
