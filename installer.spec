@@ -1,20 +1,11 @@
 from pathlib import Path
 root = Path(SPECPATH)
-workspace = root.parent.parent
 
 datas = [
     (str(root / 'StatCraft.ico'), '.'),
     (str(root / 'StatCraft.png'), '.'),
     (str(root / 'notices'), 'notices')
 ]
-
-# Bundle StatCraft.exe directly into the installer for complete offline installation
-app_exe = workspace / 'outputs' / 'StatCraft.exe'
-if not app_exe.exists():
-    app_exe = workspace / 'work' / 'statcraft-modern-next' / 'StatCraft.exe'
-
-if app_exe.exists():
-    datas.append((str(app_exe), '.'))
 
 a = Analysis(
     [str(root / 'installer_main.py')],

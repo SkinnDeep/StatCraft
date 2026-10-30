@@ -65,29 +65,12 @@ def get_app_icon() -> QIcon:
 
 
 def find_source_binary() -> Path | None:
-    """Find the source StatCraft.exe binary bundled or adjacent to the setup executable."""
-    # 1. Check if bundled inside PyInstaller single-file package (self-contained offline installer)
-    if hasattr(sys, "_MEIPASS"):
-        bundled = Path(sys._MEIPASS) / "StatCraft.exe"
-        if bundled.exists():
-            return bundled
-
-    # 2. Check directory containing the installer executable
+    """Find adjacent StatCraft.exe binary if present, otherwise return None to pull from online."""
     current_exe_dir = Path(sys.executable).resolve().parent
-    sibling = current_exe_dir / "StatCraft.exe"
-    if sibling.exists():
-        return sibling
-
-    # 3. Check repository outputs folder
-    repo_outputs = _root.parent.parent / "outputs" / "StatCraft.exe"
-    if repo_outputs.exists():
-        return repo_outputs
-
-    # 4. Check work/statcraft-modern-next/StatCraft.exe
-    work_out = _root.parent / "statcraft-modern-next" / "StatCraft.exe"
-    if work_out.exists():
-        return work_out
-
+    for name in ["StatCraft.exe", f"StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe"]:
+        sibling = current_exe_dir / name
+        if sibling.exists():
+            return sibling
     return None
 
 
@@ -112,9 +95,9 @@ class InstallWorker(QThread):
             src_exe = find_source_binary()
             target_exe = self.target_dir / "StatCraft.exe"
 
-            if src_exe and src_exe.exists():
+            if src_exe and src_exe.exists() and src_exe != target_exe:
                 size_mb = max(1, src_exe.stat().st_size // (1024 * 1024))
-                self.progress_changed.emit(45, f"Installing StatCraft binary ({size_mb} MB)...")
+                self.progress_changed.emit(45, f"Installing local StatCraft binary ({size_mb} MB)...")
                 if target_exe.exists():
                     try:
                         target_exe.unlink()
@@ -122,13 +105,59 @@ class InstallWorker(QThread):
                         pass
                 shutil.copy2(src_exe, target_exe)
             else:
-                self.progress_changed.emit(40, "Downloading StatCraft from release feed...")
-                info = check_for_updates()
-                dl_url = info.get("download_url")
+                self.progress_changed.emit(25, "Connecting to GitHub release server...")
+                info = check_for_updates(repo=DEFAULT_GITHUB_REPO)
+                dl_url = info.get("app_download_url") or info.get("download_url")
                 if not dl_url:
-                    self.finished.emit(False, "Could not find local or remote StatCraft binary to install.")
+                    dl_url = f"https://github.com/{DEFAULT_GITHUB_REPO}/releases/download/v{STATCRAFT_VERSION}/StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe"
+
+                self.progress_changed.emit(30, f"Downloading StatCraft from GitHub...")
+
+                def on_download_progress(downloaded: int, total: int):
+                    if total > 0:
+                        pct = int((downloaded / total) * 55)
+                        d_mb = downloaded / (1024 * 1024)
+                        t_mb = total / (1024 * 1024)
+                        self.progress_changed.emit(30 + pct, f"Downloading StatCraft ({d_mb:.1f} MB / {t_mb:.1f} MB)...")
+                    else:
+                        d_mb = downloaded / (1024 * 1024)
+                        self.progress_changed.emit(45, f"Downloading StatCraft ({d_mb:.1f} MB)...")
+
+                download_succeeded = False
+                candidate_urls = [
+                    dl_url,
+                    f"https://github.com/{DEFAULT_GITHUB_REPO}/releases/download/v{STATCRAFT_VERSION}/StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe",
+                    f"https://github.com/{DEFAULT_GITHUB_REPO}/releases/download/v{STATCRAFT_VERSION}/StatCraft.exe"
+                ]
+
+                # De-duplicate while preserving order
+                seen = set()
+                urls_to_try = []
+                for u in candidate_urls:
+                    if u and u not in seen:
+                        seen.add(u)
+                        urls_to_try.append(u)
+
+                last_err = ""
+                for u in urls_to_try:
+                    try:
+                        self.progress_changed.emit(32, f"Connecting to {u}...")
+                        download_file(u, target_exe, progress_callback=on_download_progress)
+                        download_succeeded = True
+                        break
+                    except Exception as exc:
+                        last_err = str(exc)
+
+                if not download_succeeded or not target_exe.exists():
+                    msg = (
+                        f"Could not download StatCraft binary from GitHub.\n\n"
+                        f"Last error: {last_err}\n\n"
+                        f"Please verify that 'StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe' is uploaded to the release:\n"
+                        f"https://github.com/{DEFAULT_GITHUB_REPO}/releases/tag/v{STATCRAFT_VERSION}\n\n"
+                        f"Or place 'StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe' in the same folder as this setup tool."
+                    )
+                    self.finished.emit(False, msg)
                     return
-                download_file(dl_url, target_exe)
 
             self.progress_changed.emit(70, "Writing installation and version metadata...")
             write_install_metadata(

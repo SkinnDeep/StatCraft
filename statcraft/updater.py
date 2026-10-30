@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 STATCRAFT_VERSION = "104.0.0"
-DEFAULT_GITHUB_REPO = "statcraft/statcraft"
+DEFAULT_GITHUB_REPO = "SkinnDeep/StatCraft"
 
 
 def parse_version(ver_str: str) -> tuple[int, ...]:
@@ -161,7 +161,9 @@ def check_for_updates(
             elif name.endswith(".exe"):
                 exe_url = asset.get("browser_download_url")
 
-        res["download_url"] = setup_url or exe_url or data.get("download_url")
+        res["setup_download_url"] = setup_url or f"https://github.com/{repo}/releases/download/v{latest_ver}/StatCraft-Setup-v{latest_ver}-Windows-x64.exe"
+        res["app_download_url"] = exe_url or f"https://github.com/{repo}/releases/download/v{latest_ver}/StatCraft-v{latest_ver}-Windows-x64.exe"
+        res["download_url"] = res["app_download_url"] or setup_url or data.get("download_url")
 
         if compare_versions(cur_v, latest_ver) < 0:
             res["update_available"] = True
