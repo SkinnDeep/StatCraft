@@ -1120,6 +1120,12 @@ class ModernWindow(QMainWindow):
         if not hasattr(self,'zoom_slider'):return
         from .output_zoom import OutputZoomView
         page=self.result_tabs.currentWidget()
+        if isinstance(page, OutputZoomView):
+            from .graph_frame import GraphFrame
+            frame = page.findChild(GraphFrame)
+            if frame is not None:
+                self._active_graph_frame = frame
+                self._active_chart_widget = getattr(frame, 'chart', None)
         percent=page.percent if isinstance(page,OutputZoomView) else self._output_zoom_levels.get(self._zoom_key(),100) if self.selected_entry else self._worksheet_zoom
         if page is getattr(self,'_report_pad_editor',None):percent=self._output_zoom_levels.get(('__report_pad__','ReportPad'),100)
         if isinstance(page,QPlainTextEdit) and (self.selected_entry is not None or page is getattr(self,'_report_pad_editor',None)):
@@ -1383,8 +1389,25 @@ class ModernWindow(QMainWindow):
                 node.setFont(0, normal_font)
                 node.setToolTip(0, entry.get("time", ""))
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
-                if entry is self.selected_entry:
+                if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
+                graphs = entry.get("result", {}).get("graphs", [])
+                if len(graphs) > 1:
+                    has_text = bool(entry.get("result", {}).get("text", "").strip())
+                    if has_text:
+                        r_node = QTreeWidgetItem(node, ["Report"])
+                        r_node.setFont(0, normal_font)
+                        r_node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "report", "entry": entry})
+                        if entry is self.selected_entry and getattr(self, '_selected_nav_kind', None) == "report":
+                            selected_tree_item = r_node
+                    for g_idx, g in enumerate(graphs):
+                        g_title = g.get("title") or f"Graph {g_idx + 1}"
+                        g_node = QTreeWidgetItem(node, [g_title])
+                        g_node.setFont(0, normal_font)
+                        g_node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "graph", "entry": entry, "graph_index": g_idx})
+                        if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) == g_idx:
+                            selected_tree_item = g_node
+                    node.setExpanded(True)
         else:
             for entry in entries:
                 stale = self.presenter.result_stale(entry, cache)
@@ -1393,8 +1416,25 @@ class ModernWindow(QMainWindow):
                 node.setFont(0, normal_font)
                 node.setToolTip(0, (entry.get("worksheet_name") or sheet.name) + " · " + entry.get("time", ""))
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
-                if entry is self.selected_entry:
+                if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
+                graphs = entry.get("result", {}).get("graphs", [])
+                if len(graphs) > 1:
+                    has_text = bool(entry.get("result", {}).get("text", "").strip())
+                    if has_text:
+                        r_node = QTreeWidgetItem(node, ["Report"])
+                        r_node.setFont(0, normal_font)
+                        r_node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "report", "entry": entry})
+                        if entry is self.selected_entry and getattr(self, '_selected_nav_kind', None) == "report":
+                            selected_tree_item = r_node
+                    for g_idx, g in enumerate(graphs):
+                        g_title = g.get("title") or f"Graph {g_idx + 1}"
+                        g_node = QTreeWidgetItem(node, [g_title])
+                        g_node.setFont(0, normal_font)
+                        g_node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "graph", "entry": entry, "graph_index": g_idx})
+                        if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) == g_idx:
+                            selected_tree_item = g_node
+                    node.setExpanded(True)
         if selected_tree_item is not None:
             self.navigator.setCurrentItem(selected_tree_item)
 
@@ -1508,8 +1548,20 @@ class ModernWindow(QMainWindow):
     def _navigate(self, item, column):
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(data, dict): return
-        if data["kind"] == "sheet": self._select_sheet(data["index"])
-        else: self.show_result(data["entry"])
+        if data["kind"] == "sheet":
+            self._select_sheet(data["index"])
+        elif data["kind"] == "graph":
+            self._selected_graph_index = data.get("graph_index", 0)
+            self._selected_nav_kind = "graph"
+            self.show_result(data["entry"], target_graph_index=self._selected_graph_index)
+        elif data["kind"] == "report":
+            self._selected_graph_index = None
+            self._selected_nav_kind = "report"
+            self.show_result(data["entry"], target_tab="Report")
+        else:
+            self._selected_graph_index = None
+            self._selected_nav_kind = None
+            self.show_result(data["entry"])
 
     def _page(self, delta):
         self._commit_editor(); self.page = max(0, self.page + delta); self.refresh()
@@ -3765,8 +3817,17 @@ class ModernWindow(QMainWindow):
         table.setMaximumHeight(min(390, max(95, 40 + len(rows) * 26)))
         return table
 
-    def show_result(self, entry):
+    def show_result(self, entry, target_graph_index=None, target_tab=None):
         if self.graph_options_pane.bound_entry is not entry and not self.graph_options_pane.flush():return
+        if target_graph_index is not None:
+            self._selected_graph_index = target_graph_index
+            self._selected_nav_kind = "graph"
+        elif target_tab == "Report":
+            self._selected_graph_index = None
+            self._selected_nav_kind = "report"
+        elif getattr(self, "selected_entry", None) is not entry:
+            self._selected_graph_index = None
+            self._selected_nav_kind = None
         self._workspace.before_show(entry)
         self.selected_entry = entry
         self.output_header_bar.setVisible(False)
@@ -3920,196 +3981,260 @@ class ModernWindow(QMainWindow):
         stage_layout.addWidget(content); stage_layout.addStretch()
         scroll=OutputZoomView(stage); self.result_tabs.addTab(scroll, "Report")
         scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(),100))
+        chosen_tab = 0
         from .modern_charts import ChartWidget, supported
         if supported(entry):
             if result.get('analysis') == 'native_saved_output':
                 from .native_output_chart import NativeOutputChart
-                chart = NativeOutputChart(entry)
-            elif result.get('analysis') in ('mixture_multi_optimization','mixture_multi_evaluation'):
-                from .mixture_multi_chart import MixtureMultiChart
-                chart=MixtureMultiChart(entry)
-                chart.settingSelected.connect(lambda values,e=entry:self._select_mixture_profile(e,values))
-            elif result.get('analysis') == 'mixture_joint_optimization':
-                from .mixture_joint_chart import MixtureJointChart
-                chart=MixtureJointChart(entry)
-            elif result.get('analysis') in ('mixture_contour','mixture_optimization'):
-                from .mixture_exploration_chart import MixtureExplorationChart
-                chart=MixtureExplorationChart(entry)
-            elif result.get('analysis') == 'dynamic_taguchi_analysis':
-                from .dynamic_taguchi_chart import DynamicTaguchiWidget
-                chart=DynamicTaguchiWidget(entry)
-            elif result.get('analysis') == 'taguchi_analysis':
-                from .doe_analysis_charts import TaguchiEffectsWidget
-                chart=TaguchiEffectsWidget(entry)
-            elif result.get('analysis') == 'multiple_capability':
-                from .multiple_capability_chart import MultipleCapabilityChartWidget
-                chart = MultipleCapabilityChartWidget(entry)
-            elif result.get('graph') in ('panel_graph','graph_layout'):
-                from .graph_composite import GraphCompositeWidget
-                chart=GraphCompositeWidget(entry)
-            elif result.get('graph') == 'expanded':
-                from .modern_expanded_charts import ExpandedChartWidget
-                chart = ExpandedChartWidget(entry)
-            elif result.get('graph') == 'capability_sixpack' or result.get('analysis') == 'capability_sixpack_normal':
-                from .sixpack_chart import CapabilitySixpackWidget
-                chart = CapabilitySixpackWidget(entry)
-            elif result.get('graph') in ('capability_nonparametric', 'capability_automated') or result.get('analysis') in ('capability_nonparametric', 'capability_automated'):
-                from .capability_automated_chart import NonparametricCapabilityPlotWidget
-                chart = NonparametricCapabilityPlotWidget(entry)
-            elif result.get('graph') == 'reliability_distribution' or result.get('analysis') == 'reliability_distribution':
-                from .reliability_chart import ReliabilityPlotWidget
-                chart = ReliabilityPlotWidget(entry)
-            elif result.get('graph') == 'capability_nonnormal' or result.get('analysis') == 'capability_nonnormal':
-                from .capability_nonnormal_chart import NonnormalCapabilityPlotWidget
-                chart = NonnormalCapabilityPlotWidget(entry)
-            elif result.get('graph') == 'acceptance_control' or result.get('analysis') == 'acceptance_control':
-                from .acceptance_chart import AcceptanceControlChartWidget
-                chart = AcceptanceControlChartWidget(entry)
-            elif result.get('graph') == 'capability' or result.get('analysis') == 'capability' or 'observed_perf' in result:
-                from .capability_chart import CapabilityPlotWidget
-                chart = CapabilityPlotWidget(entry)
-            elif result.get('graph') == 'imr_chart' or result.get('analysis') == 'imr_control':
-                from .imr_chart import IMRChartWidget
-                chart = IMRChartWidget(entry)
-            elif result.get('graph') == 'attribute_control' or result.get('analysis') == 'attribute_control':
-                from .attribute_control_chart import AttributeControlChartWidget
-                chart = AttributeControlChartWidget(entry)
-            elif result.get('graph') == 'time_weighted_control' or result.get('analysis') == 'time_weighted_control':
-                from .time_weighted_control_chart import TimeWeightedControlChartWidget
-                chart = TimeWeightedControlChartWidget(entry)
-            elif result.get('graph') == 'rare_event_control' or result.get('analysis') == 'rare_event_control':
-                from .rare_event_control_chart import RareEventControlChartWidget
-                chart = RareEventControlChartWidget(entry)
-            elif result.get('graph') == 'multivariate_control' or result.get('analysis') == 'multivariate_control':
-                from .multivariate_control_chart import MultivariateControlChartWidget
-                chart = MultivariateControlChartWidget(entry)
-            elif result.get('graph') == 'pareto_chart' or result.get('analysis') == 'pareto_chart':
-                from .pareto_chart import ParetoChartWidget
-                chart = ParetoChartWidget(entry)
-            elif result.get('analysis') == 'nested_gage_rr':
-                from .msa_charts import NestedGageRRChartWidget
-                chart = NestedGageRRChartWidget(entry)
-            elif result.get('analysis') == 'gage_linearity_and_bias':
-                from .msa_charts import GageLinearityChartWidget
-                chart = GageLinearityChartWidget(entry)
-            elif result.get('analysis') == 'attribute_agreement_analysis':
-                from .msa_charts import AttributeAgreementChartWidget
-                chart = AttributeAgreementChartWidget(entry)
-            elif result.get('graph') == 'type1_gage' or result.get('analysis') == 'type1_gage':
-                from .type1_gage_chart import Type1GageChartWidget
-                chart = Type1GageChartWidget(entry)
-            elif result.get('graph') == 'attribute_capability':
-                from .attribute_capability_chart import AttributeCapabilityChartWidget
-                chart = AttributeCapabilityChartWidget(entry)
-            elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
-                from .tolerance_intervals_chart import ToleranceIntervalChartWidget
-                chart = ToleranceIntervalChartWidget(entry)
-            elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation'):
-                from .time_series_chart import TimeSeriesChartWidget
-                chart = TimeSeriesChartWidget(entry)
-            elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence'):
-                from .multivariate_chart import MultivariateChartWidget
-                chart = MultivariateChartWidget(entry)
-            elif result.get('analysis') in ('mann_whitney', 'kruskal_wallis', 'moods_median', 'runs_test'):
-                from .nonparametrics_chart import NonparametricChartWidget
-                chart = NonparametricChartWidget(entry)
-            elif result.get('analysis') in ('one_sample_equivalence', 'two_sample_equivalence', 'paired_equivalence', 'crossover_equivalence'):
-                from .equivalence_chart import EquivalenceChartWidget
-                chart = EquivalenceChartWidget(entry)
-            elif result.get('analysis') in ('one_sample_z_power', 'one_sample_t_power', 'two_sample_t_power', 'paired_t_power', 'one_proportion_power', 'two_proportions_power', 'oneway_anova_power', 'factorial_power'):
-                from .power_chart import PowerCurveWidget
-                chart = PowerCurveWidget(entry)
-            elif result.get('analysis') == 'multivari':
-                from .multivari_chart import MultiVariChartWidget
-                chart = MultiVariChartWidget(entry)
-            elif result.get('analysis') == 'outlier_test':
-                from .outlier_test_chart import OutlierTestChartWidget
-                chart = OutlierTestChartWidget(entry)
-            elif result.get('analysis') == 'graphical_summary':
-                from .graphical_summary_chart import GraphicalSummaryChartWidget
-                chart = GraphicalSummaryChartWidget(entry)
-            elif result.get('analysis') == 'run_chart':
-                from .run_chart_plot import RunChartWidget
-                chart = RunChartWidget(entry)
-            elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
-                from .tables_chart import TablesChartWidget
-                chart = TablesChartWidget(entry)
+                from .graph_frame import GraphFrame
+                from .output_zoom import OutputZoomView
+                native_graphs = result.get('graphs', []) or [{}]
+                graph_tab_indices = []
+                for g_idx, g in enumerate(native_graphs):
+                    chart = NativeOutputChart(entry, graph_index=g_idx)
+                    chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    chart.customContextMenuRequested.connect(lambda pos, c=chart: self._show_output_context_menu(c.mapToGlobal(pos)) if not (getattr(c, '_has_3d_panel', lambda: False)()) else None)
+                    if g_idx == 0:
+                        self._active_chart_widget = chart
+
+                    graph_stage = QWidget(); graph_stage.setObjectName("outputPane")
+                    graph_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    graph_stage.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_stage.mapToGlobal(pos)))
+                    graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(8, 6, 8, 6); graph_stage_layout.setSpacing(6)
+                    graph_card = QFrame(); graph_card.setObjectName("resultCard")
+                    graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
+                    graph_card_layout = QVBoxLayout(graph_card); graph_card_layout.setContentsMargins(8, 6, 8, 6); graph_card_layout.setSpacing(6)
+
+                    graph_frame = GraphFrame(chart, entry)
+                    graph_frame.export_hidden.extend(getattr(chart, "export_controls", []))
+                    if g_idx == 0:
+                        self._active_graph_frame = graph_frame
+
+                    chart.graphSelected.connect(lambda index, e=entry, c=chart: self._native_graph_switched(e, c, index))
+                    def _safe_update_camera(camera, e=entry, c=chart):
+                        try:
+                            safe_cam = {
+                                'azimuth': max(-180.0, min(180.0, float(camera.get('azimuth', -35.0)))),
+                                'elevation': max(-89.0, min(89.0, float(camera.get('elevation', 25.0)))),
+                                'zoom': max(0.4, min(2.5, float(camera.get('zoom', 1.0)))),
+                            }
+                            if 'pan_x' in camera and isinstance(camera['pan_x'], (int, float)):
+                                safe_cam['pan_x'] = float(camera['pan_x'])
+                            if 'pan_y' in camera and isinstance(camera['pan_y'], (int, float)):
+                                safe_cam['pan_y'] = float(camera['pan_y'])
+                            self.presenter.update_native_graph_view(e, c.graph_index, {'camera': safe_cam})
+                        except Exception:
+                            pass
+                    chart.cameraChanged.connect(_safe_update_camera)
+                    if entry.get('native_model', {}).get('supported'):
+                        refit = QToolButton(); refit.setText('Refit in StatCraft'); refit.setObjectName('nativeRefitModel')
+                        refit.clicked.connect(lambda checked=False, e=entry: self.refit_native_model(e))
+                        graph_frame.header.addWidget(refit); graph_frame.export_hidden.append(refit)
+                    chart.objectSelected.connect(lambda target: self._graph_object_selected(target))
+                    chart.objectActivated.connect(lambda target, e=entry: self._activate_graph_object(e, target))
+                    chart.brushRowsSelected.connect(lambda rows, e=entry: self._receive_brushed_rows(e, rows))
+                    graph_frame.annotationActivated.connect(lambda name, e=entry: self.edit_graph_annotation(e, name))
+
+                    dropdown_btn = QToolButton(); dropdown_btn.setObjectName("outputDropdownBtn")
+                    dropdown_btn.setText("▾")
+                    dropdown_btn.setToolTip("Graph / Output Options")
+                    dropdown_btn.clicked.connect(lambda b=dropdown_btn: self._show_output_context_menu(b.mapToGlobal(b.rect().bottomLeft())))
+                    graph_frame.header.addWidget(dropdown_btn)
+                    graph_frame.export_hidden.append(dropdown_btn)
+
+                    graph_card_layout.addWidget(graph_frame, 1)
+                    graph_stage_layout.addWidget(graph_card, 1)
+
+                    graph_scroll = OutputZoomView(graph_stage)
+                    g_title = g.get('title') or (f"Graph {g_idx + 1}" if len(native_graphs) > 1 else "Graph")
+                    short_title = g_title.split(" for ")[0] if " for " in g_title else g_title
+                    tab_idx = self.result_tabs.addTab(graph_scroll, short_title)
+                    self.result_tabs.setTabToolTip(tab_idx, g_title)
+                    graph_scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(), 100))
+                    graph_tab_indices.append(tab_idx)
+
+                has_report_text = bool(result.get('text', '').strip())
+                if target_graph_index is not None and 0 <= target_graph_index < len(graph_tab_indices):
+                    chosen_tab = graph_tab_indices[target_graph_index]
+                elif target_tab == "Report":
+                    chosen_tab = 0
+                elif not has_report_text and graph_tab_indices:
+                    chosen_tab = graph_tab_indices[0]
+                elif has_report_text:
+                    chosen_tab = 0
+                elif graph_tab_indices:
+                    chosen_tab = graph_tab_indices[0]
+                else:
+                    chosen_tab = 0
+                self.result_tabs.setCurrentIndex(chosen_tab)
+                self._sync_output_zoom()
             else:
-                chart = ChartWidget(entry)
-            if result.get('graph')=='categorical_points':chart.setMinimumHeight(len(chart.panels)*350+36)
-            elif result.get('graph')=='dotplot_graphs':
-                from .dotplot_chart import panel_height
-                chart.setMinimumHeight(sum(panel_height(panel) for panel in chart.panels)+36)
-            elif result.get('graph')=='boxplot_graphs':chart.setMinimumHeight(len(chart.panels)*330+36)
-            elif result.get('analysis')=='mixture_joint_optimization':chart.setMinimumHeight(chart.minimumHeight())
-            elif result.get('analysis')=='response_optimizer':chart.setMinimumHeight(max(440,130+(1+len(result.get('predictions',[])))*130))
-            elif result.get('analysis')=='binary_logistic':chart.setMinimumHeight(720)
-            elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
-            elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
-            elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
-            elif result.get('graph') not in ('panel_graph','graph_layout'):
-                chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
-            chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            chart.customContextMenuRequested.connect(lambda pos, c=chart: self._show_output_context_menu(c.mapToGlobal(pos)) if not (getattr(c, '_has_3d_panel', lambda: False)()) else None)
-            self._active_chart_widget = chart
+                if result.get('analysis') in ('mixture_multi_optimization','mixture_multi_evaluation'):
+                    from .mixture_multi_chart import MixtureMultiChart
+                    chart=MixtureMultiChart(entry)
+                    chart.settingSelected.connect(lambda values,e=entry:self._select_mixture_profile(e,values))
+                elif result.get('analysis') == 'mixture_joint_optimization':
+                    from .mixture_joint_chart import MixtureJointChart
+                    chart=MixtureJointChart(entry)
+                elif result.get('analysis') in ('mixture_contour','mixture_optimization'):
+                    from .mixture_exploration_chart import MixtureExplorationChart
+                    chart=MixtureExplorationChart(entry)
+                elif result.get('analysis') == 'dynamic_taguchi_analysis':
+                    from .dynamic_taguchi_chart import DynamicTaguchiWidget
+                    chart=DynamicTaguchiWidget(entry)
+                elif result.get('analysis') == 'taguchi_analysis':
+                    from .doe_analysis_charts import TaguchiEffectsWidget
+                    chart=TaguchiEffectsWidget(entry)
+                elif result.get('analysis') == 'multiple_capability':
+                    from .multiple_capability_chart import MultipleCapabilityChartWidget
+                    chart = MultipleCapabilityChartWidget(entry)
+                elif result.get('graph') in ('panel_graph','graph_layout'):
+                    from .graph_composite import GraphCompositeWidget
+                    chart=GraphCompositeWidget(entry)
+                elif result.get('graph') == 'expanded':
+                    from .modern_expanded_charts import ExpandedChartWidget
+                    chart = ExpandedChartWidget(entry)
+                elif result.get('graph') == 'capability_sixpack' or result.get('analysis') == 'capability_sixpack_normal':
+                    from .sixpack_chart import CapabilitySixpackWidget
+                    chart = CapabilitySixpackWidget(entry)
+                elif result.get('graph') in ('capability_nonparametric', 'capability_automated') or result.get('analysis') in ('capability_nonparametric', 'capability_automated'):
+                    from .capability_automated_chart import NonparametricCapabilityPlotWidget
+                    chart = NonparametricCapabilityPlotWidget(entry)
+                elif result.get('graph') == 'reliability_distribution' or result.get('analysis') == 'reliability_distribution':
+                    from .reliability_chart import ReliabilityPlotWidget
+                    chart = ReliabilityPlotWidget(entry)
+                elif result.get('graph') == 'capability_nonnormal' or result.get('analysis') == 'capability_nonnormal':
+                    from .capability_nonnormal_chart import NonnormalCapabilityPlotWidget
+                    chart = NonnormalCapabilityPlotWidget(entry)
+                elif result.get('graph') == 'acceptance_control' or result.get('analysis') == 'acceptance_control':
+                    from .acceptance_chart import AcceptanceControlChartWidget
+                    chart = AcceptanceControlChartWidget(entry)
+                elif result.get('graph') == 'capability' or result.get('analysis') == 'capability' or 'observed_perf' in result:
+                    from .capability_chart import CapabilityPlotWidget
+                    chart = CapabilityPlotWidget(entry)
+                elif result.get('graph') == 'imr_chart' or result.get('analysis') == 'imr_control':
+                    from .imr_chart import IMRChartWidget
+                    chart = IMRChartWidget(entry)
+                elif result.get('graph') == 'attribute_control' or result.get('analysis') == 'attribute_control':
+                    from .attribute_control_chart import AttributeControlChartWidget
+                    chart = AttributeControlChartWidget(entry)
+                elif result.get('graph') == 'time_weighted_control' or result.get('analysis') == 'time_weighted_control':
+                    from .time_weighted_control_chart import TimeWeightedControlChartWidget
+                    chart = TimeWeightedControlChartWidget(entry)
+                elif result.get('graph') == 'rare_event_control' or result.get('analysis') == 'rare_event_control':
+                    from .rare_event_control_chart import RareEventControlChartWidget
+                    chart = RareEventControlChartWidget(entry)
+                elif result.get('graph') == 'multivariate_control' or result.get('analysis') == 'multivariate_control':
+                    from .multivariate_control_chart import MultivariateControlChartWidget
+                    chart = MultivariateControlChartWidget(entry)
+                elif result.get('graph') == 'pareto_chart' or result.get('analysis') == 'pareto_chart':
+                    from .pareto_chart import ParetoChartWidget
+                    chart = ParetoChartWidget(entry)
+                elif result.get('analysis') == 'nested_gage_rr':
+                    from .msa_charts import NestedGageRRChartWidget
+                    chart = NestedGageRRChartWidget(entry)
+                elif result.get('analysis') == 'gage_linearity_and_bias':
+                    from .msa_charts import GageLinearityChartWidget
+                    chart = GageLinearityChartWidget(entry)
+                elif result.get('analysis') == 'attribute_agreement_analysis':
+                    from .msa_charts import AttributeAgreementChartWidget
+                    chart = AttributeAgreementChartWidget(entry)
+                elif result.get('graph') == 'type1_gage' or result.get('analysis') == 'type1_gage':
+                    from .type1_gage_chart import Type1GageChartWidget
+                    chart = Type1GageChartWidget(entry)
+                elif result.get('graph') == 'attribute_capability':
+                    from .attribute_capability_chart import AttributeCapabilityChartWidget
+                    chart = AttributeCapabilityChartWidget(entry)
+                elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
+                    from .tolerance_intervals_chart import ToleranceIntervalChartWidget
+                    chart = ToleranceIntervalChartWidget(entry)
+                elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation'):
+                    from .time_series_chart import TimeSeriesChartWidget
+                    chart = TimeSeriesChartWidget(entry)
+                elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence'):
+                    from .multivariate_chart import MultivariateChartWidget
+                    chart = MultivariateChartWidget(entry)
+                elif result.get('analysis') in ('mann_whitney', 'kruskal_wallis', 'moods_median', 'runs_test'):
+                    from .nonparametrics_chart import NonparametricChartWidget
+                    chart = NonparametricChartWidget(entry)
+                elif result.get('analysis') in ('one_sample_equivalence', 'two_sample_equivalence', 'paired_equivalence', 'crossover_equivalence'):
+                    from .equivalence_chart import EquivalenceChartWidget
+                    chart = EquivalenceChartWidget(entry)
+                elif result.get('analysis') in ('one_sample_z_power', 'one_sample_t_power', 'two_sample_t_power', 'paired_t_power', 'one_proportion_power', 'two_proportions_power', 'oneway_anova_power', 'factorial_power'):
+                    from .power_chart import PowerCurveWidget
+                    chart = PowerCurveWidget(entry)
+                elif result.get('analysis') == 'multivari':
+                    from .multivari_chart import MultiVariChartWidget
+                    chart = MultiVariChartWidget(entry)
+                elif result.get('analysis') == 'outlier_test':
+                    from .outlier_test_chart import OutlierTestChartWidget
+                    chart = OutlierTestChartWidget(entry)
+                elif result.get('analysis') == 'graphical_summary':
+                    from .graphical_summary_chart import GraphicalSummaryChartWidget
+                    chart = GraphicalSummaryChartWidget(entry)
+                elif result.get('analysis') == 'run_chart':
+                    from .run_chart_plot import RunChartWidget
+                    chart = RunChartWidget(entry)
+                elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
+                    from .tables_chart import TablesChartWidget
+                    chart = TablesChartWidget(entry)
+                else:
+                    chart = ChartWidget(entry)
+                if result.get('graph')=='categorical_points':chart.setMinimumHeight(len(chart.panels)*350+36)
+                elif result.get('graph')=='dotplot_graphs':
+                    from .dotplot_chart import panel_height
+                    chart.setMinimumHeight(sum(panel_height(panel) for panel in chart.panels)+36)
+                elif result.get('graph')=='boxplot_graphs':chart.setMinimumHeight(len(chart.panels)*330+36)
+                elif result.get('analysis')=='mixture_joint_optimization':chart.setMinimumHeight(chart.minimumHeight())
+                elif result.get('analysis')=='response_optimizer':chart.setMinimumHeight(max(440,130+(1+len(result.get('predictions',[])))*130))
+                elif result.get('analysis')=='binary_logistic':chart.setMinimumHeight(720)
+                elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
+                elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
+                elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
+                elif result.get('graph') not in ('panel_graph','graph_layout'):
+                    chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
+                chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                chart.customContextMenuRequested.connect(lambda pos, c=chart: self._show_output_context_menu(c.mapToGlobal(pos)) if not (getattr(c, '_has_3d_panel', lambda: False)()) else None)
+                self._active_chart_widget = chart
 
-            graph_stage = QWidget(); graph_stage.setObjectName("outputPane")
-            graph_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            graph_stage.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_stage.mapToGlobal(pos)))
-            graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(8, 6, 8, 6); graph_stage_layout.setSpacing(6)
-            graph_card = QFrame(); graph_card.setObjectName("resultCard")
-            graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
-            graph_card_layout = QVBoxLayout(graph_card); graph_card_layout.setContentsMargins(8, 6, 8, 6); graph_card_layout.setSpacing(6)
+                graph_stage = QWidget(); graph_stage.setObjectName("outputPane")
+                graph_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                graph_stage.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_stage.mapToGlobal(pos)))
+                graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(8, 6, 8, 6); graph_stage_layout.setSpacing(6)
+                graph_card = QFrame(); graph_card.setObjectName("resultCard")
+                graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
+                graph_card_layout = QVBoxLayout(graph_card); graph_card_layout.setContentsMargins(8, 6, 8, 6); graph_card_layout.setSpacing(6)
 
-            from .graph_frame import GraphFrame
-            graph_frame=GraphFrame(chart,entry)
-            graph_frame.export_hidden.extend(getattr(chart,"export_controls",[]))
-            if result.get('analysis')=='native_saved_output':
-                chart.graphSelected.connect(lambda index,e=entry,c=chart:self._native_graph_switched(e,c,index))
-                def _safe_update_camera(camera, e=entry, c=chart):
-                    try:
-                        safe_cam = {
-                            'azimuth': max(-180.0, min(180.0, float(camera.get('azimuth', -35.0)))),
-                            'elevation': max(-89.0, min(89.0, float(camera.get('elevation', 25.0)))),
-                            'zoom': max(0.4, min(2.5, float(camera.get('zoom', 1.0)))),
-                        }
-                        if 'pan_x' in camera and isinstance(camera['pan_x'], (int, float)):
-                            safe_cam['pan_x'] = float(camera['pan_x'])
-                        if 'pan_y' in camera and isinstance(camera['pan_y'], (int, float)):
-                            safe_cam['pan_y'] = float(camera['pan_y'])
-                        self.presenter.update_native_graph_view(e, c.graph_index, {'camera': safe_cam})
-                    except Exception:
-                        pass
-                chart.cameraChanged.connect(_safe_update_camera)
-                if entry.get('native_model',{}).get('supported'):
-                    refit=QToolButton();refit.setText('Refit in StatCraft');refit.setObjectName('nativeRefitModel')
-                    refit.clicked.connect(lambda checked=False,e=entry:self.refit_native_model(e))
-                    graph_frame.header.addWidget(refit);graph_frame.export_hidden.append(refit)
-            chart.objectSelected.connect(lambda target:self._graph_object_selected(target))
-            chart.objectActivated.connect(lambda target,e=entry:self._activate_graph_object(e,target))
-            chart.brushRowsSelected.connect(lambda rows,e=entry:self._receive_brushed_rows(e,rows))
-            graph_frame.annotationActivated.connect(lambda name,e=entry:self.edit_graph_annotation(e,name))
-            self.graph_dropdown_button = QToolButton(); self.graph_dropdown_button.setObjectName("outputDropdownBtn")
-            self.graph_dropdown_button.setText("▾")
-            self.graph_dropdown_button.setToolTip("Graph / Output Options")
-            self.graph_dropdown_button.clicked.connect(lambda: self._show_output_context_menu(self.graph_dropdown_button.mapToGlobal(self.graph_dropdown_button.rect().bottomLeft())))
-            if result.get('analysis') in ('mixture_multi_optimization','mixture_multi_evaluation'):
-                reoptimize=QToolButton();reoptimize.setText('Re-optimize');reoptimize.setObjectName('mixtureReoptimize')
-                reoptimize.setToolTip('Search again using this mixture as a starting point, with the same goals and bounds.')
-                reoptimize.clicked.connect(lambda checked=False,e=entry:self._reoptimize_mixture_multi(e))
-                graph_frame.header.addWidget(reoptimize);graph_frame.export_hidden.append(reoptimize)
-            graph_frame.header.addWidget(self.graph_dropdown_button)
-            graph_frame.export_hidden.append(self.graph_dropdown_button)
-            graph_card_layout.addWidget(graph_frame, 1)
-            self._active_graph_frame=graph_frame
-            graph_stage_layout.addWidget(graph_card, 1)
+                from .graph_frame import GraphFrame
+                graph_frame=GraphFrame(chart,entry)
+                graph_frame.export_hidden.extend(getattr(chart,"export_controls",[]))
+                chart.objectSelected.connect(lambda target:self._graph_object_selected(target))
+                chart.objectActivated.connect(lambda target,e=entry:self._activate_graph_object(e,target))
+                chart.brushRowsSelected.connect(lambda rows,e=entry:self._receive_brushed_rows(e,rows))
+                graph_frame.annotationActivated.connect(lambda name,e=entry:self.edit_graph_annotation(e,name))
+                self.graph_dropdown_button = QToolButton(); self.graph_dropdown_button.setObjectName("outputDropdownBtn")
+                self.graph_dropdown_button.setText("▾")
+                self.graph_dropdown_button.setToolTip("Graph / Output Options")
+                self.graph_dropdown_button.clicked.connect(lambda: self._show_output_context_menu(self.graph_dropdown_button.mapToGlobal(self.graph_dropdown_button.rect().bottomLeft())))
+                if result.get('analysis') in ('mixture_multi_optimization','mixture_multi_evaluation'):
+                    reoptimize=QToolButton();reoptimize.setText('Re-optimize');reoptimize.setObjectName('mixtureReoptimize')
+                    reoptimize.setToolTip('Search again using this mixture as a starting point, with the same goals and bounds.')
+                    reoptimize.clicked.connect(lambda checked=False,e=entry:self._reoptimize_mixture_multi(e))
+                    graph_frame.header.addWidget(reoptimize);graph_frame.export_hidden.append(reoptimize)
+                graph_frame.header.addWidget(self.graph_dropdown_button)
+                graph_frame.export_hidden.append(self.graph_dropdown_button)
+                graph_card_layout.addWidget(graph_frame, 1)
+                self._active_graph_frame=graph_frame
+                graph_stage_layout.addWidget(graph_card, 1)
 
-            graph_scroll = OutputZoomView(graph_stage)
-            graph_index = self.result_tabs.addTab(graph_scroll, "Graph")
-            self.result_tabs.setCurrentIndex(graph_index)
-            graph_scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(),100))
-            self._sync_output_zoom()
+                graph_scroll = OutputZoomView(graph_stage)
+                graph_index = self.result_tabs.addTab(graph_scroll, "Graph")
+                chosen_tab = 0 if target_tab == "Report" else graph_index
+                self.result_tabs.setCurrentIndex(chosen_tab)
+                graph_scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(),100))
+                self._sync_output_zoom()
         else:
             self._active_chart_widget = None
             self._active_graph_frame=None
@@ -4120,7 +4245,8 @@ class ModernWindow(QMainWindow):
         self.result_tabs.addTab(text, "Text export")
         if not self.graph_options_pane.isHidden():self.graph_options_pane.load_entry(entry)
         self.refresh()
-        self._workspace.after_show()
+        explicit_target = (target_graph_index is not None or target_tab is not None)
+        self._workspace.after_show(target_index=chosen_tab if explicit_target else None)
 
     # --- StatCraft Column & Row Selection Highlighting (`RT_MENU 9839` / `RT_MENU 10521`) ---
 

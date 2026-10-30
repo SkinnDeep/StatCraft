@@ -88,9 +88,9 @@ def _format(value, col=None, row=None):
         if not isinstance(obj, dict):
             return str(obj)[:4096]
         if 'FormattedLines' in obj:
-            return ' '.join(str(v) for v in obj['FormattedLines'][:100])[:4096]
+            return ' '.join(str(v).replace('\u00a0', ' ') for v in obj['FormattedLines'][:100])[:4096]
         if 'Base' in obj:
-            base = str(obj['Base'])[:4096]
+            base = str(obj['Base']).replace('\u00a0', ' ')[:4096]
             if '%' in base and any('%' + str(i) in base for i in range(1, 10)):
                 return ''  # Unexpanded sentence templates are not display text.
             return base
@@ -107,6 +107,9 @@ def _format(value, col=None, row=None):
             return format(value, '.' + str(max(0, min(12, fmt['NumDecPlaces']))) + 'f')
         return format(value, '.10g')
     if isinstance(value, (int, float)):
+        # Missing sentinel in Minitab tables is 1.23456e+30 or >= 1e29 (render blank in tables)
+        if abs(value) >= 1e29:
+            return ''
         return '*'
     return str(value)[:4096]
 
@@ -171,7 +174,7 @@ def _grid(model, key):
     return {'x': xs[:], 'y': ys[:], 'z': [zs[i:i + len(xs)] for i in range(0, len(zs), len(xs))]}
 
 
-def _series(reader, model, kind):
+def _series(reader, model, kind, group_vals=None, group_name=''):
     if 'BinCountCol' in model:
         xs = reader.vector(model.get('MidPointCol'))
         ys = reader.vector(model.get('BinCountCol'))
@@ -197,6 +200,25 @@ def _series(reader, model, kind):
     points = [(x, y) for x, y in zip(xs[:count], ys[:count]) if _number(x) and _number(y)]
     if not points:
         return []
+
+    # If grouping variable exists (e.g. Interaction Plot), separate into distinct curves
+    if group_vals and len(group_vals) >= count:
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for x, y, g in zip(xs[:count], ys[:count], group_vals[:count]):
+            if _number(x) and _number(y):
+                grouped[g].append((x, y))
+        out = []
+        palette = ['#0054a6', '#931313', '#00841f', '#9112b6', '#515151', '#cf8703']
+        for i, (g_val, pairs) in enumerate(grouped.items()):
+            pairs.sort(key=lambda p: p[0])
+            lbl = f"{group_name}: {g_val:g}" if group_name and isinstance(g_val, float) else f"{group_name}: {g_val}" if group_name else str(g_val)
+            entry = {'x': [p[0] for p in pairs], 'y': [p[1] for p in pairs],
+                     'kind': kind, 'color': palette[i % len(palette)],
+                     'label': lbl}
+            out.append(entry)
+        return out
+
     groups = [[]]
     for pair in points:
         # Saved interaction curves concatenate increasing X sequences. Preserve
@@ -232,13 +254,41 @@ def _figure(reader, figure):
     kind = ('surface' if surface else 'contour' if contour else 'histogram' if any(isinstance(m, dict) and 'BinCountCol' in m for m in models)
             else 'probability' if 12 in graph_types and figure.get('FigureState', {}).get('DistributionType', {}).get('DistributionType') == 1
             else 'bar' if 4 in [d.get('Key') for r in reps if isinstance(r, dict) for d in r.get('DataReps', []) if isinstance(d, dict)]
-            else 'line' if 'Connect Line' in tags else 'scatter')
+            else 'line' if any('Connect Line' in str(t) for t in tags) or any(gt in (16, 17, 57) for gt in graph_types) else 'scatter')
     panels = figure.get('Panels', [])[:64] or [{}]
+
+    # Check legend for group column in interaction / grouped plots
+    group_vals = []
+    group_name = ''
+    for leg in figure.get('Legends', []):
+        for sec in leg.get('LegendSection', []):
+            header = sec.get('SectionHeader', {}).get('SectionHeader', [])
+            if header: group_name = header[0]
+            for cvar in sec.get('ColumnVars', []):
+                vals = reader.vector(cvar)
+                if vals:
+                    group_vals = vals
+                    name = cvar.get('WorksheetVarBody', {}).get('Name')
+                    if name: group_name = name
+                    break
+
     output = []
     for panel_index, native_panel in enumerate(panels):
         ids = native_panel.get('GraphModels', list(range(len(models))))
-        panel = {'kind': kind, 'x_label': _axis(reader, figure, 0, panel_index), 'y_label': _axis(reader, figure, 1, panel_index),
-                 'z_label': _axis(reader, figure, 2), 'series': [], 'title': native_panel.get('XLabel', '')}
+
+        # Detect panel label (e.g. Factor name 'A', 'B' in multi-panel Main Effects)
+        p_label = native_panel.get('PanelLabel', {}).get('PanelLabel')
+        if not p_label:
+            for index in ids[:64]:
+                if 0 <= index < len(models) and isinstance(models[index], dict):
+                    m_name = models[index].get('XCol', {}).get('WorksheetVar', {}).get('WorksheetVarBody', {}).get('Name')
+                    if m_name:
+                        p_label = m_name
+                        break
+        x_lbl = p_label or _axis(reader, figure, 0, panel_index)
+
+        panel = {'kind': kind, 'x_label': x_lbl, 'y_label': _axis(reader, figure, 1, panel_index),
+                 'z_label': _axis(reader, figure, 2), 'series': [], 'title': p_label or native_panel.get('XLabel', '')}
         frame = native_panel.get('Frame', {})
         transform = frame.get('DataDeviceXTransform', {})
         bounds = [transform.get(k) for k in ('AXMin', 'AXMax', 'AYMin', 'AYMax')]
@@ -248,6 +298,34 @@ def _figure(reader, figure):
             ticks = frame.get(axis + 'GridLine', {}).get('MajorTickPositions', [])
             if isinstance(ticks, list) and len(ticks) <= 100 and all(_number(v) for v in ticks):
                 panel[axis.lower() + '_ticks'] = ticks
+
+        # Extract reference lines (XReference / YReference)
+        ref_lines = []
+        for ref_key, orientation in (('XReference', 'x'), ('YReference', 'y')):
+            for ref in frame.get(ref_key, []):
+                if not isinstance(ref, dict) or ref.get('Show') is False:
+                    continue
+                ref_state = ref.get('ReferenceState', {})
+                pos_val = ref_state.get('ReferencePos', {}).get('Value')
+                if not _number(pos_val):
+                    continue
+                rgba = ref_state.get('RGBA', 'ce0000ff')
+                color = '#' + rgba[:6] if len(rgba) >= 6 else '#ce0000'
+                l_type = ref_state.get('Type', {}).get('Value', 3)
+                style = 'dash' if l_type in (2, 3) else 'solid'
+                b_label_state = ref_state.get('BorderLabelState', {})
+                label_text = reader.label(b_label_state.get('LabelText')) or ''
+                if not label_text and _number(pos_val):
+                    label_text = f"{pos_val:.3g}"
+                ref_lines.append({
+                    'axis': orientation,
+                    'pos': float(pos_val),
+                    'color': color,
+                    'style': style,
+                    'label': label_text,
+                    'tag': ref.get('Tag', '')
+                })
+
         for index in ids[:64]:
             if type(index) is not int or not 0 <= index < len(models) or not isinstance(models[index], dict):
                 continue
@@ -282,7 +360,7 @@ def _figure(reader, figure):
                 if lines:
                     panel['contour_lines'] = lines
             else:
-                panel['series'].extend(_series(reader, model, kind))
+                panel['series'].extend(_series(reader, model, kind, group_vals, group_name))
                 if kind == 'probability':
                     panel['note'] = 'Symbol plotting positions reconstructed from saved residuals; fitted distribution retained.'
                     parameters = model.get('Parameters', [])
@@ -296,6 +374,9 @@ def _figure(reader, figure):
                     category_ticks = panel.get('x_ticks', [])
                     effect_ticks = panel.get('y_ticks', [])
                     panel['x_ticks'], panel['y_ticks'] = effect_ticks, category_ticks
+                    panel['x_label'], panel['y_label'] = panel['y_label'], panel['x_label']
+                    for ref in ref_lines:
+                        ref['axis'] = 'x' if ref['axis'] == 'y' else 'y'
                     descending = reader.vector(figure.get('FigureState', {}).get('CategoryOrder')) == [3.0]
                     for series in panel['series']:
                         cats = series.get('categories', [])
@@ -311,6 +392,8 @@ def _figure(reader, figure):
                         edges = series.get('edges', [])
                         if len(edges) >= 2:
                             series['bar_width'] = edges[1] - edges[0]
+        if ref_lines:
+            panel['ref_lines'] = ref_lines
         if panel['series'] or panel.get('grid') or panel.get('polygons'):
             output.append(panel)
     return output

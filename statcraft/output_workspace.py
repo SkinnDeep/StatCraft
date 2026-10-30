@@ -49,13 +49,15 @@ class OutputWorkspace:
         if self.busy:return
         key=self.state['active'];w=self.window
         if key is None:return
-        record={'view':w.result_tabs.tabText(w.result_tabs.currentIndex()),'zoom':{},'scroll':{},'editor':not w.graph_options_pane.isHidden()}
+        curr_text = w.result_tabs.tabText(w.result_tabs.currentIndex())
+        v_name = curr_text if curr_text in ws.VIEWS else 'Graph'
+        record={'view':v_name,'zoom':{},'scroll':{},'editor':not w.graph_options_pane.isHidden()}
         for i in range(w.result_tabs.count()):
             page=w.result_tabs.widget(i);name=w.result_tabs.tabText(i)
-            if name not in ws.VIEWS:continue
+            target_name = name if name in ws.VIEWS else 'Graph'
             zoom=getattr(page,'percent',w._output_zoom_levels.get((key,name),100))
-            record['zoom'][name]=max(10,min(500,int(zoom)))
-            if hasattr(page,'horizontalScrollBar'):record['scroll'][name]=[page.horizontalScrollBar().value(),page.verticalScrollBar().value()]
+            record['zoom'][target_name]=max(10,min(500,int(zoom)))
+            if hasattr(page,'horizontalScrollBar'):record['scroll'][target_name]=[page.horizontalScrollBar().value(),page.verticalScrollBar().value()]
         if record['view'] not in ws.VIEWS:record['view']='Report'
         self.state['views'][key]=record;self.state['report_pad']=self.pad.toPlainText()
 
@@ -66,14 +68,16 @@ class OutputWorkspace:
         self.state['active']=key;self.busy=True
         for name,zoom in self.state['views'].get(key,{}).get('zoom',{}).items():self.window._output_zoom_levels[(key,name)]=zoom
 
-    def after_show(self):
+    def after_show(self, target_index=None):
         self.busy=False;self.rebuild();w=self.window
         key=self.state['active'];record=copy.deepcopy(self.state['views'].get(key,{}))
         view=record.get('view')
-        if view:
+        if target_index is not None and 0 <= target_index < w.result_tabs.count():
+            w.result_tabs.setCurrentIndex(target_index)
+        elif view:
             i=next((i for i in range(w.result_tabs.count()) if w.result_tabs.tabText(i)==view),-1)
             if i>=0:w.result_tabs.setCurrentIndex(i)
-        w.result_tabs.tabBar().hide();w.tab_corner_widget.hide();self.sync_views()
+        w.result_tabs.tabBar().show();w.tab_corner_widget.show();self.sync_views()
         if record.get('editor') and w.selected_entry is not None and w._active_graph_frame is not None:w.edit_graph_dialog(w.selected_entry)
         elif record:w.graph_options_pane.hide()
         def restore_scroll():

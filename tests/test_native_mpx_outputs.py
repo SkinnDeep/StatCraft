@@ -154,4 +154,35 @@ class NativeSavedOutputTests(unittest.TestCase):
         s=read_outputs(meta,members)[0]['result']['graphs'][0]['panels'][0]['series'][0]
         self.assertEqual(s['x'],[1.,3.])
 
+    def test_reference_lines_extracted_with_formatting(self):
+        meta, members, graph, figure, group = fixture()
+        figure['Panels'][0]['Frame'] = {
+            'XReference': [{
+                'Show': True,
+                'ReferenceState': {
+                    'ReferencePos': {'Value': 2.1788},
+                    'RGBA': 'ce0000ff',
+                    'Type': {'Value': 3},
+                    'BorderLabelState': {'LabelText': {'Base': '2.179'}}
+                }
+            }]
+        }
+        update(members, '/commands/1/graphs/3/graph.json', graph)
+        p = read_outputs(meta, members)[0]['result']['graphs'][0]['panels'][0]
+        self.assertIn('ref_lines', p)
+        ref = p['ref_lines'][0]
+        self.assertEqual(ref['axis'], 'x')
+        self.assertAlmostEqual(ref['pos'], 2.1788)
+        self.assertEqual(ref['color'], '#ce0000')
+        self.assertEqual(ref['style'], 'dash')
+        self.assertEqual(ref['label'], '2.179')
+
+    def test_table_missing_sentinel_rendered_as_blank(self):
+        data = {'TableCol': [
+            {'Value': {'UnformattedLabels': [{'Label': 'VIF'}], 'Values': [1.23456e30]}}
+        ]}
+        text = _report(data)
+        # Missing values (>= 1e29) should render blank, not '*'
+        self.assertNotIn('*', text)
+
 if __name__ == '__main__':unittest.main()

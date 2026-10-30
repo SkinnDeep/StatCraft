@@ -374,11 +374,13 @@ class NativeOutputChart(SnapshotChartWidget):
     """Saved geometry with independent, editable StatCraft appearance overlays."""
     graphSelected=Signal(int)
     cameraChanged=Signal(dict)
-    def __init__(self, entry, parent=None):
+    def __init__(self, entry, parent=None, graph_index=None):
         super().__init__(entry, parent)
         self.result = self.entry.get('result', {})
         self.graphs = self.result.get('graphs', [])
-        self.graph_index = graph_index(self.entry)
+        from .native_graph_view import graph_index as get_graph_index
+        default_index = get_graph_index(self.entry)
+        self.graph_index = graph_index if (isinstance(graph_index, int) and 0 <= graph_index < len(self.graphs)) else default_index
         self.surface_camera = dict(DEFAULT_VIEW)
         self._orbit_start = None
         self._rotate_start = None
@@ -408,7 +410,9 @@ class NativeOutputChart(SnapshotChartWidget):
         self._cad_hint_visible = True
         from PySide6.QtCore import QTimer
         QTimer.singleShot(4500, self._auto_hide_cad_hint)
+        self.graph_selector.blockSignals(True)
         self.graph_selector.setCurrentIndex(self.graph_index)
+        self.graph_selector.blockSignals(False)
         self.setMinimumSize(660, 470)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setFont(QFont('Segoe UI', 9))
@@ -639,7 +643,37 @@ class NativeOutputChart(SnapshotChartWidget):
                     if plot.contains(point(a,b)):self.remember_marker(name,point(a,b),style.get('marker_size',5.6))
                     shown_y=100*NormalDist().cdf(b) if panel.get('kind')=='probability' else b
                     self.remember_point_hover(point(a,b),point_info(a,shown_y,panel.get('x_label','X'),panel.get('y_label','Y'),series.get('label','')),clip=plot)
+        xmin, xmax, ymin, ymax = self._bounds(panel)
+        for ref in panel.get('ref_lines', []):
+            pos = ref.get('pos')
+            if not _finite(pos): continue
+            axis = ref.get('axis', 'x')
+            color = QColor(ref.get('color', '#ce0000'))
+            pen_style = Qt.PenStyle.DashLine if ref.get('style') == 'dash' else Qt.PenStyle.SolidLine
+            pen = QPen(color, 1.3, pen_style)
+            p.setPen(pen)
+            if axis == 'x' and xmin <= pos <= xmax:
+                p.drawLine(QPointF(tx(pos), plot.top()), QPointF(tx(pos), plot.bottom()))
+            elif axis == 'y' and ymin <= pos <= ymax:
+                p.drawLine(QPointF(plot.left(), ty(pos)), QPointF(plot.right(), ty(pos)))
         p.restore()
+        for ref in panel.get('ref_lines', []):
+            pos = ref.get('pos')
+            if not _finite(pos): continue
+            axis = ref.get('axis', 'x')
+            lbl = str(ref.get('label', '')).strip()
+            if not lbl: continue
+            color = QColor(ref.get('color', '#ce0000'))
+            p.save()
+            p.setFont(QFont('Segoe UI', 8, QFont.Weight.Bold))
+            p.setPen(color)
+            if axis == 'x' and xmin <= pos <= xmax:
+                x = tx(pos)
+                self._text(p, QRectF(x - 35, plot.top() - 17, 70, 15), lbl, Qt.AlignmentFlag.AlignCenter)
+            elif axis == 'y' and ymin <= pos <= ymax:
+                y = ty(pos)
+                self._text(p, QRectF(plot.right() - 65, y - 15, 60, 14), lbl, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            p.restore()
         if panel.get('kind') == 'contour': self._legend(p, area, plot, panel)
         else:
             labelled = [(j,s) for j,s in enumerate(panel.get('series',[])) if s.get('label') and self._style('s'+str(j),visible=True,legend_visible=True).get('visible',True) and self._style('s'+str(j),visible=True,legend_visible=True).get('legend_visible',True)]
