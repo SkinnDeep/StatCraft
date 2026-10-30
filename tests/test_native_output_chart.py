@@ -58,10 +58,10 @@ class NativeOutputChartTests(unittest.TestCase):
     def test_surface_depth_sort_and_camera_rotation_changes_image_without_changing_data(self):
         self.chart.select_graph(1);self.app.processEvents();before=self.chart.grab().toImage()
         self.assertEqual(self.chart.rendered_primitives,4)
-        for kind,pos,buttons in ((QEvent.Type.MouseButtonPress,QPointF(300,260),Qt.MouseButton.LeftButton),
-                                 (QEvent.Type.MouseMove,QPointF(390,290),Qt.MouseButton.LeftButton),
+        for kind,pos,buttons in ((QEvent.Type.MouseButtonPress,QPointF(300,260),Qt.MouseButton.RightButton),
+                                 (QEvent.Type.MouseMove,QPointF(390,290),Qt.MouseButton.RightButton),
                                  (QEvent.Type.MouseButtonRelease,QPointF(390,290),Qt.MouseButton.NoButton)):
-            event=QMouseEvent(kind,pos,QPointF(self.chart.mapToGlobal(pos.toPoint())),Qt.MouseButton.LeftButton,buttons,Qt.KeyboardModifier.NoModifier)
+            event=QMouseEvent(kind,pos,QPointF(self.chart.mapToGlobal(pos.toPoint())),Qt.MouseButton.RightButton,buttons,Qt.KeyboardModifier.NoModifier)
             self.app.sendEvent(self.chart,event)
         self.app.processEvents();after=self.chart.grab().toImage()
         self.assertNotEqual(before,after)
@@ -97,7 +97,7 @@ class NativeOutputChartTests(unittest.TestCase):
 
     def test_surface_rotation_uses_selected_graph_even_after_frame_panel_snapshot(self):
         self.chart.select_graph(1);self.chart.panels=[{'kind':'snapshot'}]
-        event=QMouseEvent(QEvent.Type.MouseButtonPress,QPointF(250,250),QPointF(250,250),Qt.MouseButton.LeftButton,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
+        event=QMouseEvent(QEvent.Type.MouseButtonPress,QPointF(250,250),QPointF(250,250),Qt.MouseButton.RightButton,Qt.MouseButton.RightButton,Qt.KeyboardModifier.NoModifier)
         self.app.sendEvent(self.chart,event)
         self.assertIsNotNone(self.chart._rotate_start)
 
