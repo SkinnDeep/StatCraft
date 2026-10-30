@@ -2,18 +2,18 @@
 
 <div align="center">
 
-![StatCraft](work/statcraft/StatCraft.ico)
+<img src="StatCraft.png" width="128" height="128" alt="StatCraft Logo" />
 
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, interactive CAD 3D response surfaces, and enterprise-grade reliability.**
 
-[![Version](https://img.shields.io/badge/version-104.0.0-blue.svg)](https://github.com/statcraft/statcraft/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/statcraft/statcraft)
+[![Version](https://img.shields.io/badge/version-104.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v104.0.0)](https://github.com/statcraft/statcraft/releases/tag/v104.0.0) •
+[Download Release (v104.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v104.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -142,7 +142,7 @@ StatCraft features a custom, high-speed 3D viewport for Response Surface Methodo
 ## Installation & Setup
 
 ### Option 1: Modern Windows Installer (Recommended)
-Download **`StatCraft-Setup.exe`** from the [Latest Releases](https://github.com/statcraft/statcraft/releases):
+Download **`StatCraft-Setup.exe`** from the [Latest Releases](https://github.com/SkinnDeep/StatCraft/releases):
 1. Run `StatCraft-Setup-v104.0.0-Windows-x64.exe`.
 2. Follow the 4-step wizard to install StatCraft to your user directory (no administrator elevation required).
 3. StatCraft creates Desktop and Start Menu shortcuts and configures background update checks.
@@ -161,7 +161,7 @@ StatCraft runs on Python 3.10+:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/statcraft/statcraft.git
+git clone https://github.com/SkinnDeep/StatCraft.git
 cd statcraft
 
 # 2. Create a virtual environment

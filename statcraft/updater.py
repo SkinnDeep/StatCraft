@@ -262,3 +262,123 @@ def setup_shortcuts(
         results["start_menu"] = create_windows_shortcut(target_exe, shortcut, icon_path=icon_path)
 
     return results
+
+
+def remove_shortcuts() -> None:
+    """Remove Desktop and Start Menu shortcuts for StatCraft."""
+    if sys.platform != "win32":
+        return
+    desktop_dir = Path(os.environ.get("USERPROFILE", "~")) / "Desktop"
+    if not desktop_dir.exists():
+        desktop_dir = Path.home() / "Desktop"
+    d_lnk = desktop_dir / "StatCraft.lnk"
+    if d_lnk.exists():
+        try:
+            d_lnk.unlink()
+        except Exception:
+            pass
+
+    appdata = os.environ.get("APPDATA")
+    start_dir = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" if appdata else Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    s_lnk = start_dir / "StatCraft.lnk"
+    if s_lnk.exists():
+        try:
+            s_lnk.unlink()
+        except Exception:
+            pass
+
+
+def register_windows_uninstaller(
+    install_dir: Path,
+    version: str = STATCRAFT_VERSION,
+    icon_path: Optional[Path] = None
+) -> bool:
+    """Register StatCraft in Windows Add/Remove Programs (HKCU uninstall registry)."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\StatCraft"
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
+
+        uninstall_exe = install_dir / "StatCraft-Uninstall.exe"
+        if not uninstall_exe.exists():
+            uninstall_exe = install_dir / "StatCraft-Setup.exe"
+
+        ico = icon_path or (install_dir / "StatCraft.ico")
+        if not ico.exists():
+            ico = install_dir / "StatCraft.exe"
+
+        # Calculate estimated size in KB
+        size_kb = 0
+        try:
+            for f in install_dir.rglob("*"):
+                if f.is_file():
+                    size_kb += f.stat().st_size // 1024
+        except Exception:
+            size_kb = 95000
+
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "StatCraft")
+        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version)
+        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "StatCraft Developers")
+        winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(install_dir))
+        winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(ico))
+        winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'"{uninstall_exe}" --uninstall')
+        winreg.SetValueEx(key, "QuietUninstallString", 0, winreg.REG_SZ, f'"{uninstall_exe}" --uninstall --silent')
+        winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, size_kb)
+        winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+        winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
+        winreg.SetValueEx(key, "URLInfoAbout", 0, winreg.REG_SZ, "https://github.com/SkinnDeep/StatCraft")
+        winreg.SetValueEx(key, "HelpLink", 0, winreg.REG_SZ, "https://github.com/SkinnDeep/StatCraft")
+        winreg.CloseKey(key)
+        return True
+    except Exception as exc:
+        print(f"Warning: Failed to register Windows uninstaller: {exc}")
+        return False
+
+
+def unregister_windows_uninstaller() -> bool:
+    """Remove StatCraft from Windows Add/Remove Programs registry."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\StatCraft"
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
+        return True
+    except FileNotFoundError:
+        return True
+    except Exception as exc:
+        print(f"Warning: Failed to unregister Windows uninstaller: {exc}")
+        return False
+
+
+def perform_uninstall(target_dir: Optional[Path] = None) -> bool:
+    """Fully uninstall StatCraft: remove shortcuts, unregister from Windows, and remove files."""
+    install_dir = target_dir or get_default_install_dir()
+    remove_shortcuts()
+    unregister_windows_uninstaller()
+
+    # Remove files in install directory
+    if install_dir.exists():
+        import shutil
+        try:
+            # Delete non-running files
+            for item in install_dir.iterdir():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink()
+                except Exception:
+                    pass
+            # If directory is empty, remove it
+            try:
+                install_dir.rmdir()
+            except Exception:
+                pass
+            return True
+        except Exception as exc:
+            print(f"Uninstall cleanup warning: {exc}")
+            return False
+    return True

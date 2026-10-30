@@ -25,3 +25,5 @@ work/statcraft-installer-dist/
 .idea/
 .DS_Store
 Thumbs.db
+tools/
+scratch/
