@@ -2,6 +2,8 @@ name: Build & Publish Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -36,7 +38,7 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Determine Version
+      - name: Determine Version & Tag
         id: versioning
         shell: pwsh
         run: |
@@ -83,16 +85,28 @@ jobs:
           Write-Host "Packaged artifacts:"
           Get-ChildItem release-binaries | Format-Table Name, Length
 
-      - name: Upload Binaries to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: StatCraft ${{ env.RELEASE_TAG }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            release-binaries/StatCraft-Setup-v${{ env.STATCRAFT_VER }}-Windows-x64.exe
-            release-binaries/StatCraft-v${{ env.STATCRAFT_VER }}-Windows-x64.exe
+      - name: Publish Binaries to GitHub Release
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          $files = (Get-ChildItem release-binaries/*.exe).FullName
+          
+          Write-Host "Checking if release $tag exists..."
+          $exists = $false
+          try {
+            gh release view $tag
+            $exists = ($LASTEXITCODE -eq 0)
+          } catch {
+            $exists = $false
+          }
+          
+          if ($exists) {
+            Write-Host "Updating existing release $tag with fresh binaries..."
+            gh release upload $tag $files --clobber
+          } else {
+            Write-Host "Creating new release $tag and uploading binaries..."
+            gh release create $tag $files --title "StatCraft $tag" --generate-notes
+          }
+          Write-Host "Release $tag successfully published and live on GitHub!"
