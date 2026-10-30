@@ -92,6 +92,7 @@
         <a href="#features" class="hover:text-white transition-colors">Features</a>
         <a href="#showcase" class="hover:text-white transition-colors">Showcase</a>
         <a href="#comparison" class="hover:text-white transition-colors">Comparison</a>
+        <a href="#releases" class="hover:text-white transition-colors">What's New</a>
         <a href="#install" class="hover:text-white transition-colors">Installation</a>
         <a href="https://github.com/SkinnDeep/StatCraft/releases" target="_blank" class="hover:text-white transition-colors">Releases</a>
       </nav>
@@ -434,6 +435,45 @@
     </div>
   </section>
 
+  <!-- Live Release & What's New Section -->
+  <section id="releases" class="py-20 border-t border-white/5 bg-slate-950/40">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-10">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400 font-mono mb-2">Live Release Feed</h2>
+        <p class="text-3xl font-extrabold text-white tracking-tight">What's New in StatCraft</p>
+      </div>
+
+      <div class="stitch-card rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div>
+            <div class="flex items-center space-x-3">
+              <span class="inline-flex items-center px-3 py-1 rounded-full stitch-badge text-xs font-mono font-semibold text-brand-400" id="release-card-tag">v104.0.0</span>
+              <span class="text-xs text-slate-500 font-mono" id="release-card-date">Latest Release</span>
+            </div>
+            <h3 class="text-2xl font-bold text-white mt-2" id="release-card-title">StatCraft v104.0.0</h3>
+          </div>
+          <a id="release-card-link" href="https://github.com/SkinnDeep/StatCraft/releases/latest" target="_blank" class="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 hover:text-white border border-white/10 transition-all self-start sm:self-auto">
+            <span>View on GitHub</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
+        </div>
+
+        <!-- Release Notes Content Body -->
+        <div class="mt-6 text-sm text-slate-300 leading-relaxed font-normal space-y-3" id="release-card-body">
+          <p class="text-slate-400">Loading live release highlights from GitHub...</p>
+        </div>
+
+        <!-- Live Asset Download Badges -->
+        <div class="mt-8 pt-6 border-t border-white/10">
+          <div class="text-xs text-slate-400 font-medium mb-3">Live Release Binaries & Packages:</div>
+          <div class="flex flex-wrap items-center gap-2.5" id="release-card-assets">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Installation & Quick Start -->
   <section id="install" class="py-24 bg-slate-950/60 border-t border-white/5">
     <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -596,6 +636,51 @@
 
         // Re-apply to primary button with updated version text
         applyDynamicDownload(detectOS());
+
+        // Update Live Release Feed Card
+        const cardTag = document.getElementById('release-card-tag');
+        const cardTitle = document.getElementById('release-card-title');
+        const cardDate = document.getElementById('release-card-date');
+        const cardLink = document.getElementById('release-card-link');
+        const cardBody = document.getElementById('release-card-body');
+        const cardAssets = document.getElementById('release-card-assets');
+
+        if (cardTag) cardTag.innerText = currentVersion;
+        if (cardTitle) cardTitle.innerText = data.name || `StatCraft ${currentVersion}`;
+        if (cardLink && data.html_url) cardLink.href = data.html_url;
+        if (cardDate && data.published_at) {
+          const d = new Date(data.published_at);
+          cardDate.innerText = 'Released ' + d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        if (cardBody) {
+          if (data.body && data.body.trim()) {
+            let formatted = data.body
+              .replace(/^### (.*$)/gim, '<h4 class="text-base font-bold text-white mt-3 mb-1">$1</h4>')
+              .replace(/^## (.*$)/gim, '<h3 class="text-lg font-bold text-white mt-4 mb-2">$1</h3>')
+              .replace(/^\* (.*$)/gim, '<li class="ml-4 list-disc text-slate-300">$1</li>')
+              .replace(/^- (.*$)/gim, '<li class="ml-4 list-disc text-slate-300">$1</li>')
+              .replace(/\*\*(.*?)\*\*/gim, '<strong class="text-white font-semibold">$1</strong>')
+              .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" class="text-brand-400 hover:underline">$1</a>');
+            cardBody.innerHTML = formatted;
+          } else {
+            cardBody.innerHTML = '<p class="text-slate-300">StatCraft delivers native, cross-platform statistical computing with full Minitab 22 parity, comprehensive Design of Experiments (DOE), Six Sigma capability analysis, and publication-ready charts.</p>';
+          }
+        }
+
+        if (cardAssets && data.assets && data.assets.length > 0) {
+          cardAssets.innerHTML = data.assets.map(a => {
+            const sizeMB = (a.size / (1024 * 1024)).toFixed(1);
+            let icon = '🪟';
+            if (a.name.endsWith('.zip') || a.name.endsWith('.dmg')) icon = '🍎';
+            if (a.name.endsWith('.tar.gz')) icon = '🐧';
+            return `<a href="${a.browser_download_url}" class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 hover:text-white hover:border-slate-700 transition-all font-mono">
+              <span>${icon}</span>
+              <span class="font-medium">${a.name}</span>
+              <span class="text-slate-500">(${sizeMB} MB)</span>
+            </a>`;
+          }).join('');
+        }
       } catch (err) {
         console.warn("Using offline fallback release links:", err);
       }
