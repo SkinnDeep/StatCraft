@@ -42,7 +42,10 @@ class PrintingTests(unittest.TestCase):
         self.assertEqual(cell_text(Column('Date','date',[45000]),0),'2023-03-15')
 
     def test_pdf_pagination_orientation_range_and_layout_restoration(self):
-        from pypdf import PdfReader
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("pypdf not installed")
         sheet = Worksheet('Print acceptance', [Column('Identifier','text',[f'ROW_{r:04d}' for r in range(1,1201)])])
         job = PrintJob.worksheet(sheet)
         with tempfile.TemporaryDirectory() as folder:
@@ -63,7 +66,10 @@ class PrintingTests(unittest.TestCase):
             self.assertIn('Page 2 of', ' '.join(selected.pages[0].extract_text().split()))
 
     def test_graph_one_page_and_report_all_text(self):
-        from pypdf import PdfReader
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("pypdf not installed")
         with tempfile.TemporaryDirectory() as folder:
             printer = QPrinter(); printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
             image=QImage(1600,800,QImage.Format.Format_RGB32); image.fill(QColor('blue'))
