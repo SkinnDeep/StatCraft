@@ -203,6 +203,30 @@ Source execution is already fully functional on macOS and Linux by running `pyth
 
 ---
 
+## Automated Releases & Publishing
+
+Releases are fully automated with zero manual browser uploads required:
+
+### Method 1: Cloud Automation (GitHub Actions)
+Pushing any version tag automatically triggers GitHub Actions to build both the standalone application and web setup installer, create the release on GitHub, and attach the binaries:
+```bash
+git tag v105.0.0
+git push origin v105.0.0
+```
+You can also trigger a release build on demand from the **Actions** tab on GitHub by selecting **Build & Publish Release** &rarr; **Run workflow**.
+
+### Method 2: Local 1-Click Publisher
+To package, Authenticode code-sign, and publish directly from your terminal:
+```powershell
+# Build, sign, and upload release automatically
+.\publish_release.ps1
+
+# Or skip rebuild and upload existing output binaries immediately
+.\publish_release.ps1 -SkipBuild
+```
+
+---
+
 ## Testing & Quality Assurance
 
 StatCraft maintains rigorous test suites covering calculations, numerical invariants, and visual components:

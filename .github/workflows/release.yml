@@ -1,0 +1,98 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v104.0.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release Assets
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Build Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Determine Version
+        id: versioning
+        shell: pwsh
+        run: |
+          $inputTag = "${{ github.event.inputs.tag_name }}"
+          if ($inputTag) {
+            $tag = $inputTag
+          } elseif ($env:GITHUB_REF -like "refs/tags/*") {
+            $tag = $env:GITHUB_REF -replace "refs/tags/", ""
+          } else {
+            $updaterContent = Get-Content statcraft/updater.py -Raw
+            if ($updaterContent -match 'STATCRAFT_VERSION\s*=\s*"([^"]+)"') {
+              $ver = $matches[1]
+            } else {
+              $ver = "104.0.0"
+            }
+            $tag = "v$ver"
+          }
+          $rawVer = $tag.TrimStart('vV')
+          Write-Host "Target Tag: $tag, Version: $rawVer"
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "STATCRAFT_VER=$rawVer" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build StatCraft Main Executable
+        run: |
+          pyinstaller --noconfirm --distpath dist/app --workpath build/app StatCraft.spec
+
+      - name: Build StatCraft Setup Installer
+        run: |
+          pyinstaller --noconfirm --distpath dist/setup --workpath build/setup installer.spec
+
+      - name: Stage Release Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-binaries | Out-Null
+          $setupSrc = "dist/setup/StatCraft-Setup.exe"
+          $appSrc = "dist/app/StatCraft.exe"
+          
+          if (-not (Test-Path $setupSrc)) { throw "Missing $setupSrc" }
+          if (-not (Test-Path $appSrc)) { throw "Missing $appSrc" }
+          
+          Copy-Item $setupSrc "release-binaries/StatCraft-Setup-v${env:STATCRAFT_VER}-Windows-x64.exe"
+          Copy-Item $appSrc "release-binaries/StatCraft-v${env:STATCRAFT_VER}-Windows-x64.exe"
+          
+          Write-Host "Packaged artifacts:"
+          Get-ChildItem release-binaries | Format-Table Name, Length
+
+      - name: Upload Binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: StatCraft ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-binaries/StatCraft-Setup-v${{ env.STATCRAFT_VER }}-Windows-x64.exe
+            release-binaries/StatCraft-v${{ env.STATCRAFT_VER }}-Windows-x64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
