@@ -85,8 +85,10 @@ def _number(x):
 def _format(value, col=None, row=None):
     if isinstance(value, dict):
         obj = value.get('Value', value)
+        if isinstance(obj, dict) and 'Value' in obj and not ('FormattedLines' in obj or 'Base' in obj or 'Labels' in obj):
+            obj = obj['Value']
         if not isinstance(obj, dict):
-            return str(obj)[:4096]
+            return _format(obj, col, row)
         if 'FormattedLines' in obj:
             return ' '.join(str(v).replace('\u00a0', ' ') for v in obj['FormattedLines'][:100])[:4096]
         if 'Base' in obj:
@@ -112,6 +114,53 @@ def _format(value, col=None, row=None):
             return ''
         return '*'
     return str(value)[:4096]
+
+
+def _parse_table(data):
+    if not isinstance(data, dict):
+        return None
+    columns = []
+    for item in data.get('TableCol', [])[:64]:
+        col = item.get('Value', {}) if isinstance(item, dict) else {}
+        labels = [_format(v) for v in (col.get('Labels') or col.get('UnformattedLabels', []))[:8]]
+        values = col.get('StringValues', col.get('Values', col.get('Cells', [])))
+        if not isinstance(values, list):
+            values = []
+        cells = [_format(v, col, row) for row, v in enumerate(values[:4096])]
+        columns.append((' '.join(labels).strip(), cells))
+    if not columns:
+        return None
+    titles = [_format(v.get('Value', {})) for v in data.get('Titles', []) if isinstance(v, dict)]
+    title = ' '.join(t for t in titles if t).strip()
+    headers = [label for label, _ in columns]
+    if not title and len(headers) == 1 and headers[0]:
+        title = headers[0]
+    num_rows = max((len(cells) for _, cells in columns), default=0)
+    rows = []
+    for r in range(num_rows):
+        rows.append([cells[r] if r < len(cells) else '' for _, cells in columns])
+    footnotes = [_format(item.get('Value', {})) for item in data.get('Footnotes', []) if isinstance(item, dict)]
+    footnotes = [f for f in footnotes if f]
+    return {
+        'title': title,
+        'headers': headers,
+        'rows': rows,
+        'footnotes': footnotes
+    }
+
+
+def _extract_tables(data):
+    if not isinstance(data, dict):
+        return []
+    tables = []
+    tbl = _parse_table(data)
+    if tbl:
+        tables.append(tbl)
+    for sub in data.get('Tables', [])[:64]:
+        sub_tbl = _parse_table(sub)
+        if sub_tbl:
+            tables.append(sub_tbl)
+    return tables
 
 
 def _report(data):
@@ -441,7 +490,7 @@ def read_outputs(metadata, members):
             group = reader.resolve(uri)
             if not isinstance(group, dict):
                 group = {'ErrorText': 'Saved native output member is missing or unreadable: ' + str(uri), 'Outputs': []}
-            texts, graphs, seen = [], [], set()
+            texts, graphs, tables, seen = [], [], [], set()
             def consume(outputs, depth=0):
                 if depth > 16 or not isinstance(outputs, list):
                     return
@@ -452,6 +501,9 @@ def read_outputs(metadata, members):
                     text = _report(data)
                     if text:
                         texts.append(text)
+                    t_list = _extract_tables(data)
+                    if t_list:
+                        tables.extend(t_list)
                     ref = item.get('GraphDoc')
                     if isinstance(ref, str) and ref and ref not in seen:
                         seen.add(ref)
@@ -471,6 +523,7 @@ def read_outputs(metadata, members):
                             'time': str(command.get('Executed', ''))[:100], 'title': title,
                             'native_command_id': command.get('Id', ''), 'native_group_uri': uri,
                             'result': {'analysis': 'native_saved_output', 'text': '\n\n'.join(texts), 'graphs': graphs,
+                                       'tables': tables,
                                        'warnings': list(dict.fromkeys(g['title'] + ': ' + warning for g in graphs for warning in g.get('warnings', []))),
                                        'source': 'Saved native project output; no analysis was rerun.'}})
             if len(records) >= MAX_ITEMS:

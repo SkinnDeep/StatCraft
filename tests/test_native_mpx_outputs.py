@@ -185,4 +185,27 @@ class NativeSavedOutputTests(unittest.TestCase):
         # Missing values (>= 1e29) should render blank, not '*'
         self.assertNotIn('*', text)
 
+    def test_structured_tables_extracted(self):
+        meta, members, graph, figure, group = fixture()
+        group['Outputs'] = [{
+            'Data': {
+                'Titles': [{'Value': {'Base': 'Coded Coefficients'}}],
+                'TableCol': [
+                    {'Value': {'UnformattedLabels': [{'Label': 'Term'}], 'Values': ['Constant', 'A']}},
+                    {'Value': {'UnformattedLabels': [{'Label': 'Coef'}], 'Values': [6.163, 1.785]}},
+                    {'Value': {'UnformattedLabels': [{'Label': 'P-Value'}], 'Values': [0.000, 0.005]}}
+                ]
+            }
+        }]
+        update(members, '/commands/1/groups/2/group.json', group)
+        rec = read_outputs(meta, members)[0]
+        tables = rec['result'].get('tables', [])
+        self.assertEqual(len(tables), 1)
+        self.assertEqual(tables[0]['title'], 'Coded Coefficients')
+        self.assertEqual(tables[0]['headers'], ['Term', 'Coef', 'P-Value'])
+        self.assertEqual(len(tables[0]['rows']), 2)
+        self.assertEqual(tables[0]['rows'][0], ['Constant', '6.163', '0'])
+        self.assertEqual(tables[0]['rows'][1], ['A', '1.785', '0.005'])
+
+
 if __name__ == '__main__':unittest.main()

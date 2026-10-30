@@ -85,6 +85,46 @@ class NativeGraphTabsTests(unittest.TestCase):
         chart2 = NativeOutputChart(reg_entry, graph_index=2)
         self.assertEqual(chart2.graph_index, 2)
 
+    def test_native_table_tabs_and_navigator_navigation(self):
+        reg_entry = next(e for e in self.p.history if 'Factorial Regression' in e.get('title', ''))
+        self.w.show_result(reg_entry)
+        self.app.processEvents()
+
+        # Verify structured table tabs exist in addition to Report and graphs
+        tab_names = [self.w.result_tabs.tabText(i) for i in range(self.w.result_tabs.count())]
+        self.assertIn('Coded Coefficients', tab_names)
+        self.assertIn('Model Summary', tab_names)
+        self.assertIn('Analysis of Variance', tab_names)
+
+        # Find entry node in Navigator
+        nav = self.w.navigator
+        cmd_node = None
+        for i in range(nav.topLevelItemCount()):
+            top = nav.topLevelItem(i)
+            for j in range(top.childCount()):
+                child = top.child(j)
+                if 'Factorial Regression' in child.text(0):
+                    cmd_node = child
+                    break
+        self.assertIsNotNone(cmd_node)
+        sub_titles = [cmd_node.child(k).text(0) for k in range(cmd_node.childCount())]
+        self.assertIn('Coded Coefficients', sub_titles)
+        self.assertIn('Model Summary', sub_titles)
+        self.assertIn('Analysis of Variance', sub_titles)
+
+        # Test clicking Coded Coefficients in Navigator
+        coef_child = next(cmd_node.child(k) for k in range(cmd_node.childCount()) if cmd_node.child(k).text(0) == 'Coded Coefficients')
+        self.w._navigate(coef_child, 0)
+        self.app.processEvents()
+        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Coded Coefficients')
+
+        # Test clicking Model Summary in Navigator (re-find node after refresh)
+        cmd_node = next(nav.topLevelItem(i).child(j) for i in range(nav.topLevelItemCount()) for j in range(nav.topLevelItem(i).childCount()) if 'Factorial Regression' in nav.topLevelItem(i).child(j).text(0))
+        ms_child = next(cmd_node.child(k) for k in range(cmd_node.childCount()) if cmd_node.child(k).text(0) == 'Model Summary')
+        self.w._navigate(ms_child, 0)
+        self.app.processEvents()
+        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Model Summary')
+
 
 if __name__ == '__main__':
     unittest.main()
