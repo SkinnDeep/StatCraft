@@ -97,12 +97,18 @@ class InstallWorker(QThread):
         try:
             self.progress_changed.emit(5, "Preparing destination directory...", str(self.target_dir))
             
-            # Terminate running instance if any to release Windows file locks silently
-            if sys.platform == "win32":
+            # Release Windows file locks only if existing target file is currently locked
+            target_check = self.target_dir / "StatCraft.exe"
+            if sys.platform == "win32" and target_check.exists():
                 try:
-                    _run_hidden_subprocess(["taskkill", "/F", "/IM", "StatCraft.exe"], capture_output=True)
-                except Exception:
-                    pass
+                    with open(target_check, "r+b"):
+                        pass
+                except (PermissionError, OSError):
+                    try:
+                        _run_hidden_subprocess(["taskkill", "/IM", "StatCraft.exe"], capture_output=True)
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
 
             self.target_dir.mkdir(parents=True, exist_ok=True)
             time.sleep(0.15)

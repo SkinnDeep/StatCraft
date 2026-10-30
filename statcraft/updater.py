@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import time
 import subprocess
 import urllib.request
 import urllib.error
@@ -322,23 +323,45 @@ def download_file(
                 except Exception:
                     pass
 
-    # Method 3: PowerShell Invoke-WebRequest fallback (executed silently)
-    if sys.platform == "win32":
-        try:
-            ps_cmd = f"Invoke-WebRequest -Uri '{url}' -OutFile '{temp_dest}' -UseBasicParsing"
-            res = _run_hidden_subprocess(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=180)
-            if res.returncode == 0 and temp_dest.exists() and temp_dest.stat().st_size > 1000000:
-                if destination.exists():
-                    try:
-                        destination.unlink()
-                    except Exception:
-                        pass
-                temp_dest.replace(destination)
-                return destination
-            else:
-                err_list.append(f"powershell error: {res.stderr.strip() or res.stdout.strip()}")
-        except Exception as exc:
-            err_list.append(f"powershell invocation error: {exc}")
+    # Method 3: urllib with unverified SSL context fallback (handles corporate SSL inspection / proxies)
+    try:
+        import ssl
+        unverified_ctx = ssl._create_unverified_context()
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": f"StatCraft-Updater/{STATCRAFT_VERSION} (Windows; x64)",
+                "Accept": "application/octet-stream"
+            }
+        )
+        with urllib.request.urlopen(req, context=unverified_ctx, timeout=45) as resp, open(temp_dest, 'wb') as out_f:
+            total_size = int(resp.headers.get('Content-Length', 0))
+            downloaded = 0
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                out_f.write(chunk)
+                downloaded += len(chunk)
+                if progress_callback:
+                    progress_callback(downloaded, total_size)
+            out_f.flush()
+
+        if temp_dest.exists() and temp_dest.stat().st_size > 1000000:
+            if destination.exists():
+                try:
+                    destination.unlink()
+                except Exception:
+                    pass
+            temp_dest.replace(destination)
+            return destination
+    except Exception as exc:
+        err_list.append(f"urllib fallback error: {exc}")
+        if temp_dest.exists():
+            try:
+                temp_dest.unlink()
+            except Exception:
+                pass
 
     raise RuntimeError(" ; ".join(err_list) or "All download methods failed.")
 
@@ -350,34 +373,42 @@ def create_windows_shortcut(
     icon_path: Optional[Path] = None,
     working_dir: Optional[Path] = None
 ) -> bool:
-    """Create a Windows .lnk shortcut using PowerShell WScript.Shell silently."""
+    """Create a Windows .lnk shortcut using native Windows Script Host silently."""
     if sys.platform != "win32":
         return False
     try:
         shortcut_path.parent.mkdir(parents=True, exist_ok=True)
         work_dir = working_dir or target_path.parent
-        icon_arg = str(icon_path or target_path).replace("'", "''")
-        target_arg = str(target_path).replace("'", "''")
-        lnk_arg = str(shortcut_path).replace("'", "''")
-        work_arg = str(work_dir).replace("'", "''")
-        desc_arg = str(description).replace("'", "''")
+        icon_arg = str(icon_path or target_path).replace('"', '""')
+        target_arg = str(target_path).replace('"', '""')
+        lnk_arg = str(shortcut_path).replace('"', '""')
+        work_arg = str(work_dir).replace('"', '""')
+        desc_arg = str(description).replace('"', '""')
 
-        ps_script = (
-            f"$ws = New-Object -ComObject WScript.Shell; "
-            f"$s = $ws.CreateShortcut('{lnk_arg}'); "
-            f"$s.TargetPath = '{target_arg}'; "
-            f"$s.WorkingDirectory = '{work_arg}'; "
-            f"$s.Description = '{desc_arg}'; "
-            f"$s.IconLocation = '{icon_arg}'; "
-            f"$s.Save()"
-        )
-        res = _run_hidden_subprocess(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        return res.returncode == 0 and shortcut_path.exists()
+        # Primary method: Windows Script Host via cscript/wscript (no PowerShell process spawned)
+        vbs_path = shortcut_path.parent / f"_sc_{os.getpid()}_{int(time.time()*1000)%10000}.vbs"
+        try:
+            vbs_script = (
+                f'Set ws = WScript.CreateObject("WScript.Shell")\r\n'
+                f'Set s = ws.CreateShortcut("{lnk_arg}")\r\n'
+                f's.TargetPath = "{target_arg}"\r\n'
+                f's.WorkingDirectory = "{work_arg}"\r\n'
+                f's.Description = "{desc_arg}"\r\n'
+                f's.IconLocation = "{icon_arg}"\r\n'
+                f's.Save\r\n'
+            )
+            vbs_path.write_text(vbs_script, encoding="ansi")
+            res = _run_hidden_subprocess(["cscript.exe", "//nologo", str(vbs_path)], timeout=10)
+            if res.returncode == 0 and shortcut_path.exists():
+                return True
+        finally:
+            if vbs_path.exists():
+                try:
+                    vbs_path.unlink()
+                except Exception:
+                    pass
+
+        return shortcut_path.exists()
     except Exception:
         return False
 

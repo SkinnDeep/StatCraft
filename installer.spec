@@ -35,6 +35,8 @@ if sys.platform == 'win32':
 pyz = PYZ(a.pure)
 
 icon_file = str(root / 'StatCraft.ico') if (sys.platform == 'win32' and (root / 'StatCraft.ico').exists()) else None
+version_file = str(root / 'installer_version.txt') if (root / 'installer_version.txt').exists() else None
+manifest_file = str(root / 'installer_manifest.xml') if (root / 'installer_manifest.xml').exists() else None
 
 exe = EXE(
     pyz,
@@ -45,5 +47,7 @@ exe = EXE(
     name='StatCraft-Setup',
     console=False,
     icon=icon_file,
+    version=version_file,
+    manifest=manifest_file,
     upx=False
 )
