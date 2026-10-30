@@ -1,15 +1,13 @@
-name: Build & Publish Release
+name: Multi-Platform Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v104.0.0)'
+        description: 'Release Tag (e.g. v105.0.0)'
         required: false
         default: ''
 
@@ -17,29 +15,27 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Publish Release Assets
+  build-windows:
+    name: Build Windows x64
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install Build Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Determine Version & Tag
-        id: versioning
+      - name: Determine Version
+        id: version
         shell: pwsh
         run: |
           $inputTag = "${{ github.event.inputs.tag_name }}"
@@ -49,64 +45,220 @@ jobs:
             $tag = $env:GITHUB_REF -replace "refs/tags/", ""
           } else {
             $updaterContent = Get-Content statcraft/updater.py -Raw
-            if ($updaterContent -match 'STATCRAFT_VERSION\s*=\s*"([^"]+)"') {
-              $ver = $matches[1]
-            } else {
-              $ver = "104.0.0"
-            }
+            if ($updaterContent -match 'STATCRAFT_VERSION\s*=\s*"([^"]+)"') { $ver = $matches[1] } else { $ver = "104.0.0" }
             $tag = "v$ver"
           }
           $rawVer = $tag.TrimStart('vV')
-          Write-Host "Target Tag: $tag, Version: $rawVer"
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
           "STATCRAFT_VER=$rawVer" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Build StatCraft Main Executable
+      - name: Build Application & Setup
+        run: |
+          pyinstaller --noconfirm --distpath dist/app --workpath build/app StatCraft.spec
+          pyinstaller --noconfirm --distpath dist/setup --workpath build/setup installer.spec
+
+      - name: Stage Windows Binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item "dist/setup/StatCraft-Setup.exe" "artifacts/StatCraft-Setup-v${env:STATCRAFT_VER}-Windows-x64.exe"
+          Copy-Item "dist/app/StatCraft.exe" "artifacts/StatCraft-v${env:STATCRAFT_VER}-Windows-x64.exe"
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: artifacts/*
+
+  build-macos:
+    name: Build macOS (Universal/Apple Silicon & Intel)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Determine Version
+        run: |
+          INPUT_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VER=$(python -c 'from statcraft.updater import STATCRAFT_VERSION; print(STATCRAFT_VERSION)')
+            TAG="v$VER"
+          fi
+          RAW_VER="${TAG#v}"
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+          echo "STATCRAFT_VER=$RAW_VER" >> $GITHUB_ENV
+
+      - name: Build macOS Application Bundle
         run: |
           pyinstaller --noconfirm --distpath dist/app --workpath build/app StatCraft.spec
 
-      - name: Build StatCraft Setup Installer
+      - name: Verify macOS Application Runs (Offscreen Smoke Test)
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
-          pyinstaller --noconfirm --distpath dist/setup --workpath build/setup installer.spec
+          ./dist/app/StatCraft.app/Contents/MacOS/StatCraft &
+          PID=$!
+          sleep 4
+          kill -0 $PID && kill -9 $PID || true
+          echo "macOS App launch smoke test verified"
 
-      - name: Stage Release Artifacts
-        shell: pwsh
+      - name: Package DMG and ZIP
         run: |
-          New-Item -ItemType Directory -Force -Path release-binaries | Out-Null
-          $setupSrc = "dist/setup/StatCraft-Setup.exe"
-          $appSrc = "dist/app/StatCraft.exe"
-          
-          if (-not (Test-Path $setupSrc)) { throw "Missing $setupSrc" }
-          if (-not (Test-Path $appSrc)) { throw "Missing $appSrc" }
-          
-          Copy-Item $setupSrc "release-binaries/StatCraft-Setup-v${env:STATCRAFT_VER}-Windows-x64.exe"
-          Copy-Item $appSrc "release-binaries/StatCraft-v${env:STATCRAFT_VER}-Windows-x64.exe"
-          
-          Write-Host "Packaged artifacts:"
-          Get-ChildItem release-binaries | Format-Table Name, Length
+          mkdir -p artifacts
+          cd dist/app
+          # Create DMG
+          hdiutil create -volname "StatCraft" -srcfolder "StatCraft.app" -ov -format UDZO "../../artifacts/StatCraft-v${STATCRAFT_VER}-macOS.dmg"
+          # Create ZIP
+          zip -r "../../artifacts/StatCraft-v${STATCRAFT_VER}-macOS.zip" "StatCraft.app"
+          cd ../..
 
-      - name: Publish Binaries to GitHub Release
-        shell: pwsh
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: artifacts/*
+
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libgl1-mesa-glx
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Determine Version
+        run: |
+          INPUT_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VER=$(python -c 'from statcraft.updater import STATCRAFT_VERSION; print(STATCRAFT_VERSION)')
+            TAG="v$VER"
+          fi
+          RAW_VER="${TAG#v}"
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+          echo "STATCRAFT_VER=$RAW_VER" >> $GITHUB_ENV
+
+      - name: Build Standalone Linux Executable
+        run: |
+          pyinstaller --noconfirm --distpath dist/app --workpath build/app StatCraft.spec
+
+      - name: Verify Linux Executable (Offscreen Smoke Test)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./dist/app/StatCraft &
+          PID=$!
+          sleep 4
+          kill -0 $PID && kill -9 $PID || true
+          echo "Linux standalone binary verified"
+
+      - name: Package Linux Tarball (.tar.gz)
+        run: |
+          mkdir -p artifacts
+          STAGE="StatCraft-v${STATCRAFT_VER}-Linux-x86_64"
+          mkdir -p "$STAGE"
+          cp dist/app/StatCraft "$STAGE/"
+          cp StatCraft.png "$STAGE/"
+          cp statcraft.desktop "$STAGE/"
+          chmod +x "$STAGE/StatCraft"
+          tar -czvf "artifacts/StatCraft-v${STATCRAFT_VER}-Linux-x86_64.tar.gz" "$STAGE"
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: artifacts/*
+
+  publish-release:
+    name: Publish Multi-Platform Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version
+        run: |
+          INPUT_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v104.0.0"
+          fi
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: release-all/
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-binaries
+          path: release-all/
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: release-all/
+
+      - name: Display Release Files
+        run: |
+          ls -lh release-all/
+
+      - name: Publish All Assets to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = $env:RELEASE_TAG
-          $files = (Get-ChildItem release-binaries/*.exe).FullName
+          TAG="${{ env.RELEASE_TAG }}"
+          FILES=(release-all/*)
           
-          Write-Host "Checking if release $tag exists..."
-          $exists = $false
-          try {
-            gh release view $tag
-            $exists = ($LASTEXITCODE -eq 0)
-          } catch {
-            $exists = $false
-          }
-          
-          if ($exists) {
-            Write-Host "Updating existing release $tag with fresh binaries..."
-            gh release upload $tag $files --clobber
-          } else {
-            Write-Host "Creating new release $tag and uploading binaries..."
-            gh release create $tag $files --title "StatCraft $tag" --generate-notes
-          }
-          Write-Host "Release $tag successfully published and live on GitHub!"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists. Updating with multi-platform assets..."
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            echo "Creating new release $TAG with multi-platform assets..."
+            gh release create "$TAG" "${FILES[@]}" --title "StatCraft $TAG" --generate-notes
+          fi
+          echo "Multi-platform release successfully published!"

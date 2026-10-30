@@ -1,0 +1,75 @@
+name: Multi-Platform Test & Quality Assurance
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libgl1-mesa-glx
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run Test Suite (Offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m unittest discover tests
+
+      - name: Run Headless UI & Calculation Smoke Verification
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -c "
+          import sys
+          from PySide6.QtWidgets import QApplication
+          from statcraft.modern_app import ModernWindow
+          from statcraft.app import Presenter
+          from statcraft.model import Worksheet, Column
+
+          app = QApplication.instance() or QApplication(sys.argv)
+          p = Presenter()
+          p.worksheet = Worksheet('Smoke', [Column('X', values=[1,2,3,4,5]), Column('Y', values=[2,4,6,8,10])])
+          w = ModernWindow(p)
+          w.show()
+          app.processEvents()
+          
+          # Perform basic calculation & chart rendering verification
+          desc = p.describe_columns([0, 1])
+          w.show_result(desc)
+          app.processEvents()
+
+          # Verify window grabbed without null
+          pix = w.grab()
+          assert not pix.isNull(), 'Grabbed offscreen window is null'
+          print('Headless UI smoke verification passed successfully on', sys.platform)
+          w.close()
+          "

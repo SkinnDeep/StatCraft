@@ -63,6 +63,13 @@ def compare_versions(v1: str, v2: str) -> int:
     return 0
 
 
+def is_major_update(cur_v: str, latest_v: str) -> bool:
+    """Check if latest_v represents a major version increment over cur_v (e.g. 104.x -> 105.x)."""
+    t1 = parse_version(cur_v)
+    t2 = parse_version(latest_v)
+    return t2[0] > t1[0]
+
+
 def get_default_install_dir() -> Path:
     """Get the standard user-level installation directory for StatCraft across OSes."""
     if sys.platform == "win32":
@@ -217,7 +224,7 @@ def check_for_updates(
 
         res["setup_download_url"] = setup_url or f"https://github.com/{repo}/releases/download/v{latest_ver}/StatCraft-Setup-v{latest_ver}-Windows-x64.exe"
         res["app_download_url"] = exe_url or f"https://github.com/{repo}/releases/download/v{latest_ver}/StatCraft-v{latest_ver}-Windows-x64.exe"
-        res["download_url"] = res["app_download_url"] or setup_url or data.get("download_url")
+        res["download_url"] = data.get("download_url") or exe_url or setup_url or res["app_download_url"]
 
         if compare_versions(cur_v, latest_ver) < 0:
             res["update_available"] = True

@@ -67,10 +67,18 @@ def get_app_icon() -> QIcon:
 def find_source_binary() -> Path | None:
     """Find adjacent StatCraft.exe binary if present, otherwise return None to pull from online."""
     current_exe_dir = Path(sys.executable).resolve().parent
-    for name in ["StatCraft.exe", f"StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe"]:
-        sibling = current_exe_dir / name
-        if sibling.exists():
-            return sibling
+    search_dirs = [
+        current_exe_dir,
+        Path(__file__).resolve().parent / "outputs",
+        Path(__file__).resolve().parent.parent / "outputs",
+        Path(__file__).resolve().parent.parent.parent / "outputs",
+        Path(__file__).resolve().parent.parent / "work" / "statcraft-modern-next",
+    ]
+    for d in search_dirs:
+        for name in ["StatCraft.exe", f"StatCraft-v{STATCRAFT_VERSION}-Windows-x64.exe"]:
+            sibling = d / name
+            if sibling.exists():
+                return sibling
     return None
 
 

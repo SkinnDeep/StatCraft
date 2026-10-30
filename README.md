@@ -189,17 +189,17 @@ python launch_modern.py
 
 ---
 
-## Cross-Platform Roadmap
+## Cross-Platform Availability
 
-StatCraft is built on the cross-platform Qt6 (PySide6) framework. Official pre-compiled releases are structured as follows:
+StatCraft is built on the cross-platform Qt6 (PySide6) architecture with native desktop integration across Windows, macOS, and Linux:
 
-| Platform | Current Status | Release Artifact |
+| Platform | Release Format | Description |
 |---|---|---|
-| **Windows x64** | **Available (v104.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
-| **macOS (Apple Silicon & Intel)** | *In Preparation* | `.dmg` installer & standalone `.app` bundle |
-| **Linux (x86_64)** | *In Preparation* | `AppImage` & `.deb` package |
+| **Windows x64** | `.exe` / Web Setup | Standalone portable executable and web setup installer |
+| **macOS (Apple Silicon & Intel)** | `.dmg` / `.zip` | Native macOS `.app` bundle with High-DPI Retina support |
+| **Linux (x86_64)** | `.tar.gz` | Portable distribution with `statcraft.desktop` desktop launcher |
 
-Source execution is already fully functional on macOS and Linux by running `python launch_modern.py`.
+All platforms are continuously tested across automated CI suites with headless UI validation.
 
 ---
 

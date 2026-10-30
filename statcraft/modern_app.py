@@ -4939,19 +4939,28 @@ class ModernWindow(QMainWindow):
             pass
 
     def _on_startup_update_finished(self, info: dict):
-        if info and info.get("update_available"):
-            latest = info.get("latest_version", "")
-            name = info.get("release_name") or f"StatCraft v{latest}"
-            reply = QMessageBox.question(
-                self,
-                "StatCraft Update Available",
-                f"A new version of StatCraft is available: {name}\n\n"
-                f"Would you like to review update details and install now?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                self.check_for_updates_dialog()
+        if not info or not info.get("update_available"):
+            return
+
+        # Only interrupt/prompt user automatically on startup if this is a MAJOR version upgrade (e.g. 104 -> 105).
+        # Minor patches, internal tweaks, and small changes never force existing users to reinstall.
+        from .updater import is_major_update
+        cur_v = info.get("current_version", "")
+        latest_v = info.get("latest_version", "")
+        if not is_major_update(cur_v, latest_v):
+            return
+
+        name = info.get("release_name") or f"StatCraft v{latest_v}"
+        reply = QMessageBox.question(
+            self,
+            "StatCraft Major Update Available",
+            f"A major new version of StatCraft is available: {name}\n\n"
+            f"Would you like to review update details and install now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.check_for_updates_dialog()
 
     def about(self):
         QMessageBox.information(self, "About StatCraft", "StatCraft\n\nOriginal desktop worksheet and statistical workflows.\nImplemented analyses and file-format support are shown in the menus and import notes. Native project output remains inert; unsupported native methods are not silently emulated. Complete functionality and numerical parity remain unverified.")

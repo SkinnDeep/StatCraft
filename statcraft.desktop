@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=StatCraft
+GenericName=Statistical Software
+Comment=Professional Statistical Analysis and Data Worksheets
+Exec=StatCraft %F
+Icon=StatCraft
+Terminal=false
+Categories=Science;Math;Education;Development;
+Keywords=Statistics;Minitab;MPX;ANOVA;Regression;SPC;Capability;DOE;
+StartupNotify=true
+StartupWMClass=StatCraft
