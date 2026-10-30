@@ -60,6 +60,9 @@ def supported(entry):
     if isinstance(r, dict) and r.get('analysis') == 'twoway_anova':
         from .twoway_anova_chart import supported as twoway_supported
         return twoway_supported(r)
+    if isinstance(r, dict) and r.get('analysis') in ('main_effects_plot', 'interactions_plot'):
+        from .anova_plots_chart import supported as anova_plots_supported
+        return anova_plots_supported(r)
     if isinstance(r, dict) and (r.get('graph') == 'equal_variances' or r.get('test_equal_variances')):
         return True
     if isinstance(r, dict) and (r.get('two_variances') and r.get('graphs', {}).get('summary_plot', True)):
@@ -166,6 +169,10 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         if r.get('analysis') == 'twoway_anova':
             from .twoway_anova_chart import prepare as prepare_twoway
             prepare_twoway(self, r)
+            return
+        if r.get('analysis') in ('main_effects_plot', 'interactions_plot'):
+            from .anova_plots_chart import prepare as prepare_anova_plots
+            prepare_anova_plots(self, r)
             return
         if r.get('graph') == 'equal_variances' or r.get('test_equal_variances'):
             self.panels = [{'kind': 'equal_variances', 'title': self.title, 'entry': self.entry}]
@@ -408,6 +415,10 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         if str(kind).startswith('twoway_'):
             from .twoway_anova_chart import draw_panel as draw_twoway_panel
             draw_twoway_panel(self, p, area, d)
+            return
+        if str(kind) in ('main_effects_plot', 'interactions_plot'):
+            from .anova_plots_chart import draw_panel as draw_anova_panel
+            draw_anova_panel(self, p, area, d)
             return
         if kind == 'equal_variances':
             from .equal_variances_chart import draw_equal_variances_panel

@@ -782,6 +782,66 @@ class Presenter:
         title = f"Two-Way ANOVA: {y_col.name} versus {a_col.name}, {b_col.name}"
         return self._record(title, result, recipe={'action': 'twoway_anova', 'parameters': parameters})
 
+    def main_effects_plot(self, response_index: int, factor_indices: list[int]):
+        from .anova_plots_engine import compute_main_effects
+        y_col = self.worksheet.columns[response_index]
+        factors_data = [self.worksheet.columns[i].values for i in factor_indices]
+        factor_names = [self.worksheet.columns[i].name for i in factor_indices]
+        result = compute_main_effects(
+            responses=y_col.values,
+            factors_data=factors_data,
+            response_name=y_col.name,
+            factor_names=factor_names
+        )
+        parameters = {
+            "response_index": response_index,
+            "factor_indices": factor_indices
+        }
+        title = f"Main Effects Plot for {y_col.name}"
+        return self._record(title, result, recipe={'action': 'main_effects_plot', 'parameters': parameters})
+
+    def interactions_plot(self, response_index: int, factor_a_index: int, factor_b_index: int):
+        from .anova_plots_engine import compute_interactions
+        y_col = self.worksheet.columns[response_index]
+        a_col = self.worksheet.columns[factor_a_index]
+        b_col = self.worksheet.columns[factor_b_index]
+        result = compute_interactions(
+            responses=y_col.values,
+            factor_a_vals=a_col.values,
+            factor_b_vals=b_col.values,
+            response_name=y_col.name,
+            factor_a_name=a_col.name,
+            factor_b_name=b_col.name
+        )
+        parameters = {
+            "response_index": response_index,
+            "factor_a_index": factor_a_index,
+            "factor_b_index": factor_b_index
+        }
+        title = f"Interaction Plot for {y_col.name} ({a_col.name} by {b_col.name})"
+        return self._record(title, result, recipe={'action': 'interactions_plot', 'parameters': parameters})
+
+    @undoable
+    def store_descriptive_stats(self, var_indices: list[int], by_index: int | None = None, selected_stats: list[str] | None = None):
+        from .store_descriptive import compute_store_descriptive_columns
+        new_cols = compute_store_descriptive_columns(self.worksheet, var_indices, by_index, selected_stats)
+        for col in new_cols:
+            self.worksheet.columns.append(col)
+        self.dirty = True
+        return self._record("Store Descriptive Statistics", {
+            "stored_columns": [c.name for c in new_cols],
+            "var_indices": var_indices,
+            "by_index": by_index,
+            "selected_stats": selected_stats
+        }, recipe={
+            'action': 'store_descriptive_stats',
+            'parameters': {
+                'var_indices': var_indices,
+                'by_index': by_index,
+                'selected_stats': selected_stats
+            }
+        })
+
     def _store_oneway_columns(self, result):
         storage = (result.get('options') or {}).get('storage') or {}
         store_fits = storage.get('fits', False)
@@ -3764,6 +3824,36 @@ class Presenter:
         return self._record("Patterned Text — " + col.name, {"target_column": col.name, "rows": len(values)})
 
     @undoable
+    def make_patterned_datetime_data(self, target_column_index, start_dt, end_dt=None, count=None, step=1, unit="days", repeat_each=1, repeat_sequence=1, dt_format="%Y-%m-%d"):
+        from datetime import datetime
+        from .calc_data import make_patterned_datetime
+        from .model import Column, datetime_to_serial
+        str_values = make_patterned_datetime(start_dt, end_dt, count, step, unit, repeat_each, repeat_sequence, dt_format)
+        serial_values = []
+        for s in str_values:
+            for fmt_try in (dt_format, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    dt = datetime.strptime(s, fmt_try)
+                    serial_values.append(datetime_to_serial(dt))
+                    break
+                except ValueError:
+                    continue
+            else:
+                serial_values.append(0.0)
+
+        if target_column_index == -1 or target_column_index >= len(self.worksheet.columns):
+            new_name = f"C{len(self.worksheet.columns) + 1}-D"
+            col = Column(new_name, "date", serial_values)
+            self.worksheet.columns.append(col)
+        else:
+            col = self.worksheet.columns[target_column_index]
+            col.kind = 'date'
+            col.values = serial_values
+            col.metadata.pop("auto_type", None)
+        self.dirty = True
+        return self._record("Patterned Date/Time — " + col.name, {"target_column": col.name, "rows": len(serial_values)})
+
+    @undoable
     def generate_random_data(self, target_column_index, dist='normal', n=50, param1=0.0, param2=1.0, seed=None):
         from .calc_data import (
             generate_random_normal, generate_random_uniform,
@@ -5134,6 +5224,12 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get('analysis') == 'twoway_anova':
         from .twoway_anova_report import format_twoway_anova_report
         return title + format_twoway_anova_report(result)
+    if isinstance(result, dict) and result.get('analysis') == 'main_effects_plot':
+        from .anova_plots_report import format_main_effects_report
+        return title + format_main_effects_report(result)
+    if isinstance(result, dict) and result.get('analysis') == 'interactions_plot':
+        from .anova_plots_report import format_interactions_report
+        return title + format_interactions_report(result)
     if isinstance(result,dict) and result.get('analysis')=='general_linear_model':
         from .glm_report import text_report
         return title+text_report(result)

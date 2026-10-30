@@ -673,6 +673,7 @@ class ModernWindow(QMainWindow):
         self._action(patterned_menu, "Simple Set of Numbers…", self.patterned_numbers_dialog, None, None, True)
         self._action(patterned_menu, "Arbitrary Set of Numbers…", self.patterned_arbitrary_dialog, None, None, True)
         self._action(patterned_menu, "Text Values…", self.patterned_text_dialog, None, None, True)
+        self._action(patterned_menu, "Date/Time Values…", self.patterned_datetime_dialog, None, None, True)
         random_menu = calc.addMenu("Random Data")
         self._action(random_menu, "Normal…", self.random_normal_dialog, None, None, True)
         self._action(random_menu, "Uniform…", self.random_uniform_dialog, None, None, True)
@@ -687,6 +688,7 @@ class ModernWindow(QMainWindow):
         # 5. Stat menu
         stat = bar.addMenu("&Stat"); basic = stat.addMenu("Basic Statistics")
         summary = self._action(basic, "Display Descriptive Statistics…", self.describe, None, "summary", True)
+        self.store_descriptive_action = self._action(basic, "Store Descriptive Statistics…", self.store_descriptive_dialog, None, "summary", True)
         self.graphical_summary_action = self._action(basic, "Graphical Summary…", self.graphical_summary_dialog, None, "graphical_summary", True)
         self.outlier_test_action = self._action(basic, "Outlier Test…", self.outlier_test_dialog, None, "outlier_test", True)
         self._action(basic, "Correlation…", self.correlation, None, "correlation", True)
@@ -705,6 +707,8 @@ class ModernWindow(QMainWindow):
         anova = stat.addMenu("ANOVA")
         self.oneway_anova_action = self._action(anova, "One-Way...", self.oneway_anova_dialog, None, None, True)
         self.twoway_anova_action = self._action(anova, "Two-Way…", self.twoway_anova_dialog, None, None, True)
+        self.main_effects_plot_action = self._action(anova, "Main Effects Plot…", self.main_effects_plot_dialog, None, None, True)
+        self.interactions_plot_action = self._action(anova, "Interactions Plot…", self.interactions_plot_dialog, None, None, True)
         self.test_equal_variances_action = self._action(anova, "Test for Equal Variances…", self.test_equal_variances_dialog, None, None, True)
         glm_menu=anova.addMenu("General Linear Model")
         self.glm_fit_action=self._action(glm_menu,"Fit General Linear Model…",self.general_linear_model,None,"regression",True)
@@ -2132,6 +2136,17 @@ class ModernWindow(QMainWindow):
     def describe(self):
         self._dialog("Display Descriptive Statistics", [selector("indices", "Variables", True)], [], lambda p: self.presenter.describe_columns(p["indices"]), "Select one or more numeric columns. Missing observations are counted separately.")
 
+    def store_descriptive_dialog(self):
+        from .store_descriptive import StoreDescriptiveDialog
+        self._commit_editor()
+        self._last_dialog_action = self.store_descriptive_dialog
+        dlg = StoreDescriptiveDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.get_parameters()
+            if p:
+                entry = self._call(lambda: self.presenter.store_descriptive_stats(**p), result=True)
+                self.refresh()
+
     def inference_dialog(self, method):
         count = 1 if method == "one_sample_t" else 2
         maximum = None if method == "one_way_anova" else count
@@ -2222,6 +2237,30 @@ class ModernWindow(QMainWindow):
             p = dlg.settings
             if p:
                 entry = self._call(lambda: self.presenter.twoway_anova(**p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def main_effects_plot_dialog(self):
+        from .anova_plots_dialogs import MainEffectsPlotDialog
+        self._commit_editor()
+        self._last_dialog_action = self.main_effects_plot_dialog
+        dlg = MainEffectsPlotDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.get_parameters()
+            if p:
+                entry = self._call(lambda: self.presenter.main_effects_plot(**p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def interactions_plot_dialog(self):
+        from .anova_plots_dialogs import InteractionsPlotDialog
+        self._commit_editor()
+        self._last_dialog_action = self.interactions_plot_dialog
+        dlg = InteractionsPlotDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.get_parameters()
+            if p:
+                entry = self._call(lambda: self.presenter.interactions_plot(**p), result=True)
                 if entry:
                     self.show_result(entry)
 
@@ -3414,6 +3453,20 @@ class ModernWindow(QMainWindow):
             return
         s = dlg.get_settings()
         self._call(lambda: self.presenter.make_patterned_text_data(s['target_col'], s['items'], s['repeat_each'], s['repeat_sequence']), result=False)
+
+    def patterned_datetime_dialog(self):
+        self._commit_editor()
+        from .calc_data_dialogs import PatternedDateTimeDialog
+        from PySide6.QtWidgets import QDialog
+        dlg = PatternedDateTimeDialog(self.presenter.worksheet, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        s = dlg.get_settings()
+        self._call(lambda: self.presenter.make_patterned_datetime_data(
+            s['target_col'], s['start_dt'], s.get('end_dt'), s.get('count'),
+            s.get('step', 1), s.get('unit', 'days'), s.get('repeat_each', 1),
+            s.get('repeat_sequence', 1), s.get('dt_format', '%Y-%m-%d')
+        ), result=False)
 
     def random_normal_dialog(self):
         self._commit_editor()

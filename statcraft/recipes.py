@@ -22,6 +22,9 @@ FIELDS = {
     'subgroup_control_chart': {'chart_type', 'stacked', 'response_index', 'factor_index', 'indices', 'subgroup_size', 'options'},
     'oneway_anova': {'stacked', 'response_index', 'factor_index', 'response_indices', 'options'},
     'twoway_anova': {'response_index', 'factor_a_index', 'factor_b_index', 'fit_interaction', 'display_means', 'confidence'},
+    'main_effects_plot': {'response_index', 'factor_indices'},
+    'interactions_plot': {'response_index', 'factor_a_index', 'factor_b_index'},
+    'store_descriptive_stats': {'var_indices', 'by_index', 'selected_stats'},
     'factorial_plots':{'model_recipe','selected_indices','options'},
     'model_contour_plot':{'model_recipe','x_index','y_index','options'},
     'model_surface_plot':{'model_recipe','x_index','y_index','options'},
@@ -370,6 +373,26 @@ def columns(recipe):
         if not all(isinstance(x, int) and x >= 0 for x in (r, fa, fb)) or len({r, fa, fb}) != 3:
             raise ValueError('Two-Way ANOVA requires three distinct column indices.')
         return [r, fa, fb]
+    if action == 'main_effects_plot':
+        r = parameters.get('response_index')
+        f = parameters.get('factor_indices')
+        if type(r) is not int or r < 0 or not isinstance(f, list) or not f:
+            raise ValueError('Main Effects Plot requires valid response and factor column indices.')
+        return sorted(set([r] + f))
+    if action == 'interactions_plot':
+        r = parameters.get('response_index')
+        fa = parameters.get('factor_a_index')
+        fb = parameters.get('factor_b_index')
+        if not all(isinstance(x, int) and x >= 0 for x in (r, fa, fb)) or len({r, fa, fb}) != 3:
+            raise ValueError('Interactions Plot requires three distinct column indices.')
+        return [r, fa, fb]
+    if action == 'store_descriptive_stats':
+        vars_ = parameters.get('var_indices', [])
+        by_ = parameters.get('by_index')
+        idx = list(vars_)
+        if by_ is not None and isinstance(by_, int) and by_ >= 0:
+            idx.append(by_)
+        return sorted(set(idx))
     if action=='optimize_responses':
         from .optimizer import settings,SUPPORTED_MODELS,individual_desirability
         opts=settings(parameters['options'])

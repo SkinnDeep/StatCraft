@@ -568,3 +568,105 @@ class PatternedTextDialog(QDialog):
             'repeat_sequence': int(self.rep_seq_edit.text()),
         }
 
+
+class PatternedDateTimeDialog(QDialog):
+    """Dialog for Calc > Make Patterned Data > Date/Time Values..."""
+
+    def __init__(self, worksheet, parent=None):
+        super().__init__(parent)
+        self.worksheet = worksheet
+        self.setWindowTitle("Make Patterned Data - Date/Time Values")
+        self.setMinimumSize(440, 360)
+        self.resize(460, 380)
+
+        main_layout = QVBoxLayout(self)
+        grid_group = QGroupBox("Date/Time Specifications")
+        grid_layout = QVBoxLayout(grid_group)
+
+        grid_layout.addWidget(QLabel("Store patterned data in column:"))
+        self.col_combo = QComboBox()
+        for i, col in enumerate(self.worksheet.columns):
+            self.col_combo.addItem(f"C{i + 1}  {col.name}", i)
+        self.col_combo.addItem(f"C{len(self.worksheet.columns) + 1}  (New Column)", -1)
+        grid_layout.addWidget(self.col_combo)
+
+        grid_layout.addWidget(QLabel("From first date/time:"))
+        self.start_edit = QLineEdit("2026-01-01")
+        grid_layout.addWidget(self.start_edit)
+
+        grid_layout.addWidget(QLabel("To last date/time (or leave blank to use count):"))
+        self.end_edit = QLineEdit("2026-01-10")
+        grid_layout.addWidget(self.end_edit)
+
+        step_row = QHBoxLayout()
+        step_row.addWidget(QLabel("Step size:"))
+        self.step_edit = QLineEdit("1")
+        step_row.addWidget(self.step_edit)
+
+        step_row.addWidget(QLabel("Unit:"))
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(["Days", "Weeks", "Months", "Years", "Hours", "Minutes"])
+        step_row.addWidget(self.unit_combo)
+        grid_layout.addLayout(step_row)
+
+        row_rep = QHBoxLayout()
+        row_rep.addWidget(QLabel("Repeat each:"))
+        self.rep_each_edit = QLineEdit("1")
+        row_rep.addWidget(self.rep_each_edit)
+
+        row_rep.addWidget(QLabel("Repeat sequence:"))
+        self.rep_seq_edit = QLineEdit("1")
+        row_rep.addWidget(self.rep_seq_edit)
+        grid_layout.addLayout(row_rep)
+
+        main_layout.addWidget(grid_group)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        self.ok_btn = QPushButton("OK")
+        self.ok_btn.setDefault(True)
+        self.ok_btn.clicked.connect(self._on_ok)
+        btn_layout.addWidget(self.ok_btn)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self.cancel_btn)
+        main_layout.addLayout(btn_layout)
+
+    def _on_ok(self):
+        try:
+            start_s = self.start_edit.text().strip()
+            if not start_s:
+                raise ValueError("Start date is required.")
+            step_v = int(self.step_edit.text())
+            if step_v == 0:
+                raise ValueError("Step cannot be zero.")
+            rep_each = int(self.rep_each_edit.text())
+            rep_seq = int(self.rep_seq_edit.text())
+            if rep_each < 1 or rep_seq < 1:
+                raise ValueError("Repeat counts must be positive.")
+        except Exception as e:
+            QMessageBox.warning(self, "Invalid Input", f"Please check date/time parameters:\n{e}")
+            return
+        self.accept()
+
+    def get_settings(self) -> dict:
+        unit_map = {
+            "Days": "days", "Weeks": "weeks", "Months": "months",
+            "Years": "years", "Hours": "hours", "Minutes": "minutes"
+        }
+        end_s = self.end_edit.text().strip() or None
+        unit_s = unit_map.get(self.unit_combo.currentText(), "days")
+        fmt = "%Y-%m-%d %H:%M:%S" if unit_s in ("hours", "minutes") else "%Y-%m-%d"
+
+        return {
+            'target_col': self.col_combo.currentData(),
+            'start_dt': self.start_edit.text().strip(),
+            'end_dt': end_s,
+            'step': int(self.step_edit.text()),
+            'unit': unit_s,
+            'repeat_each': int(self.rep_each_edit.text()),
+            'repeat_sequence': int(self.rep_seq_edit.text()),
+            'dt_format': fmt
+        }
+
