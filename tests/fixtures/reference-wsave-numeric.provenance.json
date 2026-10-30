@@ -1,0 +1,22 @@
+{
+  "schema": "statcraft-research-fixture-v1",
+  "fixture": "reference-wsave-numeric.mwx",
+  "sha256": "0e3398ab9f1febbb309af043de11496b5fb51dc8d2e7189c45ed4ea71c6374e9",
+  "bytes": 2169,
+  "origin": "work/runtime-samples/1791911809607/reference.mwx",
+  "acquisition": "Synthetic numeric worksheet saved through the reference application's normal UI WSAVE command, then independently imported without running target code.",
+  "expected_numeric_columns": [
+    [1, 2, 3, 4, 5],
+    [1, 2, 3, 4, null],
+    [7, null, null, null, null],
+    [10, 10, 10, 10, 10],
+    [1, 2, null, null, null]
+  ],
+  "missing_encoding": "Stored numeric 1.23456e+30 maps to StatCraft None for this observed schema.",
+  "source_names": "All five serialized Name fields are empty. C1..C5 are original importer fallback labels; original metadata retains the empty names.",
+  "limitations": [
+    "One synthetic MWX schema fixture, not proof of general format compatibility.",
+    "No MWX writing, target reopen or general application roundtrip is validated by this test.",
+    "The fixture is test data and is not required by the shipped application code."
+  ]
+}

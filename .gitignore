@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.progress
+*.log
+*.tmp
+
+# Distribution / packaging
+build/
+dist/
+outputs/
+*.egg-info/
+
+# PyInstaller work directories
+work/statcraft-modern-freeze/
+work/statcraft-installer-build/
+work/statcraft-build-deps/
+work/statcraft-modern-next/
+work/statcraft-installer-dist/
+
+# Test & IDE
+.pytest_cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

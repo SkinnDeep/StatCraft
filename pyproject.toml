@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "statcraft"
+version = "104.0.0"
+description = "A powerful desktop alternative for statistical analysis with native MPX worksheet compatibility and interactive 3D CAD visualization."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "StatCraft Developers" }
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+    "PySide6>=6.5.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "matplotlib>=3.7.0",
+    "openpyxl>=3.1.0",
+    "python-docx>=0.8.11",
+    "python-pptx>=0.6.21",
+]
+
+[project.scripts]
+statcraft = "statcraft.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["statcraft*"]
