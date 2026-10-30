@@ -390,6 +390,7 @@
       <!-- Showcase Tabs -->
       <div class="flex overflow-x-auto no-scrollbar sm:flex-wrap items-center sm:justify-center gap-2 mb-8 px-2 py-2 -mx-2 sm:mx-0">
         <button onclick="switchTab('sixpack')" id="tab-sixpack" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">Capability Sixpack</button>
+        <button onclick="switchTab('profiler')" id="tab-profiler" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Prediction Profiler (JMP)</button>
         <button onclick="switchTab('surface')" id="tab-surface" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">3D Surface Plot</button>
         <button onclick="switchTab('contour')" id="tab-contour" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Contour Slices</button>
         <button onclick="switchTab('optimizer')" id="tab-optimizer" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Response Optimizer</button>
@@ -743,6 +744,10 @@
       sixpack: {
         img: 'images/sixpack.png',
         caption: 'Process Capability Sixpack: I-MR Chart, Capability Histogram with specs, Normal Probability Plot, and detailed within/overall capability indices (Cp, Cpk, Pp, Ppk).'
+      },
+      profiler: {
+        img: 'images/response-optimizer.png',
+        caption: 'Interactive Prediction Profiler: Real-time draggable crosshairs, confidence interval bands, and Derringer-Suich multi-response desirability optimization (JMP feature parity).'
       },
       surface: {
         img: 'images/surface.png',
