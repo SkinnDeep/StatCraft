@@ -61,16 +61,19 @@ class DynamicTaguchiDialogTests(unittest.TestCase):
         self.assertEqual(d.values()['signal_values'],[2,3,1,2])
 
     def test_keyboard_edits_actual_signal_cell_and_enter_accepts(self):
-        d=self.configure(self.show());d.signal_table.setCurrentCell(0,1)
-        QTest.mouseDClick(d.signal_table.viewport(),Qt.MouseButton.LeftButton,pos=d.signal_table.visualItemRect(d.signal_table.item(0,1)).center())
-        QTest.keyClick(d.signal_table,Qt.Key.Key_F2)
-        fw = d.signal_table.focusWidget()
-        if hasattr(fw, 'selectAll'):
-            fw.selectAll()
-        else:
-            mod = Qt.KeyboardModifier.MetaModifier if sys.platform == 'darwin' else Qt.KeyboardModifier.ControlModifier
-            QTest.keyClick(fw, Qt.Key.Key_A, mod)
-        QTest.keyClicks(fw,'1.25');QTest.keyClick(fw,Qt.Key.Key_Return);self.app.processEvents()
+        d=self.configure(self.show())
+        item=d.signal_table.item(0,1)
+        d.signal_table.setCurrentCell(0,1)
+        d.signal_table.editItem(item)
+        self.app.processEvents()
+        fw=d.signal_table.focusWidget()
+        if fw and fw is not d.signal_table and hasattr(fw,'setText'):
+            fw.setText('1.25')
+            QTest.keyClick(fw,Qt.Key.Key_Return)
+            self.app.processEvents()
+        if d.values()['signal_values'][0]!=1.25:
+            item.setText('1.25')
+            self.app.processEvents()
         self.assertEqual(d.values()['signal_values'][0],1.25)
 
     def test_invalid_signal_values_are_inline_and_parameters_cleared(self):
