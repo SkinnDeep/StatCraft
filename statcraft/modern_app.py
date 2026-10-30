@@ -7,7 +7,7 @@ import math
 import copy
 from pathlib import Path
 import sys
-from PySide6.QtCore import Qt, QSize, QSignalBlocker, QRectF, QPointF
+from PySide6.QtCore import Qt, QSize, QSignalBlocker, QRectF, QPointF, QTimer
 from PySide6.QtGui import (
     QAction, QKeySequence, QIcon, QFont, QPalette, QColor, QPixmap,
     QPainter, QPen, QPolygonF, QActionGroup,
@@ -286,6 +286,7 @@ class ModernWindow(QMainWindow):
         self.splitter.addWidget(self.graph_options_pane);self.graph_options_pane.hide()
         self._create_actions(); self._create_status_bar(); self.refresh()
         self._show_welcome()
+        QTimer.singleShot(2500, self._check_startup_updates)
 
     def _prepare_blank(self):
         sheet = self.presenter.worksheet
@@ -4924,6 +4925,33 @@ class ModernWindow(QMainWindow):
         from .updater_dialog import CheckForUpdatesDialog
         dlg = CheckForUpdatesDialog(self)
         dlg.exec()
+
+    def _check_startup_updates(self):
+        try:
+            from .updater_dialog import UpdateCheckWorker
+            from .updater import read_install_metadata, STATCRAFT_VERSION
+            installed = read_install_metadata()
+            cur_v = installed.get("version", STATCRAFT_VERSION)
+            self._startup_worker = UpdateCheckWorker(cur_v)
+            self._startup_worker.finished.connect(self._on_startup_update_finished)
+            self._startup_worker.start()
+        except Exception:
+            pass
+
+    def _on_startup_update_finished(self, info: dict):
+        if info and info.get("update_available"):
+            latest = info.get("latest_version", "")
+            name = info.get("release_name") or f"StatCraft v{latest}"
+            reply = QMessageBox.question(
+                self,
+                "StatCraft Update Available",
+                f"A new version of StatCraft is available: {name}\n\n"
+                f"Would you like to review update details and install now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.check_for_updates_dialog()
 
     def about(self):
         QMessageBox.information(self, "About StatCraft", "StatCraft\n\nOriginal desktop worksheet and statistical workflows.\nImplemented analyses and file-format support are shown in the menus and import notes. Native project output remains inert; unsupported native methods are not silently emulated. Complete functionality and numerical parity remain unverified.")

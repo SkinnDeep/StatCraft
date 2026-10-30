@@ -43,7 +43,7 @@ from statcraft.updater import (
     compare_versions, get_default_install_dir, read_install_metadata,
     write_install_metadata, setup_shortcuts, download_file,
     register_windows_uninstaller, unregister_windows_uninstaller,
-    remove_shortcuts, perform_uninstall
+    remove_shortcuts, perform_uninstall, _run_hidden_subprocess
 )
 
 
@@ -89,10 +89,10 @@ class InstallWorker(QThread):
         try:
             self.progress_changed.emit(5, "Preparing destination directory...", str(self.target_dir))
             
-            # Terminate running instance if any to release Windows file locks
+            # Terminate running instance if any to release Windows file locks silently
             if sys.platform == "win32":
                 try:
-                    subprocess.run(["taskkill", "/F", "/IM", "StatCraft.exe"], capture_output=True)
+                    _run_hidden_subprocess(["taskkill", "/F", "/IM", "StatCraft.exe"], capture_output=True)
                 except Exception:
                     pass
 
@@ -229,7 +229,7 @@ class InstallerWindow(QMainWindow):
     def __init__(self, target_dir: Path | None = None, check_updates_mode: bool = False):
         super().__init__()
         self.setWindowTitle("StatCraft Setup")
-        self.setFixedSize(680, 500)
+        self.setFixedSize(700, 530)
         self.installed_exe_path = None
         self.custom_target_dir = target_dir or get_default_install_dir()
 
@@ -238,15 +238,43 @@ class InstallerWindow(QMainWindow):
         if not icon.isNull():
             self.setWindowIcon(icon)
 
+        # Global stylesheet to prevent any child widget clipping or unwanted margin inheritance
+        self.setStyleSheet("""
+            QMainWindow { background-color: #0f172a; }
+            QWidget#mainContainer { background-color: #0f172a; color: #f8fafc; }
+            QLabel { background: transparent; color: #f8fafc; }
+            QCheckBox {
+                color: #e2e8f0;
+                font-family: 'Segoe UI';
+                font-size: 9.5pt;
+                spacing: 10px;
+                background: transparent;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 1px solid #475569;
+                border-radius: 4px;
+                background-color: #0f172a;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #3b82f6;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2563eb;
+                border-color: #2563eb;
+            }
+        """)
+
         # Main widget & layout
         main_widget = QWidget()
-        main_widget.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+        main_widget.setObjectName("mainContainer")
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 1. Elegant Header Bar
+        # 1. Header Bar
         header = QFrame()
         header.setFixedHeight(72)
         header.setStyleSheet("background-color: #0b1120; border-bottom: 1px solid #1e293b;")
@@ -422,12 +450,12 @@ class InstallerWindow(QMainWindow):
     def _create_welcome_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(36, 24, 36, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(36, 20, 36, 16)
+        layout.setSpacing(14)
 
         # Title block
         h = QLabel("Welcome to StatCraft")
-        h.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        h.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
         h.setStyleSheet("color: #f8fafc;")
         layout.addWidget(h)
 
@@ -437,20 +465,15 @@ class InstallerWindow(QMainWindow):
         )
         sub.setFont(QFont("Segoe UI", 9.5))
         sub.setWordWrap(True)
-        sub.setStyleSheet("color: #94a3b8; line-height: 1.5;")
+        sub.setStyleSheet("color: #94a3b8; line-height: 1.4;")
         layout.addWidget(sub)
 
         # Feature highlights card
         feat_card = QFrame()
-        feat_card.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 14px;
-            }
-        """)
+        feat_card.setObjectName("featCard")
+        feat_card.setStyleSheet("QFrame#featCard { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; }")
         f_layout = QVBoxLayout(feat_card)
+        f_layout.setContentsMargins(18, 14, 18, 14)
         f_layout.setSpacing(10)
 
         features = [
@@ -464,11 +487,11 @@ class InstallerWindow(QMainWindow):
             row.setSpacing(2)
             lbl_title = QLabel(title_text)
             lbl_title.setFont(QFont("Segoe UI", 9.5, QFont.Weight.Bold))
-            lbl_title.setStyleSheet("color: #f1f5f9; border: none; background: transparent;")
+            lbl_title.setStyleSheet("color: #f1f5f9;")
             
             lbl_desc = QLabel(desc_text)
             lbl_desc.setFont(QFont("Segoe UI", 8.5))
-            lbl_desc.setStyleSheet("color: #94a3b8; border: none; background: transparent;")
+            lbl_desc.setStyleSheet("color: #94a3b8;")
             
             row.addWidget(lbl_title)
             row.addWidget(lbl_desc)
@@ -478,19 +501,13 @@ class InstallerWindow(QMainWindow):
 
         # Target installation summary card
         status_card = QFrame()
-        status_card.setStyleSheet("""
-            QFrame {
-                background-color: #111d32;
-                border: 1px solid #1e3a5f;
-                border-radius: 8px;
-                padding: 10px 14px;
-            }
-        """)
+        status_card.setObjectName("statusCard")
+        status_card.setStyleSheet("QFrame#statusCard { background-color: #111d32; border: 1px solid #1e3a5f; border-radius: 8px; }")
         s_layout = QHBoxLayout(status_card)
-        s_layout.setContentsMargins(12, 8, 12, 8)
+        s_layout.setContentsMargins(16, 10, 16, 10)
         
         info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet("border: none; background: transparent; font-size: 11pt;")
+        info_icon.setStyleSheet("font-size: 11pt;")
         s_layout.addWidget(info_icon)
 
         meta = read_install_metadata(self.custom_target_dir)
@@ -504,7 +521,7 @@ class InstallerWindow(QMainWindow):
 
         self.lbl_detect = QLabel(txt)
         self.lbl_detect.setFont(QFont("Segoe UI", 9))
-        self.lbl_detect.setStyleSheet("color: #60a5fa; border: none; background: transparent;")
+        self.lbl_detect.setStyleSheet("color: #60a5fa;")
         s_layout.addWidget(self.lbl_detect)
         s_layout.addStretch()
 
@@ -515,11 +532,11 @@ class InstallerWindow(QMainWindow):
     def _create_options_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(36, 24, 36, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(36, 20, 36, 16)
+        layout.setSpacing(14)
 
         h = QLabel("Installation Configuration")
-        h.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        h.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
         h.setStyleSheet("color: #f8fafc;")
         layout.addWidget(h)
 
@@ -530,13 +547,15 @@ class InstallerWindow(QMainWindow):
 
         # Directory card
         dir_card = QFrame()
-        dir_card.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px;")
+        dir_card.setObjectName("dirCard")
+        dir_card.setStyleSheet("QFrame#dirCard { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; }")
         d_layout = QVBoxLayout(dir_card)
+        d_layout.setContentsMargins(18, 14, 18, 14)
         d_layout.setSpacing(8)
 
         dest_lbl = QLabel("Install Directory:")
         dest_lbl.setFont(QFont("Segoe UI", 9.5, QFont.Weight.Bold))
-        dest_lbl.setStyleSheet("color: #f1f5f9; border: none; background: transparent;")
+        dest_lbl.setStyleSheet("color: #f1f5f9;")
         d_layout.addWidget(dest_lbl)
 
         row = QHBoxLayout()
@@ -578,31 +597,27 @@ class InstallerWindow(QMainWindow):
 
         # Integration preferences card
         pref_card = QFrame()
-        pref_card.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px;")
+        pref_card.setObjectName("prefCard")
+        pref_card.setStyleSheet("QFrame#prefCard { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; }")
         p_layout = QVBoxLayout(pref_card)
+        p_layout.setContentsMargins(18, 14, 18, 14)
         p_layout.setSpacing(10)
 
         pref_lbl = QLabel("Integration & Shortcuts:")
         pref_lbl.setFont(QFont("Segoe UI", 9.5, QFont.Weight.Bold))
-        pref_lbl.setStyleSheet("color: #f1f5f9; border: none; background: transparent;")
+        pref_lbl.setStyleSheet("color: #f1f5f9;")
         p_layout.addWidget(pref_lbl)
 
         self.chk_desktop = QCheckBox("Create Desktop shortcut")
         self.chk_desktop.setChecked(True)
-        self.chk_desktop.setFont(QFont("Segoe UI", 9))
-        self.chk_desktop.setStyleSheet("color: #cbd5e1; border: none; background: transparent;")
         p_layout.addWidget(self.chk_desktop)
 
         self.chk_start = QCheckBox("Create Start Menu shortcut and Windows Add/Remove integration")
         self.chk_start.setChecked(True)
-        self.chk_start.setFont(QFont("Segoe UI", 9))
-        self.chk_start.setStyleSheet("color: #cbd5e1; border: none; background: transparent;")
         p_layout.addWidget(self.chk_start)
 
         self.chk_auto_update = QCheckBox("Check for software updates automatically")
         self.chk_auto_update.setChecked(True)
-        self.chk_auto_update.setFont(QFont("Segoe UI", 9))
-        self.chk_auto_update.setStyleSheet("color: #cbd5e1; border: none; background: transparent;")
         p_layout.addWidget(self.chk_auto_update)
 
         layout.addWidget(pref_card)
@@ -612,11 +627,11 @@ class InstallerWindow(QMainWindow):
     def _create_progress_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(36, 30, 36, 24)
-        layout.setSpacing(18)
+        layout.setContentsMargins(36, 26, 36, 20)
+        layout.setSpacing(16)
 
         h = QLabel("Installing StatCraft")
-        h.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        h.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
         h.setStyleSheet("color: #f8fafc;")
         layout.addWidget(h)
 
@@ -625,26 +640,28 @@ class InstallerWindow(QMainWindow):
         sub.setStyleSheet("color: #94a3b8;")
         layout.addWidget(sub)
 
-        layout.addSpacing(12)
+        layout.addSpacing(10)
 
         # Progress card container
         card = QFrame()
-        card.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px;")
+        card.setObjectName("progressCard")
+        card.setStyleSheet("QFrame#progressCard { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; }")
         c_layout = QVBoxLayout(card)
+        c_layout.setContentsMargins(20, 18, 20, 18)
         c_layout.setSpacing(14)
 
         # Status text row
         stat_row = QHBoxLayout()
         self.lbl_progress_status = QLabel("Initializing setup...")
         self.lbl_progress_status.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        self.lbl_progress_status.setStyleSheet("color: #f1f5f9; border: none; background: transparent;")
+        self.lbl_progress_status.setStyleSheet("color: #f1f5f9;")
         stat_row.addWidget(self.lbl_progress_status)
 
         stat_row.addStretch()
 
         self.lbl_percent = QLabel("0%")
         self.lbl_percent.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        self.lbl_percent.setStyleSheet("color: #60a5fa; border: none; background: transparent;")
+        self.lbl_percent.setStyleSheet("color: #60a5fa;")
         stat_row.addWidget(self.lbl_percent)
         c_layout.addLayout(stat_row)
 
@@ -670,7 +687,7 @@ class InstallerWindow(QMainWindow):
         # Detail text
         self.lbl_detail = QLabel("Connecting to distribution server...")
         self.lbl_detail.setFont(QFont("Segoe UI", 8.5))
-        self.lbl_detail.setStyleSheet("color: #94a3b8; border: none; background: transparent;")
+        self.lbl_detail.setStyleSheet("color: #94a3b8;")
         c_layout.addWidget(self.lbl_detail)
 
         layout.addWidget(card)
@@ -680,12 +697,12 @@ class InstallerWindow(QMainWindow):
     def _create_finish_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(36, 30, 36, 24)
+        layout.setContentsMargins(36, 26, 36, 20)
         layout.setSpacing(16)
 
         # Success banner
         h = QLabel("StatCraft is Ready!")
-        h.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        h.setFont(QFont("Segoe UI", 17, QFont.Weight.Bold))
         h.setStyleSheet("color: #10b981;")
         layout.addWidget(h)
 
@@ -698,23 +715,25 @@ class InstallerWindow(QMainWindow):
 
         # Summary card
         card = QFrame()
-        card.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px;")
+        card.setObjectName("summaryCard")
+        card.setStyleSheet("QFrame#summaryCard { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; }")
         c_layout = QVBoxLayout(card)
+        c_layout.setContentsMargins(20, 16, 20, 16)
         c_layout.setSpacing(10)
 
         v_lbl = QLabel(f"✓  Installed Version:  StatCraft v{STATCRAFT_VERSION}")
         v_lbl.setFont(QFont("Segoe UI", 9.5, QFont.Weight.Bold))
-        v_lbl.setStyleSheet("color: #f1f5f9; border: none; background: transparent;")
+        v_lbl.setStyleSheet("color: #f1f5f9;")
         c_layout.addWidget(v_lbl)
 
         loc_lbl = QLabel(f"✓  Installed Location:  {self.custom_target_dir}")
         loc_lbl.setFont(QFont("Segoe UI", 9))
-        loc_lbl.setStyleSheet("color: #94a3b8; border: none; background: transparent;")
+        loc_lbl.setStyleSheet("color: #94a3b8;")
         c_layout.addWidget(loc_lbl)
 
         sc_lbl = QLabel("✓  Shortcuts created on Desktop and Start Menu")
         sc_lbl.setFont(QFont("Segoe UI", 9))
-        sc_lbl.setStyleSheet("color: #94a3b8; border: none; background: transparent;")
+        sc_lbl.setStyleSheet("color: #94a3b8;")
         c_layout.addWidget(sc_lbl)
 
         layout.addWidget(card)
@@ -724,7 +743,6 @@ class InstallerWindow(QMainWindow):
         self.chk_launch = QCheckBox("Launch StatCraft now")
         self.chk_launch.setChecked(True)
         self.chk_launch.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        self.chk_launch.setStyleSheet("color: #f8fafc;")
         layout.addWidget(self.chk_launch)
 
         layout.addStretch()
