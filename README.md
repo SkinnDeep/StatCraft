@@ -141,20 +141,32 @@ StatCraft features a custom, high-speed 3D viewport for Response Surface Methodo
 
 ## Installation & Setup
 
-### Option 1: Modern Windows Installer (Recommended)
-Download **`StatCraft-Setup.exe`** from the [Latest Releases](https://github.com/SkinnDeep/StatCraft/releases):
+### Option 1: Lightweight Web Installer (Recommended)
+Download **`StatCraft-Setup-v104.0.0-Windows-x64.exe`** from the [Latest Releases](https://github.com/SkinnDeep/StatCraft/releases):
 1. Run `StatCraft-Setup-v104.0.0-Windows-x64.exe`.
-2. Follow the 4-step wizard to install StatCraft to your user directory (no administrator elevation required).
-3. StatCraft creates Desktop and Start Menu shortcuts and configures background update checks.
-4. Future updates can be checked and installed anytime via **`Help > Check for Updates…`**.
+2. Follow the modern setup wizard to install StatCraft to your user directory (no administrator elevation required). The installer automatically downloads and verifies the application package directly from GitHub releases.
+3. StatCraft creates Desktop and Start Menu shortcuts, registers in Windows **Add/Remove Programs**, and configures background update checks.
+4. Future updates can be checked and applied anytime via **`Help > Check for Updates…`**.
 
-*Silent / Enterprise Deployment:*
+> [!NOTE]
+> **Windows Defender SmartScreen Notice:**
+> Because StatCraft is an independent open-source release (and does not use a commercial \$500/year enterprise certificate), Windows Defender SmartScreen may show a prompt saying *"Windows protected your PC"* on your first download.
+> - Simply click **"More info"** &rarr; **"Run anyway"**.
+> - This is standard for newly released open-source software on GitHub. As downloads and clean telemetry accumulate with Microsoft, this prompt clears automatically.
+
+*Silent / Automated Deployment:*
 ```powershell
-StatCraft-Setup.exe --silent --dir "C:\Program Files\StatCraft"
+StatCraft-Setup-v104.0.0-Windows-x64.exe --silent --dir "$env:LOCALAPPDATA\StatCraft"
 ```
 
 ### Option 2: Standalone Portable Binary
-Download **`StatCraft-v104.0.0-Windows-x64.exe`**. No installation required—simply double-click and run.
+Download **`StatCraft-v104.0.0-Windows-x64.exe`**. No installation required—simply double-click and run directly anywhere.
+
+### Uninstallation
+StatCraft integrates cleanly with standard Windows application management:
+- Go to **Windows Settings &rarr; Apps &rarr; Installed apps**, find **StatCraft**, and click **Uninstall**.
+- Or run `StatCraft-Uninstall.exe` in `%LOCALAPPDATA%\StatCraft`.
+- Shortcuts, registry keys, and program files are removed completely without leaving clutter behind.
 
 ### Option 3: Run from Source
 StatCraft runs on Python 3.10+:
