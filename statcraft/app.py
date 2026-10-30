@@ -272,8 +272,12 @@ class Presenter:
         elif suffix == ".mwx":
             worksheet = io.load_mwx(path)
             project_path = None
+        elif suffix in (".jmp", ".jsl"):
+            from .jmp_reader import load_jmp
+            worksheet = load_jmp(path)
+            project_path = None
         else:
-            raise io.UnsupportedFormatError("Open an .mpx project, .statcraft, .csv, .tsv or supported .mwx file.")
+            raise io.UnsupportedFormatError("Open an .mpx project, .statcraft, .csv, .tsv, supported .mwx, or .jmp/.jsl file.")
         # Replace the active document only after the complete import succeeds.
         self.worksheet = worksheet
         self.native_project = native_project

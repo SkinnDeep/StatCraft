@@ -712,8 +712,9 @@ class ModernWindow(QMainWindow):
         self.test_equal_variances_action = self._action(anova, "Test for Equal Variances…", self.test_equal_variances_dialog, None, None, True)
         glm_menu=anova.addMenu("General Linear Model")
         self.glm_fit_action=self._action(glm_menu,"Fit General Linear Model…",self.general_linear_model,None,"regression",True)
-        self.predict_actions={}; self.optimizer_actions={}; self.factorial_plot_actions={}; self.contour_plot_actions={}; self.surface_plot_actions={}
+        self.predict_actions={}; self.optimizer_actions={}; self.factorial_plot_actions={}; self.contour_plot_actions={}; self.surface_plot_actions={}; self.profiler_actions={}
         self.predict_actions['general_linear_model']=self._action(glm_menu,'Predict…',lambda:self.predict_model('glm'),None,None,True)
+        self.profiler_actions['general_linear_model']=self._action(glm_menu,'Prediction Profiler…',lambda:self.prediction_profiler('glm'),None,None,True)
         self.factorial_plot_actions['general_linear_model']=self._action(glm_menu,'Factorial Plots…',lambda:self.factorial_plots('glm'),None,None,True)
         self.contour_plot_actions['general_linear_model']=self._action(glm_menu,'Contour Plot…',lambda:self.model_contour_plot('glm'),None,None,True)
         self.surface_plot_actions['general_linear_model']=self._action(glm_menu,'Surface Plot…',lambda:self.model_surface_plot('glm'),None,None,True)
@@ -723,6 +724,7 @@ class ModernWindow(QMainWindow):
         regression=regression_root.addMenu('Regression')
         self._action(regression, "Fit regression model…", self.multiple_regression, None, "regression", True)
         self.predict_actions['multiple_regression']=self._action(regression,'Predict…',lambda:self.predict_model('regression'),None,None,True)
+        self.profiler_actions['multiple_regression']=self._action(regression,'Prediction Profiler…',lambda:self.prediction_profiler('regression'),None,None,True)
         self.factorial_plot_actions['multiple_regression']=self._action(regression,'Factorial Plots…',lambda:self.factorial_plots('regression'),None,None,True)
         self.contour_plot_actions['multiple_regression']=self._action(regression,'Contour Plot…',lambda:self.model_contour_plot('regression'),None,None,True)
         self.surface_plot_actions['multiple_regression']=self._action(regression,'Surface Plot…',lambda:self.model_surface_plot('regression'),None,None,True)
@@ -730,6 +732,7 @@ class ModernWindow(QMainWindow):
         binary=regression_root.addMenu('Binary Logistic Regression')
         self._action(binary,'Fit Binary Logistic Model…',self.fit_binary_logistic,None,'regression',True)
         self.predict_actions['fit_binary_logistic']=self._action(binary,'Predict…',lambda:self.predict_model('logistic'),None,None,True)
+        self.profiler_actions['fit_binary_logistic']=self._action(binary,'Prediction Profiler…',lambda:self.prediction_profiler('logistic'),None,None,True)
         self.factorial_plot_actions['fit_binary_logistic']=self._action(binary,'Factorial Plots…',lambda:self.factorial_plots('logistic'),None,None,True)
         self.contour_plot_actions['fit_binary_logistic']=self._action(binary,'Contour Plot…',lambda:self.model_contour_plot('logistic'),None,None,True)
         self.surface_plot_actions['fit_binary_logistic']=self._action(binary,'Surface Plot…',lambda:self.model_surface_plot('logistic'),None,None,True)
@@ -740,6 +743,7 @@ class ModernWindow(QMainWindow):
         self._action(factorial, "Create Factorial Design…", self.create_factorial, None, "doe", True)
         self._action(factorial, "Analyze Factorial Design…", self.analyze_factorial, None, "doe", True)
         self.predict_actions['analyze_factorial']=self._action(factorial,'Predict…',lambda:self.predict_model('factorial'),None,None,True)
+        self.profiler_actions['analyze_factorial']=self._action(factorial,'Prediction Profiler…',lambda:self.prediction_profiler('factorial'),None,None,True)
         self.factorial_plot_actions['analyze_factorial']=self._action(factorial,'Factorial Plots…',lambda:self.factorial_plots('factorial'),None,None,True)
         self.contour_plot_actions['analyze_factorial']=self._action(factorial,'Contour Plot…',lambda:self.model_contour_plot('factorial'),None,None,True)
         self.surface_plot_actions['analyze_factorial']=self._action(factorial,'Surface Plot…',lambda:self.model_surface_plot('factorial'),None,None,True)
@@ -767,6 +771,7 @@ class ModernWindow(QMainWindow):
         self._action(response_surface_menu,"Create Response Surface Design…",self.create_response_surface,None,"doe",True)
         self._action(response_surface_menu,"Analyze Response Surface Design…",self.analyze_response_surface,None,"regression",True)
         self.predict_actions['analyze_response_surface']=self._action(response_surface_menu,'Predict…',lambda:self.predict_model('response_surface'),None,None,True)
+        self.profiler_actions['analyze_response_surface']=self._action(response_surface_menu,'Prediction Profiler…',lambda:self.prediction_profiler('response_surface'),None,None,True)
         self.factorial_plot_actions['analyze_response_surface']=self._action(response_surface_menu,'Factorial Plots…',lambda:self.factorial_plots('response_surface'),None,None,True)
         self.contour_plot_actions['analyze_response_surface']=self._action(response_surface_menu,'Contour Plot…',lambda:self.model_contour_plot('response_surface'),None,None,True)
         self.surface_plot_actions['analyze_response_surface']=self._action(response_surface_menu,'Surface Plot…',lambda:self.model_surface_plot('response_surface'),None,None,True)
@@ -1330,6 +1335,7 @@ class ModernWindow(QMainWindow):
                     if n_cont>=2:two_cont_models.add(canon)
             except (ValueError,TypeError,KeyError,IndexError,OverflowError):pass
         for name,action in self.predict_actions.items():action.setEnabled(name in available_models)
+        for name,action in self.profiler_actions.items():action.setEnabled(name in available_models)
         for name,action in self.optimizer_actions.items():action.setEnabled(name in optimizer_models)
         for name,action in self.factorial_plot_actions.items():action.setEnabled(name in optimizer_models)
         for name,action in self.contour_plot_actions.items():action.setEnabled(name in two_cont_models)
@@ -1990,7 +1996,7 @@ class ModernWindow(QMainWindow):
 
     def open_document(self, typed=False):
         if not self._confirm_leave(): return
-        path, _ = QFileDialog.getOpenFileName(self, "Open project or worksheet", "", "Projects and worksheets (*.mpx *.statcraft *.csv *.tsv *.tab *.mwx);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open project or worksheet", "", "Projects and worksheets (*.mpx *.statcraft *.csv *.tsv *.tab *.mwx *.jmp *.jsl);;JMP Tables (*.jmp *.jsl);;All files (*)")
         if not path: return
         column_types = None
         if typed and Path(path).suffix.lower() in (".csv", ".tsv", ".tab"):
@@ -3202,6 +3208,31 @@ class ModernWindow(QMainWindow):
     def optimize_responses(self,family=None):
         from .optimizer_dialogs import ResponseOptimizerDialog
         ResponseOptimizerDialog(self,family).exec()
+
+    def prediction_profiler(self, family=None):
+        from .native_mpx_models import resolve_entry_recipe
+        from .prediction import normalize_recipe
+        from .prediction_profiler_dialog import PredictionProfilerDialog
+        recipes = []
+        for entry in self.presenter.history:
+            if entry.get('source_unavailable'): continue
+            try:
+                recipe = resolve_entry_recipe(entry, self.presenter.worksheet)
+                if not recipe: continue
+                if recipe.get('action') == 'predict_model': recipe = recipe['parameters']['model_recipe']
+                recipe = normalize_recipe(recipe)
+                if self.presenter.result_worksheet(entry) is not self.presenter.worksheet: continue
+                if not any(r == recipe for r in recipes):
+                    recipes.append(recipe)
+            except Exception:
+                continue
+
+        if not recipes:
+            QMessageBox.information(self, "Prediction Profiler", "Fit a supported regression, factorial, or response surface model before opening the Prediction Profiler.")
+            return
+
+        dialog = PredictionProfilerDialog(self, self.presenter.worksheet, recipes)
+        dialog.exec()
 
     def factorial_plots(self,family=None):
         from .model_plot_dialogs import FactorialPlotsDialog
