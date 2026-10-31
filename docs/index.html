@@ -299,9 +299,9 @@
             <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-5">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
             </div>
-            <h3 class="text-lg font-bold text-white mb-2">Full Design of Experiments (DOE)</h3>
+            <h3 class="text-lg font-bold text-white mb-2">Full DOE & Reliability Suite</h3>
             <p class="text-slate-400 text-sm leading-relaxed">
-              Design and analyze 2-level Factorial, Fractional, Response Surface (Central Composite & Box-Behnken), Dynamic Taguchi, Mixture, and Response Optimization.
+              Design and analyze Definitive Screening Designs (DSD), 2-level Factorials, Fractional, Response Surface (CCD & Box-Behnken), Dynamic Taguchi, Mixture, Accelerated Life Testing (ALT), and Response Optimization.
             </p>
           </div>
           <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-purple-400 font-mono">
@@ -390,6 +390,8 @@
       <!-- Showcase Tabs -->
       <div class="flex overflow-x-auto no-scrollbar sm:flex-wrap items-center sm:justify-center gap-2 mb-8 px-2 py-2 -mx-2 sm:mx-0">
         <button onclick="switchTab('sixpack')" id="tab-sixpack" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">Capability Sixpack</button>
+        <button onclick="switchTab('dsd')" id="tab-dsd" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Definitive Screening (DSD)</button>
+        <button onclick="switchTab('alt')" id="tab-alt" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Accelerated Life Testing (ALT)</button>
         <button onclick="switchTab('profiler')" id="tab-profiler" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Prediction Profiler (JMP)</button>
         <button onclick="switchTab('surface')" id="tab-surface" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">3D Surface Plot</button>
         <button onclick="switchTab('contour')" id="tab-contour" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Contour Slices</button>
@@ -744,6 +746,14 @@
       sixpack: {
         img: 'images/sixpack.png',
         caption: 'Process Capability Sixpack: I-MR Chart, Capability Histogram with specs, Normal Probability Plot, and detailed within/overall capability indices (Cp, Cpk, Pp, Ppk).'
+      },
+      dsd: {
+        img: 'images/dsd-pareto.png',
+        caption: 'Definitive Screening Designs (DSD): Orthogonal main effects, foldover structure, stepwise heredity model selection, and standardized effects Pareto chart with critical t-reference line (Jones & Nachtsheim).'
+      },
+      alt: {
+        img: 'images/alt-life-vs-stress.png',
+        caption: 'Accelerated Life Testing (ALT): Maximum Likelihood Estimation with right-censoring, Arrhenius & Inverse Power Law stress models, and use-condition percentile extrapolation with 95% confidence bounds.'
       },
       profiler: {
         img: 'images/response-optimizer.png',
