@@ -4,6 +4,7 @@ import json
 import math
 
 FIELDS = {
+    'evaluating_measurement_process': {'measurement_index', 'part_index', 'operator_index', 'alpha_interaction'},
     'definitive_screening_analysis': {'response_index', 'factor_indices', 'selection', 'alpha_enter', 'alpha_leave', 'confidence', 'show_pareto'},
     'accelerated_life_testing': {'time_index', 'stress_index', 'censor_index', 'model', 'distribution', 'use_stress', 'confidence'},
     'predict_mixture': {'model_recipe','component_rows','confidence'},
@@ -306,6 +307,9 @@ def columns(recipe):
             return [c for c in cols if isinstance(c, int) and c >= 0]
         else:
             return []
+    if action == 'evaluating_measurement_process':
+        cols = [parameters['measurement_index'], parameters['part_index'], parameters['operator_index']]
+        return sorted(set(cols))
     if action == 'definitive_screening_analysis':
         cols = [parameters['response_index']]
         if parameters.get('factor_indices'):

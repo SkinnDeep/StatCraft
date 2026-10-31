@@ -3675,6 +3675,56 @@ class Presenter:
             recipe={"action": "accelerated_life_testing", "parameters": parameters},
         )
 
+    def evaluating_measurement_process(self, measurement_index, part_index, operator_index, alpha_interaction=0.05):
+        from .emp_engine import evaluate_measurement_process
+        from .emp_report import format_emp_report, get_emp_structured_tables
+
+        m_col = self.worksheet.columns[measurement_index]
+        p_col = self.worksheet.columns[part_index]
+        o_col = self.worksheet.columns[operator_index]
+
+        measurements, parts, operators = [], [], []
+        n_rows = self.worksheet.row_count
+        for r in range(n_rows):
+            mv = m_col.values[r]
+            pv = p_col.values[r]
+            ov = o_col.values[r]
+            if mv is None or pv is None or ov is None:
+                continue
+            if not isinstance(mv, (int, float)) or not math.isfinite(mv):
+                continue
+            measurements.append(float(mv))
+            parts.append(pv)
+            operators.append(ov)
+
+        result = evaluate_measurement_process(
+            measurements=measurements,
+            parts=parts,
+            operators=operators,
+            alpha_interaction=alpha_interaction,
+        )
+        result["meas_name"] = m_col.name
+        result["part_name"] = p_col.name
+        result["op_name"] = o_col.name
+        result["measurement_index"] = measurement_index
+        result["part_index"] = part_index
+        result["operator_index"] = operator_index
+        result["alpha_interaction"] = alpha_interaction
+        result["tables"] = get_emp_structured_tables(result)
+        result["session_text"] = format_emp_report({"result": result})
+
+        parameters = {
+            "measurement_index": measurement_index,
+            "part_index": part_index,
+            "operator_index": operator_index,
+            "alpha_interaction": alpha_interaction,
+        }
+        return self._record(
+            f"Evaluating the Measurement Process — {m_col.name}",
+            result,
+            recipe={"action": "evaluating_measurement_process", "parameters": parameters},
+        )
+
     def scatter_plot(self,x_index,y_index,mode="simple",group_index=None,order="Increasing X",title="",x_label="",y_label=""):
         from .scatter import build
         parameters=dict(x_index=x_index,y_index=y_index,mode=mode,group_index=group_index,order=order,title=title,x_label=x_label,y_label=y_label)

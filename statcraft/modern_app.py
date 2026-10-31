@@ -839,6 +839,7 @@ class ModernWindow(QMainWindow):
         self._action(gage,'Gage R&R Study (Crossed)…',self.gage_rr,None,None,True)
         self._action(gage,'Gage R&R Study (&Nested)…',self.nested_gage_rr_dialog,None,None,True)
         self._action(gage,'Gage &Linearity and Bias Study…',self.gage_linearity_dialog,None,None,True)
+        self._action(gage,'Evaluating the &Measurement Process (EMP)…',self.emp_dialog,None,None,True)
         self._action(quality, '&Attribute Agreement Analysis…', self.attribute_agreement_dialog, None, None, True)
 
         # 5b. Reliability/Survival menu
@@ -2289,6 +2290,16 @@ class ModernWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             vals = dlg.values()
             entry = self._call(lambda: self.presenter.accelerated_life_testing(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
+    def emp_dialog(self):
+        self._commit_editor()
+        from .emp_dialogs import EvaluatingMeasurementProcessDialog
+        dlg = EvaluatingMeasurementProcessDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.evaluating_measurement_process(**vals), result=True)
             if entry:
                 self.show_result(entry)
 
@@ -3967,7 +3978,7 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('evaluating_measurement_process', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
             session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
@@ -4019,7 +4030,7 @@ class ModernWindow(QMainWindow):
             layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
             layout.addWidget(self._result_table(anova_headers, anova_rows))
 
-        if result.get('analysis') == 'accelerated_life_testing' and result.get('tables'):
+        if result.get('analysis') in ('accelerated_life_testing', 'evaluating_measurement_process') and result.get('tables'):
             for tbl in result['tables']:
                 layout.addWidget(label(tbl['title'], 'sectionHeading'))
                 layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
@@ -4373,6 +4384,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'accelerated_life_testing':
                     from .alt_chart import ALTLifeVsStressWidget
                     chart = ALTLifeVsStressWidget(entry)
+                elif result.get('analysis') == 'evaluating_measurement_process':
+                    from .emp_chart import EMPChartWidget
+                    chart = EMPChartWidget(entry)
                 elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
                     from .tolerance_intervals_chart import ToleranceIntervalChartWidget
                     chart = ToleranceIntervalChartWidget(entry)
