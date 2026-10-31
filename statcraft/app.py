@@ -3567,6 +3567,114 @@ class Presenter:
     def analyze_factorial_terms(self,**parameters):
         return self.analyze_factorial(**parameters)
 
+    def create_definitive_screening_design(self, factors, replicates=1, extra_centers=0, randomize=True, seed=1, name="Definitive Screening Design"):
+        from .dsd import create_definitive_screening_design
+        worksheet = create_definitive_screening_design(factors, replicates=replicates, extra_centers=extra_centers, randomize=randomize, seed=seed, name=name)
+        self.new()
+        self.worksheet = worksheet
+        self.dirty = True
+        result = {
+            "design": "Definitive Screening Design",
+            "factors": len(factors),
+            "runs": worksheet.row_count,
+            "replicates": replicates,
+            "extra_centers": extra_centers,
+            "randomized": randomize,
+            "seed": seed,
+            "convention": "Definitive Screening Design with orthogonal main effects and foldover structure (Jones & Nachtsheim 2011).",
+        }
+        return self._record("Definitive Screening Design", result)
+
+    def analyze_definitive_screening_design(self, response_index, factor_indices=None, selection='stepwise', alpha_enter=0.10, alpha_leave=0.05, confidence=95.0, show_pareto=True):
+        from .dsd_analysis import analyze_definitive_screening_design
+        result = analyze_definitive_screening_design(
+            self.worksheet,
+            response_index=response_index,
+            factor_indices=factor_indices,
+            selection=selection,
+            alpha_enter=alpha_enter,
+            alpha_leave=alpha_leave,
+            confidence=confidence,
+            show_pareto=show_pareto,
+        )
+        resp_name = self.worksheet.columns[response_index].name
+        parameters = {
+            "response_index": response_index,
+            "factor_indices": factor_indices,
+            "selection": selection,
+            "alpha_enter": alpha_enter,
+            "alpha_leave": alpha_leave,
+            "confidence": confidence,
+            "show_pareto": show_pareto,
+        }
+        return self._record(
+            f"Definitive Screening Fit — {resp_name}",
+            result,
+            recipe={"action": "definitive_screening_analysis", "parameters": parameters},
+        )
+
+    def accelerated_life_testing(self, time_index, stress_index, censor_index=None, model='arrhenius', distribution='weibull', use_stress=25.0, confidence=95.0):
+        from .alt_engine import fit_accelerated_life_test
+        from .alt_report import format_alt_report, get_alt_structured_tables
+
+        time_col = self.worksheet.columns[time_index]
+        stress_col = self.worksheet.columns[stress_index]
+        censor_col = self.worksheet.columns[censor_index] if censor_index is not None else None
+
+        times, events, stresses = [], [], []
+        n_rows = self.worksheet.row_count
+        for r in range(n_rows):
+            t_v = time_col.values[r]
+            s_v = stress_col.values[r]
+            if t_v is None or s_v is None or not isinstance(t_v, (int, float)) or not isinstance(s_v, (int, float)):
+                continue
+            if t_v <= 0 or not math.isfinite(t_v) or not math.isfinite(s_v):
+                continue
+
+            if censor_col is not None:
+                c_v = censor_col.values[r]
+                if c_v is None:
+                    continue
+                e_v = 1 if c_v in (1, 1.0, "1", "Failure", "Failed", "F") else 0
+            else:
+                e_v = 1
+
+            times.append(float(t_v))
+            events.append(e_v)
+            stresses.append(float(s_v))
+
+        result = fit_accelerated_life_test(
+            times=times,
+            events=events,
+            stresses=stresses,
+            model=model,
+            distribution=distribution,
+            use_stress=use_stress,
+            confidence=confidence,
+        )
+        result["time_name"] = time_col.name
+        result["stress_name"] = stress_col.name
+        result["time_index"] = time_index
+        result["stress_index"] = stress_index
+        result["censor_index"] = censor_index
+        result["tables"] = get_alt_structured_tables(result)
+        result["session_text"] = format_alt_report({"result": result})
+
+        parameters = {
+            "time_index": time_index,
+            "stress_index": stress_index,
+            "censor_index": censor_index,
+            "model": model,
+            "distribution": distribution,
+            "use_stress": use_stress,
+            "confidence": confidence,
+        }
+        return self._record(
+            f"Accelerated Life Testing — {time_col.name} vs {stress_col.name}",
+            result,
+            recipe={"action": "accelerated_life_testing", "parameters": parameters},
+        )
+
     def scatter_plot(self,x_index,y_index,mode="simple",group_index=None,order="Increasing X",title="",x_label="",y_label=""):
         from .scatter import build
         parameters=dict(x_index=x_index,y_index=y_index,mode=mode,group_index=group_index,order=order,title=title,x_label=x_label,y_label=y_label)

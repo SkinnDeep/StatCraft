@@ -4,6 +4,8 @@ import json
 import math
 
 FIELDS = {
+    'definitive_screening_analysis': {'response_index', 'factor_indices', 'selection', 'alpha_enter', 'alpha_leave', 'confidence', 'show_pareto'},
+    'accelerated_life_testing': {'time_index', 'stress_index', 'censor_index', 'model', 'distribution', 'use_stress', 'confidence'},
     'predict_mixture': {'model_recipe','component_rows','confidence'},
     'mixture_contour': {'model_recipe','component_positions','hold_values','options'},
     'optimize_mixture': {'model_recipe','goal','target','bounds','options'},
@@ -304,6 +306,16 @@ def columns(recipe):
             return [c for c in cols if isinstance(c, int) and c >= 0]
         else:
             return []
+    if action == 'definitive_screening_analysis':
+        cols = [parameters['response_index']]
+        if parameters.get('factor_indices'):
+            cols.extend([f for f in parameters['factor_indices'] if isinstance(f, int) and f >= 0])
+        return sorted(set(cols))
+    if action == 'accelerated_life_testing':
+        cols = [parameters['time_index'], parameters['stress_index']]
+        if parameters.get('censor_index') is not None and isinstance(parameters['censor_index'], int) and parameters['censor_index'] >= 0:
+            cols.append(parameters['censor_index'])
+        return sorted(set(cols))
     if action == 'test_equal_variances':
         from .equal_variances_engine import equal_variances_settings
         equal_variances_settings(parameters.get('options'))

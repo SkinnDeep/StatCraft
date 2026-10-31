@@ -5,7 +5,7 @@ from .model import Worksheet
 
 KINDS=('full_factorial','fractional_factorial','general_factorial','plackett_burman',
        'central_composite','box_behnken','taguchi','simplex_centroid','simplex_lattice',
-       'extreme_vertices','custom_optimal')
+       'extreme_vertices','custom_optimal','definitive_screening')
 
 
 def build_plan(kind,factors,replicates=1,centers=0,randomize=True,seed=1,blocks=1,options=None,name='DOE plan'):
@@ -40,6 +40,10 @@ def build_plan(kind,factors,replicates=1,centers=0,randomize=True,seed=1,blocks=
         else:raise ValueError('Choose a finite numeric alpha.')
         from .response_surface import create
         sheet=create(factors,kind,centers,replicates,mode,value,'cube',randomize,seed,name)
+    elif kind == 'definitive_screening':
+        from .dsd import create_definitive_screening_design
+        extra_c = options.get('extra_centers', max(0, centers - 1) if centers > 0 else 0)
+        sheet = create_definitive_screening_design(factors, replicates=replicates, extra_centers=extra_c, randomize=randomize, seed=seed, name=name)
     elif kind in ('general_factorial','plackett_burman','taguchi'):
         from .doe_catalog_designs import create_design
         sheet=create_design(kind,factors,replicates,centers,randomize,seed,blocks,options,name)

@@ -750,6 +750,10 @@ class ModernWindow(QMainWindow):
         self.optimizer_actions['analyze_factorial']=self._action(factorial,'Response Optimizer…',lambda:self.optimize_responses('factorial'),None,None,True)
         self._action(factorial,'Create General Factorial Design…',lambda:self.doe_planner('general_factorial'),None,'doe',True)
         self._action(factorial,'Create Plackett–Burman Design…',lambda:self.doe_planner('plackett_burman'),None,'doe',True)
+        screening = doe.addMenu("Screening")
+        self._action(screening, "Create Definitive Screening Design…", self.create_dsd_dialog, None, "doe", True)
+        self._action(screening, "Analyze Definitive Screening Design…", self.analyze_dsd_dialog, None, "doe", True)
+        self.profiler_actions['definitive_screening_analysis'] = self._action(screening, 'Prediction Profiler…', lambda: self.prediction_profiler('definitive_screening'), None, None, True)
         mixtures=doe.addMenu('Mixture')
         self._action(mixtures,'Create Mixture Design…',lambda:self.doe_planner('simplex_centroid'),None,'doe',True)
         self._action(mixtures,'Analyze Mixture Design…',self.analyze_mixture,None,'regression',True)
@@ -841,6 +845,7 @@ class ModernWindow(QMainWindow):
         reliability = stat.addMenu("&Reliability/Survival")
         dist_analysis = reliability.addMenu("&Distribution Analysis (Right Censoring)")
         self._action(dist_analysis, "Parametric &Distribution Analysis…", self.reliability_distribution_dialog, None, None, True)
+        self._action(reliability, "Accelerated &Life Testing…", self.alt_dialog, None, None, True)
 
         # 5c. Time Series menu
         time_series = stat.addMenu("&Time Series")
@@ -2255,6 +2260,37 @@ class ModernWindow(QMainWindow):
         from .doe_dialogs import AnalyzeFactorialDialog
         dialog = AnalyzeFactorialDialog(self, self.presenter.worksheet)
         if dialog.exec() == QDialog.DialogCode.Accepted: self._call(lambda: self.presenter.analyze_factorial(**dialog.parameters), result=True)
+
+    def create_dsd_dialog(self):
+        from .dsd_dialogs import CreateDefinitiveScreeningDesignDialog
+        dlg = CreateDefinitiveScreeningDesignDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not self._confirm_leave():
+            return
+        entry = self._call(lambda: self.presenter.create_definitive_screening_design(**dlg.parameters), result=True)
+        self.page = 0
+        self.refresh()
+        if entry:
+            self.show_result(entry)
+
+    def analyze_dsd_dialog(self):
+        self._commit_editor()
+        from .dsd_dialogs import AnalyzeDefinitiveScreeningDesignDialog
+        dlg = AnalyzeDefinitiveScreeningDesignDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.analyze_definitive_screening_design(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
+    def alt_dialog(self):
+        self._commit_editor()
+        from .alt_dialogs import AcceleratedLifeTestingDialog
+        dlg = AcceleratedLifeTestingDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.accelerated_life_testing(**vals), result=True)
+            if entry:
+                self.show_result(entry)
 
     def one_variance(self):
         self._dialog("1 Variance — Normal Population", [selector("index", "Variable")],
@@ -3931,11 +3967,62 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
-            session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
+            session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
             rendered.update(result)
+        if result.get('analysis') == 'definitive_screening_analysis':
+            layout.addWidget(label('Regression Equation in Unstandardized Units', 'sectionHeading'))
+            eq_box = QPlainTextEdit(); eq_box.setReadOnly(True); eq_box.setFont(QFont('Consolas', 10))
+            eq_box.setPlainText(result.get('equation', '')); eq_box.setMaximumHeight(55)
+            layout.addWidget(eq_box)
+
+            ms_data = [
+                ['S', f"{result.get('s', 0.0):.4f}"],
+                ['R-sq', f"{result.get('r2', 0.0)*100:.2f}%"],
+                ['R-sq(adj)', f"{result.get('r2_adj', 0.0)*100:.2f}%"],
+                ['R-sq(pred)', f"{result.get('r2_pred', 0.0)*100:.2f}%"]
+            ]
+            layout.addWidget(label('Model Summary', 'sectionHeading'))
+            layout.addWidget(self._result_table(['Measure', 'Value'], ms_data))
+
+            coef_headers = ['Term', 'Coef', 'SE Coef', f"{result.get('confidence', 95):g}% CI", 'T-Value', 'P-Value', 'VIF']
+            coef_rows = []
+            for tr in result.get('terms', []):
+                coef_rows.append([
+                    tr.get('term', ''),
+                    f"{tr.get('coef', 0.0):.4f}",
+                    f"{tr.get('se', 0.0):.4f}",
+                    f"({tr.get('ci_lower', 0.0):.4f}, {tr.get('ci_upper', 0.0):.4f})",
+                    f"{tr.get('t_val', 0.0):.2f}",
+                    f"{tr.get('p_val', 0.0):.4f}",
+                    f"{tr.get('vif', 1.0):.2f}"
+                ])
+            layout.addWidget(label('Coded Coefficients', 'sectionHeading'))
+            layout.addWidget(self._result_table(coef_headers, coef_rows))
+
+            anova_headers = ['Source', 'DF', 'Adj SS', 'Adj MS', 'F-Value', 'P-Value']
+            anova_rows = []
+            for ar in result.get('anova', []):
+                f_s = f"{ar.get('f_val'):.2f}" if ar.get('f_val') is not None else ""
+                p_s = f"{ar.get('p_val'):.4f}" if ar.get('p_val') is not None else ""
+                ms_s = f"{ar.get('adj_ms'):.4f}" if ar.get('adj_ms') is not None else ""
+                anova_rows.append([
+                    ar.get('source', ''),
+                    str(ar.get('df', '')),
+                    f"{ar.get('adj_ss', 0.0):.4f}",
+                    ms_s,
+                    f_s,
+                    p_s
+                ])
+            layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
+            layout.addWidget(self._result_table(anova_headers, anova_rows))
+
+        if result.get('analysis') == 'accelerated_life_testing' and result.get('tables'):
+            for tbl in result['tables']:
+                layout.addWidget(label(tbl['title'], 'sectionHeading'))
+                layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
         if result.get('analysis') == 'attribute_capability':
             binomial = result['method'] == 'binomial'
             data = [['Count variable', result['count_name']], ['Sample size', result['size_name']],
@@ -4280,6 +4367,12 @@ class ModernWindow(QMainWindow):
                 elif result.get('graph') == 'attribute_capability':
                     from .attribute_capability_chart import AttributeCapabilityChartWidget
                     chart = AttributeCapabilityChartWidget(entry)
+                elif result.get('analysis') == 'definitive_screening_analysis':
+                    from .dsd_chart import DSDParetoEffectsWidget
+                    chart = DSDParetoEffectsWidget(entry)
+                elif result.get('analysis') == 'accelerated_life_testing':
+                    from .alt_chart import ALTLifeVsStressWidget
+                    chart = ALTLifeVsStressWidget(entry)
                 elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
                     from .tolerance_intervals_chart import ToleranceIntervalChartWidget
                     chart = ToleranceIntervalChartWidget(entry)
