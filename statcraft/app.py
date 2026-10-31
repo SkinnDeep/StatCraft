@@ -3725,6 +3725,57 @@ class Presenter:
             recipe={"action": "evaluating_measurement_process", "parameters": parameters},
         )
 
+    def cart_tree(self, response_index, predictor_indices, tree_type='auto', max_depth=5, min_split_size=10, min_leaf_size=5):
+        from .tree_engine import fit_decision_tree
+        from .tree_report import format_tree_report, get_tree_structured_tables
+
+        r_col = self.worksheet.columns[response_index]
+        p_cols = [self.worksheet.columns[i] for i in predictor_indices]
+
+        n_rows = self.worksheet.row_count
+        X_mat, y_vec = [], []
+
+        for r in range(n_rows):
+            y_val = r_col.values[r]
+            if y_val is None:
+                continue
+            row = [c.values[r] for c in p_cols]
+            X_mat.append(row)
+            y_vec.append(y_val)
+
+        feat_names = [c.name for c in p_cols]
+        feat_kinds = ["numeric" if c.kind == "number" else "categorical" for c in p_cols]
+
+        result = fit_decision_tree(
+            X=X_mat,
+            y=y_vec,
+            feature_names=feat_names,
+            feature_kinds=feat_kinds,
+            tree_type=tree_type,
+            max_depth=max_depth,
+            min_split_size=min_split_size,
+            min_leaf_size=min_leaf_size,
+        )
+        result["response_name"] = r_col.name
+        result["response_index"] = response_index
+        result["predictor_indices"] = predictor_indices
+        result["tables"] = get_tree_structured_tables(result)
+        result["session_text"] = format_tree_report({"result": result})
+
+        parameters = {
+            "response_index": response_index,
+            "predictor_indices": predictor_indices,
+            "tree_type": tree_type,
+            "max_depth": max_depth,
+            "min_split_size": min_split_size,
+            "min_leaf_size": min_leaf_size,
+        }
+        return self._record(
+            f"CART® {result['tree_type'].capitalize()} Tree — {r_col.name}",
+            result,
+            recipe={"action": "cart_tree", "parameters": parameters},
+        )
+
     def scatter_plot(self,x_index,y_index,mode="simple",group_index=None,order="Increasing X",title="",x_label="",y_label=""):
         from .scatter import build
         parameters=dict(x_index=x_index,y_index=y_index,mode=mode,group_index=group_index,order=order,title=title,x_label=x_label,y_label=y_label)

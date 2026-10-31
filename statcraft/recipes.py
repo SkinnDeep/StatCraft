@@ -4,6 +4,7 @@ import json
 import math
 
 FIELDS = {
+    'cart_tree': {'response_index', 'predictor_indices', 'tree_type', 'max_depth', 'min_split_size', 'min_leaf_size'},
     'evaluating_measurement_process': {'measurement_index', 'part_index', 'operator_index', 'alpha_interaction'},
     'definitive_screening_analysis': {'response_index', 'factor_indices', 'selection', 'alpha_enter', 'alpha_leave', 'confidence', 'show_pareto'},
     'accelerated_life_testing': {'time_index', 'stress_index', 'censor_index', 'model', 'distribution', 'use_stress', 'confidence'},
@@ -307,6 +308,11 @@ def columns(recipe):
             return [c for c in cols if isinstance(c, int) and c >= 0]
         else:
             return []
+    if action == 'cart_tree':
+        cols = [parameters['response_index']]
+        if parameters.get('predictor_indices'):
+            cols.extend([p for p in parameters['predictor_indices'] if isinstance(p, int) and p >= 0])
+        return sorted(set(cols))
     if action == 'evaluating_measurement_process':
         cols = [parameters['measurement_index'], parameters['part_index'], parameters['operator_index']]
         return sorted(set(cols))
