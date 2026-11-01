@@ -42,6 +42,7 @@ def supported(entry):
     if isinstance(r,dict) and r.get('analysis') in ('mixture_model','taguchi_analysis'):
         return bool(r.get('show_graphs',True)) and (r.get('analysis')=='mixture_model' or bool(r.get('panels')))
     if isinstance(r, dict) and (r.get('analysis') in (
+            'optimal_design', 'design_evaluation',
             'cart_tree', 'evaluating_measurement_process', 'definitive_screening_analysis', 'accelerated_life_testing',
             'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis',
             'reliability_distribution', 'capability_nonparametric',

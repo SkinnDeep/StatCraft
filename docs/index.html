@@ -394,6 +394,7 @@
         <button onclick="switchTab('alt')" id="tab-alt" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Accelerated Life Testing (ALT)</button>
         <button onclick="switchTab('emp')" id="tab-emp" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">EMP Gauge (Wheeler)</button>
         <button onclick="switchTab('tree')" id="tab-tree" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">CART® Trees (JMP Partition)</button>
+        <button onclick="switchTab('optimal')" id="tab-optimal" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Custom D-Optimal (JMP)</button>
         <button onclick="switchTab('profiler')" id="tab-profiler" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Prediction Profiler (JMP)</button>
         <button onclick="switchTab('surface')" id="tab-surface" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">3D Surface Plot</button>
         <button onclick="switchTab('contour')" id="tab-contour" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Contour Slices</button>
@@ -764,6 +765,10 @@
       tree: {
         img: 'images/decision-tree.png',
         caption: 'CART® Classification & Regression Trees (Partition): Hierarchical split tree with branch rules, observation purity, predictor importance ranking, and non-linear interaction discovery.'
+      },
+      optimal: {
+        img: 'images/d-optimal-correlations.png',
+        caption: 'Custom D-Optimal Design & Color Map on Correlations: Algorithmic Fedorov coordinate exchange, D/A/G-efficiency diagnostics, and signature JMP correlation heatmap for confounding inspection.'
       },
       profiler: {
         img: 'images/prediction-profiler.png',

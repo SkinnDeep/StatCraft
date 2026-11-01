@@ -754,6 +754,9 @@ class ModernWindow(QMainWindow):
         self._action(screening, "Create Definitive Screening Design…", self.create_dsd_dialog, None, "doe", True)
         self._action(screening, "Analyze Definitive Screening Design…", self.analyze_dsd_dialog, None, "doe", True)
         self.profiler_actions['definitive_screening_analysis'] = self._action(screening, 'Prediction Profiler…', lambda: self.prediction_profiler('definitive_screening'), None, None, True)
+        self._action(screening, "Create D-&Optimal Custom Design…", self.create_d_optimal_dialog, None, "doe", True)
+        diagnostics = doe.addMenu("Design Diagnostics")
+        self._action(diagnostics, "Evaluate &Design (Color Map on Correlations)…", self.evaluate_design_dialog, None, "doe", True)
         mixtures=doe.addMenu('Mixture')
         self._action(mixtures,'Create Mixture Design…',lambda:self.doe_planner('simplex_centroid'),None,'doe',True)
         self._action(mixtures,'Analyze Mixture Design…',self.analyze_mixture,None,'regression',True)
@@ -2284,6 +2287,27 @@ class ModernWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             vals = dlg.values()
             entry = self._call(lambda: self.presenter.analyze_definitive_screening_design(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
+    def create_d_optimal_dialog(self):
+        from .optimal_dialogs import CreateDOptimalDesignDialog
+        dlg = CreateDOptimalDesignDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not self._confirm_leave():
+            return
+        entry = self._call(lambda: self.presenter.create_optimal_design(**dlg.parameters), result=True)
+        self.page = 0
+        self.refresh()
+        if entry:
+            self.show_result(entry)
+
+    def evaluate_design_dialog(self):
+        self._commit_editor()
+        from .optimal_dialogs import EvaluateDesignDialog
+        dlg = EvaluateDesignDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.evaluate_design(**vals), result=True)
             if entry:
                 self.show_result(entry)
 
@@ -3992,7 +4016,7 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('cart_tree', 'evaluating_measurement_process', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
             session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
@@ -4044,7 +4068,7 @@ class ModernWindow(QMainWindow):
             layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
             layout.addWidget(self._result_table(anova_headers, anova_rows))
 
-        if result.get('analysis') in ('cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process') and result.get('tables'):
+        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process') and result.get('tables'):
             for tbl in result['tables']:
                 layout.addWidget(label(tbl['title'], 'sectionHeading'))
                 layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
@@ -4404,6 +4428,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'cart_tree':
                     from .tree_chart import DecisionTreeWidget
                     chart = DecisionTreeWidget(entry)
+                elif result.get('analysis') in ('optimal_design', 'design_evaluation'):
+                    from .design_eval_chart import DesignEvaluationChartWidget
+                    chart = DesignEvaluationChartWidget(entry)
                 elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
                     from .tolerance_intervals_chart import ToleranceIntervalChartWidget
                     chart = ToleranceIntervalChartWidget(entry)

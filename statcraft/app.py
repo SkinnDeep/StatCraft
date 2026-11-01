@@ -3776,6 +3776,95 @@ class Presenter:
             recipe={"action": "cart_tree", "parameters": parameters},
         )
 
+    def create_optimal_design(self, factors, n_runs, model_order='interactions', randomize=True, seed=42, name='Custom D-Optimal Design'):
+        from .optimal_design import create_optimal_design_worksheet
+        from .optimal_report import format_optimal_design_report, get_optimal_structured_tables
+
+        worksheet, result = create_optimal_design_worksheet(
+            factors=factors,
+            n_runs=n_runs,
+            model_order=model_order,
+            randomize=randomize,
+            seed=seed,
+            name=name,
+        )
+        self.new()
+        self.worksheet = worksheet
+        self.dirty = True
+
+        result["tables"] = get_optimal_structured_tables(result)
+        result["session_text"] = format_optimal_design_report({"result": result})
+
+        return self._record(
+            f"Custom D-Optimal Design — {n_runs} Runs",
+            result,
+        )
+
+    def evaluate_design(self, factor_indices, model_order='interactions'):
+        import numpy as np
+        from .optimal_design import expand_model_matrix, evaluate_design_matrix
+        from .optimal_report import format_optimal_design_report, get_optimal_structured_tables
+
+        f_cols = [self.worksheet.columns[i] for i in factor_indices]
+        n_runs = self.worksheet.row_count
+
+        # Convert columns to coded [-1, 1] matrix
+        coded_cols = []
+        factors_info = []
+
+        for col in f_cols:
+            vals = col.values[:n_runs]
+            if col.kind == "number":
+                num_vals = [float(v) for v in vals if v is not None and not math.isnan(float(v))]
+                min_v = min(num_vals) if num_vals else -1.0
+                max_v = max(num_vals) if num_vals else 1.0
+                rng_v = max_v - min_v if max_v > min_v else 1.0
+                # Scale to [-1, 1]
+                c_vec = [((float(v) - min_v) / rng_v * 2.0 - 1.0) if v is not None else 0.0 for v in vals]
+                factors_info.append({"name": col.name, "kind": "continuous", "low": min_v, "high": max_v})
+            else:
+                unique_levs = sorted(list(set(str(v) for v in vals if v is not None)))
+                lev0 = unique_levs[0] if unique_levs else "A"
+                c_vec = [-1.0 if str(v) == lev0 else 1.0 for v in vals]
+                factors_info.append({"name": col.name, "kind": "categorical", "levels": unique_levs[:2]})
+            coded_cols.append(c_vec)
+
+        X_coded = np.column_stack(coded_cols)
+        X_model, term_names = expand_model_matrix(X_coded, model_order=model_order)
+
+        # Replace X1, X2 with actual factor names
+        pretty_terms = []
+        for t in term_names:
+            name_t = t
+            for f_idx, col in enumerate(f_cols):
+                name_t = name_t.replace(f"X{f_idx+1}", col.name)
+            pretty_terms.append(name_t)
+
+        eval_res = evaluate_design_matrix(X_model)
+
+        result = {
+            "analysis": "design_evaluation",
+            "design_name": self.worksheet.name,
+            "n_runs": n_runs,
+            "model_order": model_order,
+            "factors": factors_info,
+            "factor_indices": factor_indices,
+            "term_names": pretty_terms,
+            "eval": eval_res,
+        }
+        result["tables"] = get_optimal_structured_tables(result)
+        result["session_text"] = format_optimal_design_report({"result": result})
+
+        parameters = {
+            "factor_indices": factor_indices,
+            "model_order": model_order,
+        }
+        return self._record(
+            f"Design Evaluation — {self.worksheet.name}",
+            result,
+            recipe={"action": "evaluate_design", "parameters": parameters},
+        )
+
     def scatter_plot(self,x_index,y_index,mode="simple",group_index=None,order="Increasing X",title="",x_label="",y_label=""):
         from .scatter import build
         parameters=dict(x_index=x_index,y_index=y_index,mode=mode,group_index=group_index,order=order,title=title,x_label=x_label,y_label=y_label)
