@@ -46,6 +46,9 @@ if sys.platform == 'win32' and (root / 'StatCraft.ico').exists():
 elif sys.platform == 'darwin' and (root / 'StatCraft.icns').exists():
     icon_file = str(root / 'StatCraft.icns')
 
+version_file = str(root / 'app_version.txt') if (root / 'app_version.txt').exists() else None
+manifest_file = str(root / 'app_manifest.xml') if (root / 'app_manifest.xml').exists() else None
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -55,6 +58,8 @@ exe = EXE(
     name='StatCraft',
     console=False,
     icon=icon_file,
+    version=version_file,
+    manifest=manifest_file,
     upx=False
 )
 
@@ -68,8 +73,8 @@ if sys.platform == 'darwin':
             'CFBundleName': 'StatCraft',
             'CFBundleDisplayName': 'StatCraft',
             'CFBundleIdentifier': 'com.statcraft.desktop',
-            'CFBundleVersion': '104.0.0',
-            'CFBundleShortVersionString': '104.0.0',
+            'CFBundleVersion': '105.0.0',
+            'CFBundleShortVersionString': '105.0.0',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '11.0',
         }

@@ -28,7 +28,7 @@ def get_current_version(repo_root: Path) -> str:
         match = re.search(r'STATCRAFT_VERSION\s*=\s*["\']([^"\']+)["\']', text)
         if match:
             return match.group(1).strip()
-    return "104.0.0"
+    return "105.0.0"
 
 
 def get_github_token() -> str | None:
@@ -281,20 +281,31 @@ def publish_release(
         f"### StatCraft v{version} Production Release\n\n"
         f"- **Installer**: `StatCraft-Setup-v{version}-Windows-x64.exe` (Lightweight web bootstrapper with background download)\n"
         f"- **Application**: `StatCraft-v{version}-Windows-x64.exe` (Full portable standalone package)\n\n"
-        f"#### What's New:\n"
-        f"- Native Windows background execution with zero console flashes\n"
-        f"- Integrated automatic startup update check\n"
-        f"- Modern executive dark UI styling\n"
-        f"- Authenticode code-signed for Windows SmartScreen compatibility\n"
+        f"#### What's New in v{version}:\n"
+        f"- **D-Optimal Custom Design & Evaluation**: Coordinate-exchange optimal design algorithm, D/A/G-efficiency diagnostics, and JMP-style Color Map on Correlations\n"
+        f"- **CART® Partition Trees**: Interactive decision trees with hierarchical split diagrams, variable importance ranking, and session reporting\n"
+        f"- **Wheeler EMP Gauge Study**: Evaluating the Measurement Process classification spectrum (First–Fourth Class), ICC, signal attenuation, and shift detection curves\n"
+        f"- **Definitive Screening (DSD) & ALT**: Orthogonal designs with stepwise heredity selection, and Accelerated Life Testing with right-censored Arrhenius/IPL models\n"
+        f"- **RSM Surface & Contour Plots**: Fixed factor coordinate dereferencing and rendering for native MPX project files\n"
+        f"- **Unified Report Output**: Streamlined single Report workbook matching Minitab with Navigator navigation to individual table cards\n"
+        f"- **PE Metadata & Authenticode**: Embedded PE version resource and Windows application manifests for SmartScreen trust\n"
     )
 
     # Connect to GitHub Release
     release = get_or_create_release(token, repo, tag, release_name, release_body)
     upload_url_tmpl = release["upload_url"]
 
+    upload_list = [(setup_file, setup_file.name), (app_file, app_file.name)]
+    mac_file = outputs_dir / f"StatCraft-v{version}-macOS.zip"
+    linux_file = outputs_dir / f"StatCraft-v{version}-Linux-x86_64.tar.gz"
+    if mac_file.exists():
+        upload_list.append((mac_file, mac_file.name))
+    if linux_file.exists():
+        upload_list.append((linux_file, linux_file.name))
+
     # Delete existing assets with the same name to prevent upload conflicts
     existing_assets = {a["name"]: a["id"] for a in release.get("assets", [])}
-    for file_to_upload, asset_name in [(setup_file, setup_file.name), (app_file, app_file.name)]:
+    for file_to_upload, asset_name in upload_list:
         if asset_name in existing_assets:
             asset_id = existing_assets[asset_name]
             print(f"Removing old asset {asset_name} (ID {asset_id})...")
@@ -312,8 +323,8 @@ def publish_release(
                 print(f"  [OK] Removed old asset (Status {del_resp.status})")
 
     # Upload fresh binaries
-    upload_asset(token, upload_url_tmpl, setup_file, setup_file.name)
-    upload_asset(token, upload_url_tmpl, app_file, app_file.name)
+    for file_to_upload, asset_name in upload_list:
+        upload_asset(token, upload_url_tmpl, file_to_upload, asset_name)
 
     # Also copy to Downloads folder for convenient local testing
     downloads_dir = Path.home() / "Downloads"
