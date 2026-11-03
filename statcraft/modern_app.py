@@ -3977,15 +3977,19 @@ class ModernWindow(QMainWindow):
         rendered = set()
         if result.get('analysis') == 'native_saved_output':
             native_tables = result.get('tables', [])
+            self._report_table_widgets = {}
             if native_tables:
-                for tbl in native_tables:
+                for t_idx, tbl in enumerate(native_tables):
                     t_title = tbl.get('title', '')
                     t_headers = tbl.get('headers', [])
                     t_rows = tbl.get('rows', [])
                     t_notes = tbl.get('footnotes', [])
+                    heading_widget = None
                     if t_title:
-                        layout.addWidget(label(t_title, 'sectionHeading'))
+                        heading_widget = label(t_title, 'sectionHeading')
+                        layout.addWidget(heading_widget)
                     has_headers = any(bool(h.strip()) for h in t_headers)
+                    anchor = heading_widget
                     if has_headers:
                         t_widget = self._result_table(t_headers, t_rows)
                         t_widget.resizeColumnsToContents()
@@ -3994,6 +3998,8 @@ class ModernWindow(QMainWindow):
                             t_widget.setFixedHeight(t_widget.horizontalHeader().height() + sum(t_widget.rowHeight(i) for i in range(t_widget.rowCount())) + 4)
                             t_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
                         layout.addWidget(t_widget)
+                        if anchor is None:
+                            anchor = t_widget
                     else:
                         for row in t_rows:
                             eq_line = "  ".join(str(cell) for cell in row if str(cell).strip())
@@ -4004,12 +4010,20 @@ class ModernWindow(QMainWindow):
                                 eq_lbl.setWordWrap(True)
                                 eq_lbl.setStyleSheet("padding: 2px 4px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 3px;")
                                 layout.addWidget(eq_lbl)
+                                if anchor is None:
+                                    anchor = eq_lbl
                     for fn in t_notes:
                         fn_lbl = QLabel(fn)
                         fn_lbl.setFont(QFont('Segoe UI', 8.5))
                         fn_lbl.setStyleSheet("color: #666666; font-style: italic;")
                         fn_lbl.setWordWrap(True)
                         layout.addWidget(fn_lbl)
+                    if anchor is not None:
+                        if t_title:
+                            self._report_table_widgets[t_title] = anchor
+                            short_tbl_title = t_title.split(" (")[0] if " (" in t_title else t_title
+                            self._report_table_widgets[short_tbl_title] = anchor
+                        self._report_table_widgets[t_idx] = anchor
                 rendered.update(result)
             else:
                 session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
@@ -4190,66 +4204,6 @@ class ModernWindow(QMainWindow):
         scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(),100))
         chosen_tab = 0
         native_tables = result.get('tables', []) if result.get('analysis') == 'native_saved_output' else []
-        table_tab_indices = {}
-        if len(native_tables) > 1:
-            for t_idx, tbl in enumerate(native_tables):
-                tbl_title = tbl.get('title') or (tbl['headers'][0] if tbl.get('headers') and tbl['headers'][0] else f"Table {t_idx + 1}")
-                short_tbl_title = tbl_title.split(" (")[0] if " (" in tbl_title else tbl_title
-                tbl_stage = QWidget(); tbl_stage.setObjectName("outputPane")
-                tbl_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-                tbl_stage.customContextMenuRequested.connect(lambda pos, s=tbl_stage: self._show_output_context_menu(s.mapToGlobal(pos)))
-                tbl_stage_layout = QVBoxLayout(tbl_stage); tbl_stage_layout.setContentsMargins(14, 12, 14, 14)
-                tbl_card = QFrame(); tbl_card.setObjectName("resultCard")
-                tbl_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-                tbl_card.customContextMenuRequested.connect(lambda pos, c=tbl_card: self._show_output_context_menu(c.mapToGlobal(pos)))
-                tbl_card_layout = QVBoxLayout(tbl_card); tbl_card_layout.setContentsMargins(18, 14, 18, 18); tbl_card_layout.setSpacing(11)
-
-                tbl_badge_row = QHBoxLayout(); tbl_badge_row.setContentsMargins(0, 0, 0, 0)
-                tbl_ws_badge = QLabel("WORKSHEET: " + (entry.get("worksheet_name") or self.presenter.worksheet.name).upper())
-                tbl_ws_badge.setObjectName("worksheetBadge")
-                tbl_badge_row.addWidget(tbl_ws_badge, 1)
-                tbl_drop_btn = QToolButton(); tbl_drop_btn.setObjectName("outputDropdownBtn")
-                tbl_drop_btn.setText("▾"); tbl_drop_btn.setToolTip("Output Options")
-                tbl_drop_btn.clicked.connect(lambda b=tbl_drop_btn: self._show_output_context_menu(b.mapToGlobal(b.rect().bottomLeft())))
-                tbl_badge_row.addWidget(tbl_drop_btn)
-                tbl_card_layout.addLayout(tbl_badge_row)
-                tbl_card_layout.addWidget(label(tbl_title, "pageHeading"))
-
-                has_headers = any(bool(h.strip()) for h in tbl.get('headers', []))
-                if has_headers:
-                    sub_t_widget = self._result_table(tbl['headers'], tbl['rows'])
-                    sub_t_widget.resizeColumnsToContents()
-                    sub_t_widget.setMaximumWidth(min(1800, sum(sub_t_widget.columnWidth(i) for i in range(sub_t_widget.columnCount())) + 28))
-                    if len(tbl['rows']) <= 100:
-                        sub_t_widget.setFixedHeight(sub_t_widget.horizontalHeader().height() + sum(sub_t_widget.rowHeight(i) for i in range(sub_t_widget.rowCount())) + 4)
-                        sub_t_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-                    tbl_card_layout.addWidget(sub_t_widget)
-                else:
-                    for row in tbl.get('rows', []):
-                        eq_line = "  ".join(str(cell) for cell in row if str(cell).strip())
-                        if eq_line:
-                            eq_lbl = QLabel(eq_line)
-                            eq_lbl.setFont(QFont('Segoe UI', 9.5))
-                            eq_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                            eq_lbl.setWordWrap(True)
-                            eq_lbl.setStyleSheet("padding: 2px 4px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 3px;")
-                            tbl_card_layout.addWidget(eq_lbl)
-                for fn in tbl.get('footnotes', []):
-                    fn_lbl = QLabel(fn)
-                    fn_lbl.setFont(QFont('Segoe UI', 8.5))
-                    fn_lbl.setStyleSheet("color: #666666; font-style: italic;")
-                    fn_lbl.setWordWrap(True)
-                    tbl_card_layout.addWidget(fn_lbl)
-                tbl_card_layout.addStretch()
-                tbl_stage_layout.addWidget(tbl_card); tbl_stage_layout.addStretch()
-
-                tbl_scroll = OutputZoomView(tbl_stage)
-                t_tab_idx = self.result_tabs.addTab(tbl_scroll, short_tbl_title)
-                self.result_tabs.setTabToolTip(t_tab_idx, tbl_title)
-                tbl_scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(), 100))
-                table_tab_indices[tbl_title] = t_tab_idx
-                table_tab_indices[short_tbl_title] = t_tab_idx
-                table_tab_indices[t_idx] = t_tab_idx
         from .modern_charts import ChartWidget, supported
         if supported(entry):
             if result.get('analysis') == 'native_saved_output':
@@ -4325,8 +4279,12 @@ class ModernWindow(QMainWindow):
                 has_report_text = bool(result.get('text', '').strip()) or bool(native_tables)
                 if target_graph_index is not None and 0 <= target_graph_index < len(graph_tab_indices):
                     chosen_tab = graph_tab_indices[target_graph_index]
-                elif target_tab is not None and target_tab in table_tab_indices:
-                    chosen_tab = table_tab_indices[target_tab]
+                elif target_tab is not None and target_tab in getattr(self, '_report_table_widgets', {}):
+                    chosen_tab = 0
+                    try:
+                        scroll.ensureWidgetVisible(self._report_table_widgets[target_tab], 0, 50)
+                    except Exception:
+                        pass
                 elif target_tab == "Report":
                     chosen_tab = 0
                 elif not has_report_text and graph_tab_indices:
@@ -4524,9 +4482,13 @@ class ModernWindow(QMainWindow):
             self._active_chart_widget = None
             self._active_graph_frame=None
             self.graph_options_pane.load_entry(None);self.graph_options_pane.hide()
-            if target_tab is not None and target_tab in table_tab_indices:
-                chosen_tab = table_tab_indices[target_tab]
-                self.result_tabs.setCurrentIndex(chosen_tab)
+            if target_tab is not None and target_tab in getattr(self, '_report_table_widgets', {}):
+                chosen_tab = 0
+                try:
+                    scroll.ensureWidgetVisible(self._report_table_widgets[target_tab], 0, 50)
+                except Exception:
+                    pass
+                self.result_tabs.setCurrentIndex(0)
         text = QPlainTextEdit(); text.setReadOnly(True); text.setFont(QFont("Consolas", 9.5)); text.setPlainText(format_entry(entry))
         text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         text.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(text.mapToGlobal(pos)))

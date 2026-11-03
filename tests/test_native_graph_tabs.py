@@ -90,11 +90,12 @@ class NativeGraphTabsTests(unittest.TestCase):
         self.w.show_result(reg_entry)
         self.app.processEvents()
 
-        # Verify structured table tabs exist in addition to Report and graphs
+        # Tables are unified in the single Report workbook, not exploding into separate tabs
         tab_names = [self.w.result_tabs.tabText(i) for i in range(self.w.result_tabs.count())]
-        self.assertIn('Coded Coefficients', tab_names)
-        self.assertIn('Model Summary', tab_names)
-        self.assertIn('Analysis of Variance', tab_names)
+        self.assertIn('Report', tab_names)
+        self.assertNotIn('Coded Coefficients', tab_names)
+        self.assertNotIn('Model Summary', tab_names)
+        self.assertNotIn('Analysis of Variance', tab_names)
 
         # Find entry node in Navigator
         nav = self.w.navigator
@@ -112,18 +113,18 @@ class NativeGraphTabsTests(unittest.TestCase):
         self.assertIn('Model Summary', sub_titles)
         self.assertIn('Analysis of Variance', sub_titles)
 
-        # Test clicking Coded Coefficients in Navigator
+        # Test clicking Coded Coefficients in Navigator focuses the Report tab
         coef_child = next(cmd_node.child(k) for k in range(cmd_node.childCount()) if cmd_node.child(k).text(0) == 'Coded Coefficients')
         self.w._navigate(coef_child, 0)
         self.app.processEvents()
-        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Coded Coefficients')
+        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Report')
 
         # Test clicking Model Summary in Navigator (re-find node after refresh)
         cmd_node = next(nav.topLevelItem(i).child(j) for i in range(nav.topLevelItemCount()) for j in range(nav.topLevelItem(i).childCount()) if 'Factorial Regression' in nav.topLevelItem(i).child(j).text(0))
         ms_child = next(cmd_node.child(k) for k in range(cmd_node.childCount()) if cmd_node.child(k).text(0) == 'Model Summary')
         self.w._navigate(ms_child, 0)
         self.app.processEvents()
-        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Model Summary')
+        self.assertEqual(self.w.result_tabs.tabText(self.w.result_tabs.currentIndex()), 'Report')
 
 
 if __name__ == '__main__':

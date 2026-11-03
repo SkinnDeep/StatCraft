@@ -317,9 +317,13 @@ def _figure(reader, figure):
                 vals = reader.vector(cvar)
                 if vals:
                     group_vals = vals
-                    name = cvar.get('WorksheetVarBody', {}).get('Name')
-                    if name: group_name = name
-                    break
+                    cvar_body = cvar.get('WorksheetVarBody')
+                    if isinstance(cvar_body, str):
+                        cvar_body = reader.resolve(cvar_body)
+                    if isinstance(cvar_body, dict):
+                        name = cvar_body.get('Name')
+                        if name: group_name = str(name)
+                        break
 
     output = []
     for panel_index, native_panel in enumerate(panels):
@@ -330,10 +334,22 @@ def _figure(reader, figure):
         if not p_label:
             for index in ids[:64]:
                 if 0 <= index < len(models) and isinstance(models[index], dict):
-                    m_name = models[index].get('XCol', {}).get('WorksheetVar', {}).get('WorksheetVarBody', {}).get('Name')
-                    if m_name:
-                        p_label = m_name
-                        break
+                    xcol = models[index].get('XCol')
+                    if isinstance(xcol, str):
+                        xcol = reader.resolve(xcol)
+                    if isinstance(xcol, dict):
+                        wvar = xcol.get('WorksheetVar')
+                        if isinstance(wvar, str):
+                            wvar = reader.resolve(wvar)
+                        if isinstance(wvar, dict):
+                            wbody = wvar.get('WorksheetVarBody')
+                            if isinstance(wbody, str):
+                                wbody = reader.resolve(wbody)
+                            if isinstance(wbody, dict):
+                                m_name = wbody.get('Name')
+                                if m_name:
+                                    p_label = str(m_name)
+                                    break
         x_lbl = p_label or _axis(reader, figure, 0, panel_index)
 
         panel = {'kind': kind, 'x_label': x_lbl, 'y_label': _axis(reader, figure, 1, panel_index),
