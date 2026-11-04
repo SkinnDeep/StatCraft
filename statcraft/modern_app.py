@@ -7,7 +7,7 @@ import math
 import copy
 from pathlib import Path
 import sys
-from PySide6.QtCore import Qt, QSize, QSignalBlocker, QRectF, QPointF, QTimer
+from PySide6.QtCore import Qt, QSize, QSignalBlocker, QRectF, QPointF, QTimer, QSettings
 from PySide6.QtGui import (
     QAction, QKeySequence, QIcon, QFont, QPalette, QColor, QPixmap,
     QPainter, QPen, QPolygonF, QActionGroup,
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFormLayout, QLineEdit, QListWidget, QListWidgetItem, QPushButton,
     QMessageBox, QFileDialog, QInputDialog, QCheckBox, QTabBar, QMenu,
     QToolButton, QSlider, QRadioButton, QGroupBox, QGridLayout, QFrame,QTableWidgetSelectionRange,
+    QStackedWidget, QSizePolicy,
 )
 from .app import Presenter, format_entry, _display, _number_list
 from .model import Column, finite_number, display_date
@@ -174,6 +175,7 @@ class ModernWindow(QMainWindow):
         self._use_hidden_in_dialogs = False
         self._report_pad_entries = []
         self._prepare_blank()
+        self._ui_mode = QSettings("StatCraft", "StatCraft").value("ui_mode", "minitab")
         self.setWindowTitle("StatCraft - Untitled")
         self.resize(1280, 760); self.setMinimumSize(920, 520)
         self.setFont(QFont("Segoe UI", 9))
@@ -286,6 +288,7 @@ class ModernWindow(QMainWindow):
         self.splitter.addWidget(self.graph_options_pane);self.graph_options_pane.hide()
         self._create_actions(); self._create_status_bar(); self.refresh()
         self._show_welcome()
+        self.set_ui_mode(self._ui_mode)
         QTimer.singleShot(2500, self._check_startup_updates)
 
     def _prepare_blank(self):
@@ -319,7 +322,16 @@ class ModernWindow(QMainWindow):
         self.navigator.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.navigator.customContextMenuRequested.connect(self._show_navigator_item_menu)
         nav_layout.addWidget(self.navigator, 1)
-        self.splitter.addWidget(self.navigator_container)
+
+        from .jmp_panel import JMPTablePanel
+        self.jmp_panel = JMPTablePanel(self)
+
+        self.sidebar_stack = QStackedWidget()
+        self.sidebar_stack.setObjectName("sidebarStack")
+        self.sidebar_stack.setMinimumWidth(175); self.sidebar_stack.setMaximumWidth(380)
+        self.sidebar_stack.addWidget(self.navigator_container)
+        self.sidebar_stack.addWidget(self.jmp_panel)
+        self.splitter.addWidget(self.sidebar_stack)
 
         # Center/Right vertical splitter: Output pane on top, Worksheet grid on bottom
         self.work_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -583,18 +595,16 @@ class ModernWindow(QMainWindow):
         action.triggered.connect(lambda checked=False: invoke())
         menu.addAction(action); return action
 
-    def _create_actions(self):
-        bar = self.menuBar()
-
+    def _populate_minitab_menubar(self, bar):
         # 1. File menu
         file = bar.addMenu("&File")
         new_menu = file.addMenu("New")
         self.new_sheet_action = self._action(new_menu, "Worksheet", self.new_worksheet, QKeySequence("Ctrl+N"), "new_sheet")
         new_proj = self._action(new_menu, "Project", self.new_document, QKeySequence("Ctrl+Shift+N"), "new_project")
-        opened = self._action(file, "Open…", self.open_document, QKeySequence.StandardKey.Open, "open")
+        self.open_action = self._action(file, "Open…", self.open_document, QKeySequence.StandardKey.Open, "open")
         self._action(file, "Import delimited text with column types…", lambda: self.open_document(True))
         file.addSeparator()
-        saved = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
+        self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
         self._action(file, "Save Project As…", lambda: self.save_document(True), QKeySequence.StandardKey.SaveAs, "save_copy")
         self._action(file, "Save Current Worksheet As…", self.export_data, None, "export")
         excel=file.addMenu('Export to Excel')
@@ -608,7 +618,7 @@ class ModernWindow(QMainWindow):
         self._action(file, "Page Setup…", lambda: self._printing().page_setup())
         self._action(file, "Print Preview…", lambda: self._printing().run("preview"))
         self._action(file, "Export PDF…", lambda: self._printing().run("pdf"))
-        printed = self._action(file, "Print…", self.print_current, QKeySequence.StandardKey.Print, "print")
+        self.print_action = self._action(file, "Print…", self.print_current, QKeySequence.StandardKey.Print, "print")
         file.addSeparator()
         self._action(file, "Exit", self.close, QKeySequence.StandardKey.Quit)
 
@@ -620,8 +630,8 @@ class ModernWindow(QMainWindow):
         self.clear_action = self._action(edit, "Clear Cells", self.clear_cells, QKeySequence("Delete"), "erase")
         self.delete_action = self._action(edit, "Delete Cells", self.delete_selected_rows, None, "delete")
         self.cut_action = self._action(edit, "Cut Cells", self.cut_cells, QKeySequence.StandardKey.Cut, "cut")
-        copied = self._action(edit, "Copy Cells", self.copy_cells, QKeySequence.StandardKey.Copy, "copy")
-        pasted = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
+        self.copy_action = self._action(edit, "Copy Cells", self.copy_cells, QKeySequence.StandardKey.Copy, "copy")
+        self.paste_action = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
         edit.addSeparator()
         self._action(edit, "Select All Cells in Worksheet", self.table.selectAll, QKeySequence.StandardKey.SelectAll)
         self.last_dialog_action = self._action(edit, "Edit Last Dialog", self.edit_last_dialog, QKeySequence("Ctrl+E"), "last_dialog")
@@ -931,7 +941,11 @@ class ModernWindow(QMainWindow):
 
         # 7. View menu (`RT_MENU 8445`: Navigator, Command Line/History, Data and Output, Data Only, Output Only, Zoom)
         view = bar.addMenu("&View")
-        self.view_nav_action = QAction("Navigator", self, checkable=True, checked=True)
+        ui_style_menu = view.addMenu("UI Style")
+        self._action(ui_style_menu, "Minitab Style (Classic)", lambda: self.set_ui_mode("minitab"))
+        self._action(ui_style_menu, "JMP Style (Platform)", lambda: self.set_ui_mode("jmp"))
+        view.addSeparator()
+        self.view_nav_action = QAction("Navigator / Table Panel", self, checkable=True, checked=True)
         self.view_nav_action.triggered.connect(self.toggle_navigator)
         view.addAction(self.view_nav_action)
         self.view_cmd_action = QAction("Command Line/History", self, checkable=True, checked=False)
@@ -998,6 +1012,10 @@ class ModernWindow(QMainWindow):
         self._action(solutions, "Solutions Modules Overview…", lambda: self._module_notice("Solutions Modules", "Industry-specific guided templates remain under development. Use Stat, DOE, Control Charts and Quality Tools directly."))
 
         # Toolbar: Exact 21-button StatCraft layout (`RT_TOOLBAR 8445` + `RT_TOOLBAR 9915`)
+    def _create_actions(self):
+        bar = self.menuBar()
+        self._populate_minitab_menubar(bar)
+
         self.cancel_action = QAction(tool_icon("cancel"), "Cancel", self)
         self.cancel_action.setToolTip("Cancel active edit / operation")
         self.cancel_action.triggered.connect(self.cancel_operation)
@@ -1018,14 +1036,14 @@ class ModernWindow(QMainWindow):
         self.main_toolbar = toolbar
 
         # Standard Toolbar (8445) — 13 buttons
-        toolbar.addAction(opened)
-        toolbar.addAction(saved)
+        toolbar.addAction(self.open_action)
+        toolbar.addAction(self.save_action)
         toolbar.addSeparator()
-        toolbar.addAction(printed)
+        toolbar.addAction(self.print_action)
         toolbar.addSeparator()
         toolbar.addAction(self.cut_action)
-        toolbar.addAction(copied)
-        toolbar.addAction(pasted)
+        toolbar.addAction(self.copy_action)
+        toolbar.addAction(self.paste_action)
         toolbar.addSeparator()
         toolbar.addAction(self.undo_action)
         toolbar.addAction(self.redo_action)
@@ -1050,6 +1068,122 @@ class ModernWindow(QMainWindow):
         toolbar.addAction(self.next_brushed_action)
         toolbar.addSeparator()
         toolbar.addAction(self.clear_action)
+
+        # Right-aligned spacer and UI Mode switcher toggle
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+
+        mode_box = QWidget()
+        mode_box.setObjectName("modeToggleBox")
+        mode_layout = QHBoxLayout(mode_box)
+        mode_layout.setContentsMargins(4, 0, 4, 0)
+        mode_layout.setSpacing(2)
+
+        lbl_mode = QLabel("UI:")
+        lbl_mode.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
+        lbl_mode.setStyleSheet("color: #444444; padding-right: 2px;")
+        mode_layout.addWidget(lbl_mode)
+
+        self.btn_mode_minitab = QToolButton()
+        self.btn_mode_minitab.setText("⊞ Minitab")
+        self.btn_mode_minitab.setToolTip("Switch to Minitab Classic UI Mode (Ctrl+Alt+J)")
+        self.btn_mode_minitab.setCheckable(True)
+        self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
+
+        self.btn_mode_jmp = QToolButton()
+        self.btn_mode_jmp.setText("📊 JMP")
+        self.btn_mode_jmp.setToolTip("Switch to JMP Platform UI Mode (Ctrl+Alt+J)")
+        self.btn_mode_jmp.setCheckable(True)
+        self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
+
+        self.btn_mode_minitab.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-top-left-radius: 3px;
+                border-bottom-left-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover {
+                background-color: #e5f1fb;
+            }
+            QToolButton:checked {
+                background-color: #00569a;
+                color: #ffffff;
+                border-color: #00447c;
+            }
+        """)
+
+        self.btn_mode_jmp.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-left: none;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover {
+                background-color: #e1f5fe;
+            }
+            QToolButton:checked {
+                background-color: #0277bd;
+                color: #ffffff;
+                border-color: #01579b;
+            }
+        """)
+
+        mode_layout.addWidget(self.btn_mode_minitab)
+        mode_layout.addWidget(self.btn_mode_jmp)
+        toolbar.addWidget(mode_box)
+
+        # Global shortcut Ctrl+Alt+J to toggle mode
+        self.toggle_mode_action = QAction(self)
+        self.toggle_mode_action.setShortcut(QKeySequence("Ctrl+Alt+J"))
+        self.toggle_mode_action.triggered.connect(lambda: self.set_ui_mode("jmp" if getattr(self, "_ui_mode", "minitab") == "minitab" else "minitab"))
+        self.addAction(self.toggle_mode_action)
+
+    def set_ui_mode(self, mode: str):
+        mode = mode.lower() if isinstance(mode, str) else "minitab"
+        if mode not in ("minitab", "jmp"):
+            mode = "minitab"
+        self._ui_mode = mode
+
+        if hasattr(self, "btn_mode_minitab") and hasattr(self, "btn_mode_jmp"):
+            self.btn_mode_minitab.setChecked(mode == "minitab")
+            self.btn_mode_jmp.setChecked(mode == "jmp")
+
+        bar = self.menuBar()
+        bar.clear()
+        if mode == "jmp":
+            from .jmp_panel import populate_jmp_menubar
+            populate_jmp_menubar(self, bar)
+        else:
+            self._populate_minitab_menubar(bar)
+
+        if hasattr(self, "sidebar_stack"):
+            self.sidebar_stack.setCurrentIndex(1 if mode == "jmp" else 0)
+            if mode == "jmp" and hasattr(self, "jmp_panel"):
+                self.jmp_panel.refresh()
+
+        if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
+            self.refresh()
+
+        from PySide6.QtCore import QSettings
+        settings = QSettings("StatCraft", "StatCraft")
+        settings.setValue("ui_mode", mode)
+
+        mode_label = "JMP Platform" if mode == "jmp" else "Minitab Classic"
+        self.statusBar().showMessage(f"StatCraft UI Style: {mode_label}", 4000)
 
     def _module_notice(self, title, message):
         QMessageBox.information(self, title, message)
@@ -1087,8 +1221,9 @@ class ModernWindow(QMainWindow):
         self.statusBar().showMessage("Data entry direction: " + mode_text, 5000)
 
     def toggle_navigator(self):
-        vis = not self.navigator_container.isVisible()
-        self.navigator_container.setVisible(vis)
+        target = getattr(self, "sidebar_stack", self.navigator_container)
+        vis = not target.isVisible()
+        target.setVisible(vis)
         if hasattr(self, "status_nav_button"): self.status_nav_button.setChecked(vis)
         if hasattr(self, "view_nav_action"): self.view_nav_action.setChecked(vis)
 
@@ -1254,6 +1389,10 @@ class ModernWindow(QMainWindow):
             elif self.table.columnWidth(i) <= 0:
                 self.table.setColumnWidth(i, default_w)
             address = "C" + str(i + 1) + ("-T" if column.kind == "text" else "-D" if column.kind == "date" else "")
+            if getattr(self, "_ui_mode", "minitab") == "jmp":
+                mt = column.metadata.get("modeling_type") or ("nominal" if column.kind == "text" else "ordinal" if column.kind == "date" else "continuous")
+                symbol = "▲ " if mt == "continuous" else "▮ " if mt == "nominal" else "📶 "
+                address = symbol + address
             headers.append(address)
             item = QTableWidgetItem(column.name if column.name != "C" + str(i + 1) else "")
             formula_note = ("  [Formula: " + column.metadata["formula"] + "]") if column.metadata.get("formula") else ""
@@ -1486,6 +1625,8 @@ class ModernWindow(QMainWindow):
             frame.apply_appearance()
         self._sync_selection_highlights()
         if self.selected_entry is not None: self._update_result_state()
+        if hasattr(self, "jmp_panel"):
+            self.jmp_panel.refresh()
 
     def _column_name_current_changed(self,row,column,*unused):
         if self._refreshing or column<0:return

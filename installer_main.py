@@ -378,7 +378,7 @@ class InstallerWindow(QMainWindow):
     def __init__(self, target_dir: Path | None = None, check_updates_mode: bool = False):
         super().__init__()
         self.setWindowTitle("Setup - StatCraft")
-        self.setFixedSize(540, 420)
+        self.setFixedSize(560, 460)
         self.installed_exe_path: Path | None = None
         self.custom_target_dir = target_dir or get_default_install_dir()
 
@@ -455,6 +455,22 @@ class InstallerWindow(QMainWindow):
                 color: #000000;
                 spacing: 8px;
                 background: transparent;
+                padding: 2px 0px;
+            }
+            QRadioButton::indicator {
+                width: 14px;
+                height: 14px;
+                border-radius: 8px;
+                border: 1px solid #707070;
+                background-color: #ffffff;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #0078d7;
+            }
+            QRadioButton::indicator:checked {
+                border-radius: 8px;
+                border: 1px solid #0078d7;
+                background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5, stop: 0 #0078d7, stop: 0.55 #0078d7, stop: 0.6 #ffffff, stop: 1.0 #ffffff);
             }
             QGroupBox {
                 font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -582,7 +598,7 @@ class InstallerWindow(QMainWindow):
 
         body = QWidget()
         b_layout = QVBoxLayout(body)
-        b_layout.setContentsMargins(24, 12, 24, 12)
+        b_layout.setContentsMargins(24, 10, 24, 10)
         b_layout.setSpacing(8)
 
         lbl = QLabel("Please read the following License Agreement. You must accept the terms of this agreement before continuing with the installation.")
@@ -593,17 +609,29 @@ class InstallerWindow(QMainWindow):
         txt_license = QTextEdit()
         txt_license.setReadOnly(True)
         txt_license.setPlainText(MIT_LICENSE_TEXT)
-        txt_license.setFixedHeight(180)
+        txt_license.setFixedHeight(140)
         b_layout.addWidget(txt_license)
 
+        radio_container = QWidget()
+        r_layout = QVBoxLayout(radio_container)
+        r_layout.setContentsMargins(0, 4, 0, 4)
+        r_layout.setSpacing(6)
+
         self.radio_accept = QRadioButton("I &accept the agreement")
+        self.radio_accept.setFont(QFont("Segoe UI", 9))
+        self.radio_accept.setCursor(Qt.CursorShape.PointingHandCursor)
+
         self.radio_decline = QRadioButton("I &do not accept the agreement")
+        self.radio_decline.setFont(QFont("Segoe UI", 9))
+        self.radio_decline.setCursor(Qt.CursorShape.PointingHandCursor)
         self.radio_decline.setChecked(True)
 
         self.radio_accept.toggled.connect(self._on_license_toggled)
 
-        b_layout.addWidget(self.radio_accept)
-        b_layout.addWidget(self.radio_decline)
+        r_layout.addWidget(self.radio_accept)
+        r_layout.addWidget(self.radio_decline)
+        b_layout.addWidget(radio_container)
+
         b_layout.addStretch()
 
         layout.addWidget(body)
@@ -758,7 +786,7 @@ class InstallerWindow(QMainWindow):
 
         self.txt_summary = QTextEdit()
         self.txt_summary.setReadOnly(True)
-        self.txt_summary.setFixedHeight(190)
+        self.txt_summary.setFixedHeight(170)
         b_layout.addWidget(self.txt_summary)
 
         b_layout.addStretch()
