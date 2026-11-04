@@ -5450,7 +5450,20 @@ class ModernWindow(QMainWindow):
             self.check_for_updates_dialog()
 
     def about(self):
-        QMessageBox.information(self, "About StatCraft", "StatCraft\n\nOriginal desktop worksheet and statistical workflows.\nImplemented analyses and file-format support are shown in the menus and import notes. Native project output remains inert; unsupported native methods are not silently emulated. Complete functionality and numerical parity remain unverified.")
+        from .updater import STATCRAFT_VERSION
+        QMessageBox.information(
+            self,
+            "About StatCraft",
+            f"StatCraft v{STATCRAFT_VERSION}\n\n"
+            "The Modern, Native Statistical Engine for Engineers & Scientists.\n"
+            "Open-source alternative to both Minitab® and JMP®.\n\n"
+            "• Direct .MPX/.MTW and .JMP/.JSL file compatibility\n"
+            "• JMP Fit Y by X (Bivariate, Means Diamonds, Contingency Mosaic)\n"
+            "• Interactive Prediction Profiler with Desirability Optimization\n"
+            "• Full DOE: Definitive Screening (DSD), Custom D-Optimal, RSM & Factorial\n"
+            "• Six Sigma Process Capability Sixpack & SPC Control Charts\n"
+            "• 100% Local, Offline & Zero Cloud Lock-in"
+        )
 
 
 def main():

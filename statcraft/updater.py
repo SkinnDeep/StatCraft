@@ -529,10 +529,107 @@ def unregister_windows_uninstaller() -> bool:
         return False
 
 
+def _delete_reg_key_tree(root, subkey: str):
+    """Recursively delete a Windows registry key tree."""
+    import winreg
+    try:
+        with winreg.OpenKey(root, subkey, 0, winreg.KEY_ALL_ACCESS) as k:
+            while True:
+                try:
+                    child = winreg.EnumKey(k, 0)
+                    _delete_reg_key_tree(root, f"{subkey}\\{child}")
+                except OSError:
+                    break
+        winreg.DeleteKey(root, subkey)
+    except Exception:
+        pass
+
+
+def register_file_associations(target_exe: Path, extensions: Optional[list[str]] = None) -> bool:
+    """Register file associations in HKCU\\Software\\Classes for Minitab and JMP files."""
+    if sys.platform != "win32":
+        return False
+    if extensions is None:
+        extensions = [".mpx", ".mtw", ".mwx", ".jmp"]
+    try:
+        import winreg
+        exe_path = str(target_exe.resolve())
+        ico_str = f'"{exe_path}",0'
+
+        file_types = {
+            ".mpx": ("StatCraft.MpxFile", "Minitab Project File"),
+            ".mtw": ("StatCraft.MtwFile", "Minitab Worksheet File"),
+            ".mwx": ("StatCraft.MwxFile", "Minitab XML Worksheet"),
+            ".jmp": ("StatCraft.JmpFile", "JMP Data Table"),
+        }
+
+        for ext in extensions:
+            ext_lower = ext.lower().strip()
+            if ext_lower not in file_types:
+                continue
+            prog_id, desc = file_types[ext_lower]
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{ext_lower}") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, prog_id)
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{prog_id}") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, desc)
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{prog_id}\DefaultIcon") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, ico_str)
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{prog_id}\shell\open\command") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_path}" "%1"')
+
+        try:
+            import ctypes
+            ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, 0, 0)
+        except Exception:
+            pass
+        return True
+    except Exception as exc:
+        print(f"Warning: Failed to register file associations: {exc}")
+        return False
+
+
+def unregister_file_associations(extensions: Optional[list[str]] = None) -> bool:
+    """Unregister file associations from HKCU\\Software\\Classes."""
+    if sys.platform != "win32":
+        return False
+    if extensions is None:
+        extensions = [".mpx", ".mtw", ".mwx", ".jmp"]
+    try:
+        import winreg
+        prog_ids = ["StatCraft.MpxFile", "StatCraft.MtwFile", "StatCraft.MwxFile", "StatCraft.JmpFile"]
+        for pid in prog_ids:
+            _delete_reg_key_tree(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{pid}")
+
+        for ext in extensions:
+            ext_lower = ext.lower().strip()
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{ext_lower}", 0, winreg.KEY_READ | winreg.KEY_WRITE) as k:
+                    val, _ = winreg.QueryValueEx(k, "")
+                    if "StatCraft" in str(val):
+                        winreg.DeleteValue(k, "")
+            except Exception:
+                pass
+
+        try:
+            import ctypes
+            ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, 0, 0)
+        except Exception:
+            pass
+        return True
+    except Exception as exc:
+        print(f"Warning: Failed to unregister file associations: {exc}")
+        return False
+
+
 def perform_uninstall(target_dir: Optional[Path] = None) -> bool:
     """Fully uninstall StatCraft: remove shortcuts, unregister from Windows, and remove files."""
     install_dir = target_dir or get_default_install_dir()
     remove_shortcuts()
+    unregister_file_associations()
     unregister_windows_uninstaller()
 
     # Remove files in install directory

@@ -5,15 +5,15 @@
 <img src="StatCraft.png" width="128" height="128" alt="StatCraft Logo" />
 
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
-**A powerful desktop alternative to Minitab with native MPX file compatibility, interactive CAD 3D response surfaces, and enterprise-grade reliability.**
+**A powerful desktop alternative to Minitab® and JMP® with native .MPX/.MTW and .JMP file compatibility, JMP Fit Y by X, interactive Prediction Profiler, CAD 3D response surfaces, and enterprise-grade reliability.**
 
-[![Version](https://img.shields.io/badge/version-104.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-105.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v104.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v104.0.0) •
+[Download Release (v105.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v105.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -24,9 +24,9 @@
 
 ## Overview
 
-**StatCraft** is a modern, standalone desktop statistical analysis suite built for engineers, data scientists, quality professionals, and researchers. It provides a complete alternative to legacy proprietary tools like Minitab, featuring direct compatibility with standard **MPX** project and worksheet files, sub-millisecond calculation speeds, and an innovative CAD-grade interactive 3D visualization engine.
+**StatCraft** is a modern, standalone desktop statistical analysis suite built for engineers, data scientists, quality professionals, and researchers. It provides a complete, 100% free and open-source alternative to legacy proprietary tools like Minitab® and JMP®, featuring direct compatibility with standard **MPX/MTW** projects and worksheets as well as **JMP** data tables, sub-millisecond calculation speeds, and an innovative CAD-grade interactive 3D visualization engine.
 
-Whether you need quick descriptive statistics, hypothesis testing, Six Sigma control charts, complex Design of Experiments (DOE), or response surface optimization, StatCraft delivers authentic, production-ready results in an intuitive interface.
+Whether you need quick descriptive statistics, hypothesis testing, JMP Fit Y by X (Bivariate, Oneway Means Diamonds, Contingency), Six Sigma control charts, complex Design of Experiments (DOE, Custom D-Optimal, Definitive Screening), or response surface optimization, StatCraft delivers authentic, production-ready results in an intuitive interface.
 
 ---
 

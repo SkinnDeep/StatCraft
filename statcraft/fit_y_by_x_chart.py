@@ -73,13 +73,16 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         header_h = self._draw_header(painter, w)
 
         # Plot Canvas Area
-        canvas_rect = QRectF(70, header_h + 15, w - 100, h - header_h - 60)
-
-        if self.platform == "bivariate":
+        if self.platform == "oneway":
+            # Reserve space on right for signature JMP Tukey-Kramer comparison circles
+            canvas_rect = QRectF(75, header_h + 15, max(200.0, w - 245.0), max(100.0, h - header_h - 75.0))
+            circles_rect = QRectF(w - 155, header_h + 15, 135, max(100.0, h - header_h - 75.0))
+            self._draw_oneway(painter, canvas_rect, circles_rect)
+        elif self.platform == "bivariate":
+            canvas_rect = QRectF(75, header_h + 15, max(200.0, w - 105.0), max(100.0, h - header_h - 75.0))
             self._draw_bivariate(painter, canvas_rect)
-        elif self.platform == "oneway":
-            self._draw_oneway(painter, canvas_rect)
         elif self.platform == "contingency":
+            canvas_rect = QRectF(75, header_h + 15, max(200.0, w - 145.0), max(100.0, h - header_h - 75.0))
             self._draw_contingency(painter, canvas_rect)
 
     def _draw_header(self, painter: QPainter, w: int) -> int:
@@ -87,10 +90,20 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         y_name = self.result.get("y_name", "Y")
         x_name = self.result.get("x_name", "X")
 
+        # Signature JMP Red Triangle dropdown indicator
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#dc2626")))
+        tri_path = QPainterPath()
+        tri_path.moveTo(20, 16)
+        tri_path.lineTo(32, 16)
+        tri_path.lineTo(26, 26)
+        tri_path.closeSubpath()
+        painter.drawPath(tri_path)
+
         painter.setPen(QColor(INK))
-        font_title = QFont("Segoe UI", 13, QFont.Weight.Bold)
+        font_title = QFont("Segoe UI", 12, QFont.Weight.Bold)
         painter.setFont(font_title)
-        painter.drawText(20, 28, title)
+        painter.drawText(38, 25, title)
 
         # Summary Pills
         painter.setFont(QFont("Segoe UI", 9))
@@ -191,6 +204,15 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         # Draw Grid & Axes
         self._draw_grid_and_axes(painter, rect, x_min, x_max, y_min, y_max)
 
+        # 0. Grand Mean Line (JMP Fit Mean)
+        y_mean = float(np.mean(ys))
+        painter.setPen(QPen(QColor("#64748b"), 1.1, Qt.PenStyle.DashLine))
+        y_gm = map_y(y_mean)
+        painter.drawLine(rect.left(), y_gm, rect.right(), y_gm)
+        painter.setFont(QFont("Segoe UI", 7.5))
+        painter.setPen(QColor("#64748b"))
+        painter.drawText(rect.right() - 78, y_gm - 4, f"Mean: {y_mean:.2f}")
+
         # 1. Confidence Band Region
         if self.show_ci:
             ci = self.result.get("ci_band", {})
@@ -285,7 +307,7 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         painter.setPen(QColor(INK))
         painter.drawText(leg_rect.left() + 195, leg_rect.center().y() + 4, "50% Ellipse")
 
-    def _draw_oneway(self, painter: QPainter, rect: QRectF):
+    def _draw_oneway(self, painter: QPainter, rect: QRectF, circles_rect: Optional[QRectF] = None):
         g_stats = self.result.get("group_stats", [])
         diamonds = self.result.get("diamonds", [])
         grand_mean = self.result.get("grand_mean", 0.0)
@@ -383,6 +405,14 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
                 painter.setPen(QPen(QColor("#0e7490"), 2))
                 painter.drawLine(cx - dw, mean_y, cx + dw, mean_y)
 
+                # Signature JMP Overlap Lines (at 1/sqrt(2) of CI half-height)
+                ci_half = abs(ci_high_y - mean_y)
+                overlap_h = ci_half / math.sqrt(2)
+                overlap_w = dw * (1.0 - (1.0 / math.sqrt(2)))
+                painter.setPen(QPen(QColor("#0891b2"), 1.2, Qt.PenStyle.DashLine))
+                painter.drawLine(cx - overlap_w, mean_y - overlap_h, cx + overlap_w, mean_y - overlap_h)
+                painter.drawLine(cx - overlap_w, mean_y + overlap_h, cx + overlap_w, mean_y + overlap_h)
+
             # X Axis Category Label
             painter.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
             painter.setPen(QColor(INK))
@@ -395,6 +425,40 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
             painter.setPen(QColor(MUTED))
             n_rect = QRectF(rect.left() + i * col_w, rect.bottom() + 26, col_w, 18)
             painter.drawText(n_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, f"N={g['n']}")
+
+        # 3. Signature JMP Comparison Circles (Tukey-Kramer HSD)
+        if circles_rect and circles_rect.width() > 50:
+            c_center_x = circles_rect.center().x()
+
+            # Comparison Circles Header
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            painter.setPen(QColor(INK))
+            painter.drawText(QRectF(circles_rect.left(), circles_rect.top() - 14, circles_rect.width(), 16),
+                             Qt.AlignmentFlag.AlignCenter, "All Pairs (Tukey)")
+
+            for idx, (g, diam) in enumerate(zip(g_stats, diamonds)):
+                cy = map_y(diam["mean"])
+                ci_top_y = map_y(diam["ci_upper"])
+                radius = max(6.0, abs(cy - ci_top_y))
+
+                # Highlight primary group with horizontal tangent bounds
+                is_selected = (idx == 0)
+                if is_selected:
+                    painter.setPen(QPen(QColor("#dc2626"), 1.8))
+                    painter.setBrush(QBrush(QColor(220, 38, 38, 25)))
+                    painter.drawEllipse(QPointF(c_center_x, cy), radius, radius)
+
+                    painter.setPen(QPen(QColor("#dc2626"), 1.0, Qt.PenStyle.DotLine))
+                    painter.drawLine(rect.left(), cy - radius, circles_rect.right(), cy - radius)
+                    painter.drawLine(rect.left(), cy + radius, circles_rect.right(), cy + radius)
+                else:
+                    painter.setPen(QPen(QColor("#64748b"), 1.2))
+                    painter.setBrush(QBrush(QColor(100, 116, 139, 15)))
+                    painter.drawEllipse(QPointF(c_center_x, cy), radius, radius)
+
+                painter.setFont(QFont("Segoe UI", 7.5))
+                painter.setPen(QColor("#dc2626" if is_selected else MUTED))
+                painter.drawText(circles_rect.left() + 2, cy + 4, str(g["level"]))
 
     def _draw_contingency(self, painter: QPainter, rect: QRectF):
         tiles = self.result.get("mosaic_tiles", [])
@@ -515,14 +579,15 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         painter.setPen(QColor(INK))
 
-        # X Title
+        # X Title positioned cleanly below numeric or category ticks
         x_name = self.result.get("x_name", "X")
-        painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, x_name)
+        lbl_rect_x = QRectF(rect.left(), rect.bottom() + (44 if is_categorical_x else 26), rect.width(), 20)
+        painter.drawText(lbl_rect_x, Qt.AlignmentFlag.AlignCenter, x_name)
 
         # Y Title (Rotated)
         y_name = self.result.get("y_name", "Y")
         painter.save()
-        painter.translate(rect.left() - 48, rect.center().y())
+        painter.translate(rect.left() - 50, rect.center().y())
         painter.rotate(-90)
         painter.drawText(QRectF(-100, -10, 200, 20), Qt.AlignmentFlag.AlignCenter, y_name)
         painter.restore()
