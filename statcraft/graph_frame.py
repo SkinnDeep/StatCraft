@@ -19,7 +19,7 @@ class GraphFrame(QWidget):
         chart._frame_managed=True
         chart.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Ignored)
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Ignored)
-        self.base_panels=copy.deepcopy(chart.panels);self.export_hidden=[]
+        self.base_panels=copy.deepcopy(getattr(chart, 'panels', []));self.export_hidden=[]
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(4)
         self.header=QHBoxLayout();self.title_label=AnnotationLabel();self.title_label.setObjectName('pageHeading')
         self.title_label.setTextFormat(Qt.TextFormat.PlainText);self.title_label.setWordWrap(True)

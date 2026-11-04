@@ -14,18 +14,25 @@ class NativeGraphTabsTests(unittest.TestCase):
         cls.app.setQuitOnLastWindowClosed(False)
 
     def setUp(self):
+        from pathlib import Path
+        mpx_path = Path('C:/Users/funny/Downloads/MFGEN 401 HW 07 - Minitab Solution KEY - Water Absorption in Paper.mpx')
+        if not mpx_path.exists():
+            self.skipTest('MFGEN 401 HW 07 MPX not present in Downloads')
         self.p = Presenter()
-        self.p.load('C:/Users/funny/Downloads/MFGEN 401 HW 07 - Minitab Solution KEY - Water Absorption in Paper.mpx')
+        self.p.load(str(mpx_path))
         self.w = ModernWindow(self.p)
         self.w.resize(1000, 700)
         self.w.show()
         self.app.processEvents()
 
     def tearDown(self):
-        self.p.dirty = False
-        self.w.close()
-        self.w.deleteLater()
-        self.app.processEvents()
+        if hasattr(self, 'p') and self.p is not None:
+            self.p.dirty = False
+        if hasattr(self, 'w') and self.w is not None:
+            self.w.close()
+            self.w.deleteLater()
+        if hasattr(self, 'app') and self.app is not None:
+            self.app.processEvents()
 
     def test_multi_graph_dedicated_tabs_and_navigator_children(self):
         reg_entry = next(e for e in self.p.history if 'Factorial Regression' in e.get('title', ''))

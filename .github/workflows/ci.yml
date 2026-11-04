@@ -41,6 +41,7 @@ jobs:
       - name: Run Test Suite (Offscreen)
         env:
           QT_QPA_PLATFORM: offscreen
+          STATCRAFT_TESTING: '1'
         run: |
           python -m unittest discover tests
 

@@ -3725,6 +3725,34 @@ class Presenter:
             recipe={"action": "evaluating_measurement_process", "parameters": parameters},
         )
 
+    def fit_y_by_x(self, y_index, x_index, platform=None, confidence=0.95):
+        from .fit_y_by_x_engine import compute_fit_y_by_x
+        from .fit_y_by_x_report import format_fit_y_by_x_report, get_fit_y_by_x_structured_tables
+
+        result = compute_fit_y_by_x(
+            self.worksheet,
+            y_index=y_index,
+            x_index=x_index,
+            platform=platform,
+            conf=confidence
+        )
+        result["analysis"] = "fit_y_by_x"
+        result["tables"] = get_fit_y_by_x_structured_tables(result)
+        result["session_text"] = format_fit_y_by_x_report({"result": result})
+
+        parameters = {
+            "y_index": y_index,
+            "x_index": x_index,
+            "platform": platform,
+            "confidence": confidence
+        }
+        title = result.get("title", f"Fit Y by X — {self.worksheet.columns[y_index].name} by {self.worksheet.columns[x_index].name}")
+        return self._record(
+            title,
+            result,
+            recipe={"action": "fit_y_by_x", "parameters": parameters}
+        )
+
     def cart_tree(self, response_index, predictor_indices, tree_type='auto', max_depth=5, min_split_size=10, min_leaf_size=5):
         from .tree_engine import fit_decision_tree
         from .tree_report import format_tree_report, get_tree_structured_tables

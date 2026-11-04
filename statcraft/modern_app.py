@@ -686,7 +686,9 @@ class ModernWindow(QMainWindow):
         self._action(calc, "Probability Distributions…", self.probability, None, "probability", True)
 
         # 5. Stat menu
-        stat = bar.addMenu("&Stat"); basic = stat.addMenu("Basic Statistics")
+        stat = bar.addMenu("&Stat")
+        self._action(stat, "Fit &Y by X (JMP Platform)…", self.fit_y_by_x_dialog, None, "scatter", True)
+        basic = stat.addMenu("Basic Statistics")
         summary = self._action(basic, "Display Descriptive Statistics…", self.describe, None, "summary", True)
         self.store_descriptive_action = self._action(basic, "Store Descriptive Statistics…", self.store_descriptive_dialog, None, "summary", True)
         self.graphical_summary_action = self._action(basic, "Graphical Summary…", self.graphical_summary_dialog, None, "graphical_summary", True)
@@ -897,6 +899,7 @@ class ModernWindow(QMainWindow):
 
         # 5f2. Predictive Analytics menu
         predictive = stat.addMenu("&Predictive Analytics")
+        self._action(predictive, "Fit &Y by X (Bivariate / Oneway / Contingency)…", self.fit_y_by_x_dialog, None, "scatter", True)
         self._action(predictive, "CART® / &Partition Decision Tree…", self.cart_tree_dialog, None, None, True)
 
         # 5g. Power and Sample Size menu
@@ -2073,6 +2076,12 @@ class ModernWindow(QMainWindow):
 
     def closeEvent(self, event):
         if self._confirm_leave():
+            if hasattr(self, '_startup_worker') and self._startup_worker and self._startup_worker.isRunning():
+                try:
+                    self._startup_worker.quit()
+                    self._startup_worker.wait(500)
+                except Exception:
+                    pass
             # Tab/header signals can fire while Qt dismantles child widgets.
             self._refreshing = True
             self.worksheet_tabs.blockSignals(True); self.worksheet_selector.blockSignals(True)
@@ -2328,6 +2337,16 @@ class ModernWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             vals = dlg.values()
             entry = self._call(lambda: self.presenter.evaluating_measurement_process(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
+    def fit_y_by_x_dialog(self):
+        self._commit_editor()
+        from .fit_y_by_x_dialog import FitYByXDialog
+        dlg = FitYByXDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.fit_y_by_x(**vals), result=True)
             if entry:
                 self.show_result(entry)
 
@@ -4030,7 +4049,7 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
             session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
@@ -4082,7 +4101,7 @@ class ModernWindow(QMainWindow):
             layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
             layout.addWidget(self._result_table(anova_headers, anova_rows))
 
-        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process') and result.get('tables'):
+        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process', 'fit_y_by_x') and result.get('tables'):
             for tbl in result['tables']:
                 layout.addWidget(label(tbl['title'], 'sectionHeading'))
                 layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
@@ -4386,6 +4405,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'cart_tree':
                     from .tree_chart import DecisionTreeWidget
                     chart = DecisionTreeWidget(entry)
+                elif result.get('analysis') == 'fit_y_by_x':
+                    from .fit_y_by_x_chart import FitYByXChartWidget
+                    chart = FitYByXChartWidget(entry)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation'):
                     from .design_eval_chart import DesignEvaluationChartWidget
                     chart = DesignEvaluationChartWidget(entry)
@@ -4435,6 +4457,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
+                elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(560)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
                     chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
                 chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -4455,7 +4478,8 @@ class ModernWindow(QMainWindow):
                 graph_frame.export_hidden.extend(getattr(chart,"export_controls",[]))
                 chart.objectSelected.connect(lambda target:self._graph_object_selected(target))
                 chart.objectActivated.connect(lambda target,e=entry:self._activate_graph_object(e,target))
-                chart.brushRowsSelected.connect(lambda rows,e=entry:self._receive_brushed_rows(e,rows))
+                if hasattr(chart, 'brushRowsSelected'):
+                    chart.brushRowsSelected.connect(lambda rows,e=entry:self._receive_brushed_rows(e,rows))
                 graph_frame.annotationActivated.connect(lambda name,e=entry:self.edit_graph_annotation(e,name))
                 self.graph_dropdown_button = QToolButton(); self.graph_dropdown_button.setObjectName("outputDropdownBtn")
                 self.graph_dropdown_button.setText("▾")
@@ -5387,6 +5411,9 @@ class ModernWindow(QMainWindow):
         dlg.exec()
 
     def _check_startup_updates(self):
+        import os
+        if os.environ.get("STATCRAFT_TESTING") or "unittest" in sys.modules or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+            return
         try:
             from .updater_dialog import UpdateCheckWorker
             from .updater import read_install_metadata, STATCRAFT_VERSION
