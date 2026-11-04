@@ -74,3 +74,20 @@ jobs:
           print('Headless UI smoke verification passed successfully on', sys.platform)
           w.close()
           "
+
+      - name: Build Windows Pre-Release Test Binaries
+        if: runner.os == 'Windows'
+        run: |
+          pip install pyinstaller
+          python -m PyInstaller --noconfirm --distpath dist/setup installer.spec
+          python -m PyInstaller --noconfirm --distpath dist/app StatCraft.spec
+
+      - name: Upload Test Executable Artifacts (Pre-Release Testing)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: StatCraft-Windows-PreRelease-Executables
+          path: |
+            dist/setup/StatCraft-Setup.exe
+            dist/app/StatCraft.exe
+          retention-days: 14

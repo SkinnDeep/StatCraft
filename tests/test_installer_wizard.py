@@ -25,11 +25,13 @@ class InstallerWizardTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_drive_free_space(self):
-        free_gb, total_gb = get_drive_free_space(Path("C:/"))
+        target = Path("C:/") if sys.platform == "win32" else Path.home()
+        free_gb, total_gb = get_drive_free_space(target)
         self.assertGreater(total_gb, 0.0)
 
     def test_installer_wizard_flow(self):
-        w = InstallerWindow(target_dir=Path("C:/StatCraftTest"))
+        target_dir = Path("C:/StatCraftTest") if sys.platform == "win32" else (Path.home() / "StatCraftTest")
+        w = InstallerWindow(target_dir=target_dir)
         w.show()
         self.app.processEvents()
 
@@ -93,7 +95,8 @@ class InstallerWizardTests(unittest.TestCase):
         self.app.processEvents()
 
     def test_uninstaller_window(self):
-        u = UninstallerWindow(target_dir=Path("C:/StatCraftTest"))
+        target_dir = Path("C:/StatCraftTest") if sys.platform == "win32" else (Path.home() / "StatCraftTest")
+        u = UninstallerWindow(target_dir=target_dir)
         u.show()
         self.app.processEvents()
         self.assertTrue(u.btn_uninstall.isEnabled())
@@ -103,6 +106,7 @@ class InstallerWizardTests(unittest.TestCase):
         u.deleteLater()
         self.app.processEvents()
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows registry file associations require Windows OS")
     def test_file_associations_dry_run(self):
         # Register and unregister with dummy test path
         dummy_exe = Path("C:/Windows/notepad.exe")
@@ -110,6 +114,11 @@ class InstallerWizardTests(unittest.TestCase):
         self.assertTrue(ok)
         ok_uninst = unregister_file_associations([".mpx", ".jmp"])
         self.assertTrue(ok_uninst)
+
+    def test_non_windows_file_associations_safely_ignored(self):
+        if sys.platform != "win32":
+            self.assertFalse(register_file_associations(Path("/tmp/fake"), [".mpx"]))
+            self.assertFalse(unregister_file_associations([".mpx"]))
 
 
 if __name__ == "__main__":
