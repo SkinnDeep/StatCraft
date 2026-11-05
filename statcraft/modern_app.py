@@ -5841,13 +5841,15 @@ class ModernWindow(QMainWindow):
             "About StatCraft",
             f"StatCraft v{STATCRAFT_VERSION}\n\n"
             "The Modern, Native Statistical Engine for Engineers & Scientists.\n"
-            "Open-source alternative to both Minitab® and JMP®.\n\n"
+            "Open-source alternative to both Minitab® and JMP® with R Workbench.\n\n"
             "• Direct .MPX/.MTW and .JMP/.JSL file compatibility\n"
             "• JMP Fit Y by X (Bivariate, Means Diamonds, Contingency Mosaic)\n"
             "• Interactive Prediction Profiler with Desirability Optimization\n"
             "• Full DOE: Definitive Screening (DSD), Custom D-Optimal, RSM & Factorial\n"
             "• Six Sigma Process Capability Sixpack & SPC Control Charts\n"
-            "• 100% Local, Offline & Zero Cloud Lock-in"
+            "• Positron-Style R Data Science Workbench\n"
+            "• 100% Local, Offline & Zero Cloud Lock-in\n\n"
+            "Co-developed with Antigravity (Google DeepMind) and Codex (OpenAI)."
         )
 
 

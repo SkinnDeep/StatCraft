@@ -238,6 +238,18 @@ python -m unittest discover tests
 
 ---
 
+## Contributors & Authors
+
+StatCraft is co-developed through advanced human-AI collaboration:
+
+- **SkinnDeep** ([@SkinnDeep](https://github.com/SkinnDeep)) — Project Lead, Creator & System Architect
+- **Antigravity** (Google DeepMind) — Advanced Agentic Co-Developer (JMP platforms, vector visualizers, TrueType graphics pipeline, R Workbench)
+- **Codex** (OpenAI) — Autonomous Systems Co-Developer (cross-platform harness, verification test suites, CI automation)
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full details.
+
+---
+
 ## Contributing & License
 
 Contributions, feature requests, and issue reports are welcome! Please open an issue or pull request on GitHub.
