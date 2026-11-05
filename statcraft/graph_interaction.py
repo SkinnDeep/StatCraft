@@ -126,6 +126,13 @@ class GraphInteractionMixin:
         if type(row) is int and row>0 and (getattr(self,'_current_plot',None) is None or self._current_plot.contains(point)):
             self.brush_regions.append((row,QRectF(point.x()-5,point.y()-5,10,10)))
 
+    def remember_bar_brush(self, rect, rows):
+        if not rows: return
+        r = rect.normalized()
+        for row in rows:
+            if type(row) is int and row > 0:
+                self.brush_regions.append((row, r))
+
     def remember_path(self,name,points):
         path=QPainterPath();active=False
         for point in points:
@@ -150,6 +157,22 @@ class GraphInteractionMixin:
             if self.is_brushing:
                 self._brush_start=self._brush_end=event.position();self._brush_add=bool(event.modifiers()&Qt.KeyboardModifier.ControlModifier)
                 event.accept();self.update();return
+            pos = event.position()
+            clicked_rows = {row for row, region in self.brush_regions if region.contains(pos)}
+            if clicked_rows:
+                is_ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+                if is_ctrl:
+                    self.brushed_rows = self.brushed_rows | clicked_rows
+                else:
+                    self.brushed_rows = clicked_rows
+                self.brushRowsSelected.emit(sorted(self.brushed_rows))
+                self.update()
+                event.accept()
+                return
+            elif self.brushed_rows and not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                self.brushed_rows = set()
+                self.brushRowsSelected.emit([])
+                self.update()
             self.selected_object=self.object_at(event.position());self.update()
             if self.selected_object:self.objectSelected.emit(self.selected_object)
             event.accept();return
@@ -169,7 +192,7 @@ class GraphInteractionMixin:
         if self.is_brushing and self._brush_start is not None and event.button()==Qt.MouseButton.LeftButton:
             rect=QRectF(self._brush_start,event.position()).normalized()
             if rect.width()<4 and rect.height()<4:rect=rect.adjusted(-5,-5,5,5)
-            rows={row for row,region in self.brush_regions if rect.contains(region.center())}
+            rows={row for row,region in self.brush_regions if rect.intersects(region) or rect.contains(region.center())}
             if self._brush_add:rows|=self.brushed_rows
             self.brushed_rows=rows;self._brush_start=self._brush_end=None
             self.brushRowsSelected.emit(sorted(rows));self.update();event.accept();return
@@ -190,9 +213,16 @@ class GraphInteractionMixin:
 
     def draw_selection(self,painter):
         if getattr(self,'_exporting',False):return
-        painter.save();painter.setPen(QPen(QColor('#bd2870'),2));painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.save()
+        painter.setPen(QPen(QColor('#bd2870'),2))
+        painter.setBrush(QColor(189,40,112,35))
+        drawn_bounds = set()
         for row,region in self.brush_regions:
-            if row in self.brushed_rows:painter.drawRect(region.adjusted(-2,-2,2,2))
+            if row in self.brushed_rows:
+                key = (round(region.x(), 1), round(region.y(), 1), round(region.width(), 1), round(region.height(), 1))
+                if key not in drawn_bounds:
+                    drawn_bounds.add(key)
+                    painter.drawRect(region.adjusted(-2,-2,2,2))
         if self._brush_start is not None:
             painter.setPen(QPen(QColor('#087fbd'),1,Qt.PenStyle.DashLine));painter.setBrush(QColor(8,127,189,25))
             painter.drawRect(QRectF(self._brush_start,self._brush_end).normalized())

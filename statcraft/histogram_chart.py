@@ -20,7 +20,9 @@ def draw_histogram_groups(chart,painter,area,panel):
             for bin_index,(left,right,count) in enumerate(zip(item['edges'],item['edges'][1:],item['counts'])):
                 rect=QRectF(QPointF(x(left),y(count)),QPointF(x(right),y(0))).normalized()
                 painter.drawRect(rect);chart.remember_rect(name,rect)
-                chart.remember_hover(rect,histogram_info(left,right,count,panel.get('ylabel','Frequency'),item.get('label',''),item.get('source'),item.get('row_indices'),last=bin_index==len(item['counts'])-1))
+                info = histogram_info(left,right,count,panel.get('ylabel','Frequency'),item.get('label',''),item.get('source'),item.get('row_indices'),last=bin_index==len(item['counts'])-1)
+                chart.remember_hover(rect,info)
+                if hasattr(chart,'remember_bar_brush'):chart.remember_bar_brush(rect,info.get('rows',[]))
         for _,cx,cy,_ in item['curves']:
             fit='fit'+str(index)
             chart._path(painter,cx,cy,x,y,color,2,style=chart.graph_style(fit,color=color),target=fit)

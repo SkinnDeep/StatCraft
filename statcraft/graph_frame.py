@@ -1,7 +1,7 @@
 """Graph annotations around a live chart; numerical result data stays unchanged."""
 import copy
 from PySide6.QtCore import Qt,Signal
-from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QSizePolicy
+from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QSizePolicy,QToolButton
 from .graph_presentation import graph_presentation,validate_presentation
 
 
@@ -26,13 +26,54 @@ class GraphFrame(QWidget):
         self.header.addWidget(self.title_label,1);layout.addLayout(self.header)
         self.subtitle_label=AnnotationLabel();self.subtitle_label.setTextFormat(Qt.TextFormat.PlainText)
         self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter);self.subtitle_label.setWordWrap(True)
-        layout.addWidget(self.subtitle_label);layout.addWidget(chart,1)
+        layout.addWidget(self.subtitle_label)
+
+        # Quick-action selection strip for brushed rows
+        self.selection_strip = QWidget()
+        self.selection_strip.setObjectName('graphSelectionStrip')
+        self.selection_strip.setStyleSheet(
+            '#graphSelectionStrip { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 2px 6px; margin: 2px 0px; }'
+            'QLabel { color: #166534; font-weight: bold; font-size: 8.5pt; }'
+            'QToolButton { background-color: #ffffff; border: 1px solid #86efac; border-radius: 3px; padding: 2px 6px; color: #166534; font-size: 8pt; font-weight: 500; }'
+            'QToolButton:hover { background-color: #dcfce7; border-color: #4ade80; }'
+        )
+        s_layout = QHBoxLayout(self.selection_strip)
+        s_layout.setContentsMargins(6, 2, 6, 2)
+        s_layout.setSpacing(6)
+        self.selection_label = QLabel('0 observations selected')
+        s_layout.addWidget(self.selection_label)
+
+        self.btn_highlight = QToolButton(); self.btn_highlight.setText('Highlight in Table')
+        self.btn_save = QToolButton(); self.btn_save.setText('Save Selection…')
+        self.btn_analyze = QToolButton(); self.btn_analyze.setText('Analyze…')
+        self.btn_r = QToolButton(); self.btn_r.setText('Open in R')
+        self.btn_clear = QToolButton(); self.btn_clear.setText('✕'); self.btn_clear.setToolTip('Clear Selection')
+
+        s_layout.addWidget(self.btn_highlight)
+        s_layout.addWidget(self.btn_save)
+        s_layout.addWidget(self.btn_analyze)
+        s_layout.addWidget(self.btn_r)
+        s_layout.addStretch()
+        s_layout.addWidget(self.btn_clear)
+
+        self.selection_strip.hide()
+        self.export_hidden.append(self.selection_strip)
+        layout.addWidget(self.selection_strip)
+        layout.addWidget(chart, 1)
         self.footnote_label=AnnotationLabel();self.footnote_label.setTextFormat(Qt.TextFormat.PlainText)
         self.footnote_label.setWordWrap(True);layout.addWidget(self.footnote_label)
         for name in ('title','subtitle','footnote'):
             label=getattr(self,name+'_label');label.annotation_name=name
             label.activated.connect(self.annotationActivated);label.setToolTip('Double-click to edit '+name)
         self.apply_appearance()
+
+    def update_selection_strip(self, count):
+        if count > 0:
+            s_sfx = 's' if count != 1 else ''
+            self.selection_label.setText(f'{count} observation{s_sfx} selected')
+            self.selection_strip.show()
+        else:
+            self.selection_strip.hide()
 
     def apply_appearance(self):
         if self.entry.get('result',{}).get('analysis')=='native_saved_output':

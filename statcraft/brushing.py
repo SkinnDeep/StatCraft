@@ -25,6 +25,9 @@ def brushable_rows(entry):
         source=result.get('row_indices',[])
         if not isinstance(source,list) or any(type(row) is not int or row<0 for row in source):raise ValueError('Invalid logistic graph source rows.')
         rows.extend(row+1 for row in source)
+    if result.get('graph') in ('histogram_graphs','histogram'):
+        for panel in result.get('panels',[]):
+            for series in panel.get('series',[]):links(series,'row_indices',len(series.get('source',[])))
     if result.get('graph')=='categorical_points':
         for panel in result.get('panels',[]):
             if panel.get('display',{}).get('individual'):

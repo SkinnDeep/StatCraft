@@ -318,22 +318,35 @@ def import_r_predictions_to_worksheet(
 
 def _extract_coef_map(obj: Any) -> Dict[str, float]:
     """Helper to extract {term_name: estimate} from various coefficient representations."""
-    raw = []
+    coef_map: Dict[str, float] = {}
     if hasattr(obj, "coefficients"):
         raw = obj.coefficients
     elif isinstance(obj, dict):
-        raw = obj.get("coefficients", [])
+        if "coefficients" in obj:
+            raw = obj["coefficients"]
+        else:
+            # Direct mapping {term: float}
+            for k, v in obj.items():
+                try:
+                    norm_k = "Constant" if str(k) in ("(Intercept)", "Intercept") else str(k)
+                    coef_map[norm_k] = float(v)
+                except (ValueError, TypeError):
+                    pass
+            return coef_map
     elif isinstance(obj, (list, tuple)):
         raw = obj
+    else:
+        raw = []
 
-    coef_map: Dict[str, float] = {}
     for item in raw:
         if isinstance(item, dict):
             name = item.get("name") or item.get("term", "")
             val = item.get("estimate") if item.get("estimate") is not None else (item.get("coef") or item.get("coefficient", 0.0))
-            coef_map[str(name)] = float(val)
+            norm_name = "Constant" if str(name) in ("(Intercept)", "Intercept") else str(name)
+            coef_map[norm_name] = float(val)
         elif isinstance(item, (list, tuple)) and len(item) >= 2:
-            coef_map[str(item[0])] = float(item[1])
+            norm_name = "Constant" if str(item[0]) in ("(Intercept)", "Intercept") else str(item[0])
+            coef_map[norm_name] = float(item[1])
     return coef_map
 
 

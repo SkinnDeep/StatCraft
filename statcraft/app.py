@@ -5309,6 +5309,16 @@ class Presenter:
                 vals.pop()
             new_cols.append(Column(col.name, col.kind, vals, copy.deepcopy(col.metadata)))
         new_sheet.columns = new_cols
+        try:
+            from .connect import ensure_worksheet_identities
+            ensure_worksheet_identities(source)
+            src_row_ids = source.metadata.get("row_ids", [])
+            new_sheet.metadata["source_worksheet"] = getattr(source, "name", "Data")
+            new_sheet.metadata["source_rows"] = [r + 1 for r in keep_rows]
+            new_sheet.metadata["source_row_ids"] = [src_row_ids[r] for r in keep_rows if r < len(src_row_ids)]
+            ensure_worksheet_identities(new_sheet)
+        except Exception:
+            pass
         self.dirty = True
         return new_sheet
 

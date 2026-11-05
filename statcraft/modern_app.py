@@ -1010,6 +1010,9 @@ class ModernWindow(QMainWindow):
         self._action(data, "Change Data Type…", self.change_type, None, None, True)
         self._action(data, "Worksheet Information", self.show_worksheet_information, None, "worksheet")
         self._action(data, "Stored Constants…", self.stored_constants, None, "constants", True)
+        data.addSeparator()
+        self._action(data, "Recall Named Selection…", self.recall_named_selection_dialog, None, "select_all", True)
+        self._action(data, "Subset Worksheet from Selection…", self.subset_worksheet_from_selection, None, "subset", True)
         worksheets_menu = data.addMenu("Worksheets")
         self.rename_sheet_action = self._action(worksheets_menu, "Rename Worksheet…", self.rename_worksheet, None, "rename_sheet")
         self.duplicate_sheet_action = self._action(worksheets_menu, "Duplicate Worksheet…", self.duplicate_worksheet, None, "duplicate_sheet")
@@ -5050,6 +5053,7 @@ class ModernWindow(QMainWindow):
                     chart.objectActivated.connect(lambda target, e=entry: self._activate_graph_object(e, target))
                     chart.brushRowsSelected.connect(lambda rows, e=entry: self._receive_brushed_rows(e, rows))
                     graph_frame.annotationActivated.connect(lambda name, e=entry: self.edit_graph_annotation(e, name))
+                    self._setup_graph_frame(graph_frame, chart, entry)
 
                     dropdown_btn = QToolButton(); dropdown_btn.setObjectName("outputDropdownBtn")
                     dropdown_btn.setText("▾")
@@ -5264,6 +5268,7 @@ class ModernWindow(QMainWindow):
                 if hasattr(chart, 'brushRowsSelected'):
                     chart.brushRowsSelected.connect(lambda rows,e=entry:self._receive_brushed_rows(e,rows))
                 graph_frame.annotationActivated.connect(lambda name,e=entry:self.edit_graph_annotation(e,name))
+                self._setup_graph_frame(graph_frame, chart, entry)
                 self.graph_dropdown_button = QToolButton(); self.graph_dropdown_button.setObjectName("outputDropdownBtn")
                 self.graph_dropdown_button.setText("▾")
                 self.graph_dropdown_button.setToolTip("Graph / Output Options")
@@ -5622,8 +5627,11 @@ class ModernWindow(QMainWindow):
 
         if is_graph and getattr(self, "_brushed_rows", None):
             menu.addSeparator()
-            menu.addAction("Save Brushed Selection...", lambda: self.save_brushed_selection())
-            menu.addAction("Open Selection in R Workbench...", lambda: self.open_brushed_selection_in_r())
+            menu.addAction("Highlight in Worksheet", lambda: self.highlight_brushed_selection())
+            menu.addAction("Save Selection…", lambda: self.save_brushed_selection())
+            menu.addAction("Analyze Selection…", lambda: self.analyze_brushed_selection())
+            menu.addAction("Open Selection in R Workbench…", lambda: self.open_brushed_selection_in_r())
+            menu.addAction("Clear Selection", lambda: self.clear_brushed_selection())
 
         menu.addAction(tool_icon("save"), "Save Output As...", self.export_report)
         menu.addAction(tool_icon("print"), "Print...\tCtrl+P", lambda checked=False: self.print_current(target_entry))
@@ -5718,25 +5726,45 @@ class ModernWindow(QMainWindow):
             6000
         )
 
+    def _setup_graph_frame(self, graph_frame, chart, entry):
+        self._active_graph_frame = graph_frame
+        if hasattr(graph_frame, 'btn_highlight'):
+            graph_frame.btn_highlight.clicked.connect(lambda: self.highlight_brushed_selection())
+            graph_frame.btn_save.clicked.connect(lambda: self.save_brushed_selection())
+            graph_frame.btn_analyze.clicked.connect(lambda: self.analyze_brushed_selection())
+            graph_frame.btn_r.clicked.connect(lambda: self.open_brushed_selection_in_r())
+            graph_frame.btn_clear.clicked.connect(lambda: self.clear_brushed_selection())
+
     def connect_compare_implementations(self, entry):
         conn_dict = entry.get("connected_analysis")
         if not conn_dict:
             return
         from .connect import ConnectedAnalysis
-        from .connect_r import compare_implementations
-        from .r_bridge import is_r_available, execute_r_code
-        conn = ConnectedAnalysis.from_dict(conn_dict)
+        from .connect_compare_dialog import run_cross_engine_comparison, CompareImplementationsDialog
+        from .r_bridge import is_r_available
         if not is_r_available():
             QMessageBox.information(self, "Compare Implementations", "R is not detected on this system. Click 'Install R' in R Workbench to enable cross-engine verification.")
             return
 
-        res = execute_r_code(conn.r_script, worksheet=self.presenter.worksheet, persist_session=True)
+        conn = ConnectedAnalysis.from_dict(conn_dict)
+        self.statusBar().showMessage("Running cross-engine execution comparison...", 4000)
+        res = run_cross_engine_comparison(conn, self.presenter.worksheet)
         if not res.get("success"):
-            QMessageBox.warning(self, "Compare Implementations", f"R execution failed:\n{res.get('stderr')}")
+            QMessageBox.warning(self, "Compare Implementations", f"Execution comparison failed:\n{res.get('error')}")
             return
 
-        msg = f"StatCraft Connect — Execution Comparison\n\nStatCraft Engine: Multiple Regression\nModel: {conn.title}\nStatus: Aligned\nR Output:\n\n" + res.get("stdout", "")[:1200]
-        QMessageBox.information(self, "Compare Implementations", msg)
+        dlg = CompareImplementationsDialog(conn, res, self)
+        dlg.exec()
+
+    def highlight_brushed_selection(self, rows=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            self.statusBar().showMessage("No observations currently selected.", 4000)
+            return
+        self.set_ui_mode("minitab")
+        self.center_tabs.setCurrentIndex(0)
+        self._show_brushed_rows(target_rows[0])
+        self.statusBar().showMessage(f"Highlighted {len(target_rows)} observations in worksheet.", 5000)
 
     def save_brushed_selection(self, rows=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
@@ -5751,10 +5779,65 @@ class ModernWindow(QMainWindow):
         from PySide6.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(self, "Save Selection", "Enter a name for this observation selection:", text="Selection_1")
         if ok and name.strip():
+            clean_name = name.strip()
             sel_dict = self.presenter.worksheet.metadata.setdefault("named_selections", {})
-            sel_dict[name.strip()] = selected_ids
+            sel_dict[clean_name] = {
+                "name": clean_name,
+                "row_ids": selected_ids,
+                "row_indices": sorted(target_rows),
+                "count": len(selected_ids),
+                "source_sheet": getattr(self.presenter.worksheet, "name", "Data"),
+            }
             self.presenter.dirty = True
-            self.statusBar().showMessage(f"Saved selection '{name.strip()}' with {len(selected_ids)} observations.", 5000)
+            self.statusBar().showMessage(f"Saved selection '{clean_name}' with {len(selected_ids)} observations.", 5000)
+
+    def analyze_brushed_selection(self, rows=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            QMessageBox.information(self, "Analyze Selection", "Please select or brush observations on a graph first.")
+            return
+
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QCursor
+        menu = QMenu(self)
+        menu.setTitle(f"Analyze Selection ({len(target_rows)} rows)")
+        menu.addAction(f"Create Subset Worksheet ({len(target_rows)} rows)…", lambda: self.subset_worksheet_from_selection(target_rows))
+        menu.addSeparator()
+        menu.addAction("Fit Regression on Selection…", lambda: self._fit_regression_on_selection(target_rows))
+        menu.addAction("Descriptive Statistics on Selection…", lambda: self._descriptive_stats_on_selection(target_rows))
+        menu.addAction("Open Selection in R Workbench…", lambda: self.open_brushed_selection_in_r(target_rows))
+        menu.exec(QCursor.pos())
+
+    def _fit_regression_on_selection(self, rows):
+        sheet = self.subset_worksheet_from_selection(rows)
+        if sheet:
+            self.multiple_regression_dialog()
+
+    def _descriptive_stats_on_selection(self, rows):
+        sheet = self.subset_worksheet_from_selection(rows)
+        if sheet:
+            self.display_descriptive_dialog()
+
+    def subset_worksheet_from_selection(self, rows=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            QMessageBox.information(self, "Subset Worksheet", "Please select or brush observations on a graph or table first.")
+            return None
+        from PySide6.QtWidgets import QInputDialog
+        src = self.presenter.worksheet
+        row_indices_0 = [r - 1 for r in sorted(target_rows) if 0 <= r - 1 < src.row_count]
+        if not row_indices_0:
+            return None
+        def_name = f"{getattr(src, "name", "Data")} (Subset {len(row_indices_0)})"
+        new_title, ok = QInputDialog.getText(self, "Subset Worksheet", "New worksheet name:", text=def_name)
+        if not ok or not new_title.strip():
+            return None
+        new_sheet = self.presenter.subset_worksheet(new_title.strip(), "include", row_indices_0)
+        self.refresh()
+        self.set_ui_mode("minitab")
+        self.center_tabs.setCurrentIndex(0)
+        self.statusBar().showMessage(f"Created subset worksheet '{getattr(new_sheet, "name", "Subset")}' with {len(row_indices_0)} observations.", 6000)
+        return new_sheet
 
     def open_brushed_selection_in_r(self, rows=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
@@ -5766,7 +5849,7 @@ class ModernWindow(QMainWindow):
             f"# StatCraft Connect: Selected Observations\n"
             f"selected_rows <- c({idx_list})\n"
             f"df_subset <- df[selected_rows, ]\n"
-            f"cat('Subsetting', nrow(df_subset), 'observations into df_subset.\n')\n"
+            f"cat(sprintf('Subsetting %d observations from %s into df_subset.\n', nrow(df_subset), '{getattr(self.presenter.worksheet, "name", "Data")}'))\n"
             f"summary(df_subset)\n"
         )
         self.set_ui_mode("r")
@@ -5774,6 +5857,58 @@ class ModernWindow(QMainWindow):
             self.r_workbench.editor.setPlainText(code)
             self.r_workbench._execute_r(code)
             self.statusBar().showMessage(f"Loaded selection of {len(target_rows)} observations into R Workbench (df_subset)", 5000)
+
+    def recall_named_selection_dialog(self):
+        sel_dict = self.presenter.worksheet.metadata.get("named_selections", {})
+        if not sel_dict:
+            QMessageBox.information(self, "Recall Selection", "No saved selections found in this worksheet. Select points on a graph and choose 'Save Selection' first.")
+            return
+
+        from PySide6.QtWidgets import QInputDialog
+        names = list(sel_dict.keys())
+        item, ok = QInputDialog.getItem(self, "Recall Selection", "Select a saved observation set:", names, 0, False)
+        if ok and item:
+            val = sel_dict[item]
+            if isinstance(val, dict):
+                saved_ids = val.get("row_ids", [])
+                saved_indices = val.get("row_indices", [])
+            else:
+                saved_ids = list(val)
+                saved_indices = []
+
+            current_ids = self.presenter.worksheet.metadata.get("row_ids", [])
+            if current_ids and saved_ids:
+                id_map = {rid: idx + 1 for idx, rid in enumerate(current_ids)}
+                matched_rows = [id_map[rid] for rid in saved_ids if rid in id_map]
+            else:
+                matched_rows = saved_indices
+
+            if not matched_rows:
+                QMessageBox.warning(self, "Recall Selection", f"None of the observations in '{item}' could be found in the current worksheet.")
+                return
+
+            self._brushed_rows = matched_rows
+            chart = getattr(self, "_active_chart_widget", None)
+            if chart is not None and hasattr(chart, "brushed_rows"):
+                chart.brushed_rows = set(matched_rows)
+                chart.update()
+            frame = getattr(self, "_active_graph_frame", None)
+            if frame and hasattr(frame, "update_selection_strip"):
+                frame.update_selection_strip(len(matched_rows))
+            self.highlight_brushed_selection(matched_rows)
+            self.statusBar().showMessage(f"Recalled selection '{item}' with {len(matched_rows)} observations.", 5000)
+
+    def clear_brushed_selection(self):
+        self._brushed_rows = []
+        chart = getattr(self, "_active_chart_widget", None)
+        if chart is not None and hasattr(chart, "brushed_rows"):
+            chart.brushed_rows = set()
+            chart.update()
+        frame = getattr(self, "_active_graph_frame", None)
+        if frame and hasattr(frame, "update_selection_strip"):
+            frame.update_selection_strip(0)
+        self.table.clearSelection()
+        self.statusBar().showMessage("Selection cleared", 3000)
 
     def _show_output_context_menu(self, global_pos, entry=None):
         if (entry or self.selected_entry) is None:
@@ -6228,6 +6363,9 @@ class ModernWindow(QMainWindow):
             if chart is not None and hasattr(chart,'brushed_rows'):chart.brushed_rows=set();chart.update()
             self.statusBar().showMessage(str(exc),12000);return
         self._brushed_entry=entry;self._brushed_rows=rows
+        frame = getattr(self, "_active_graph_frame", None)
+        if frame and hasattr(frame, "update_selection_strip"):
+            frame.update_selection_strip(len(rows))
         self._show_brushed_rows(rows[0] if rows else None)
         self.statusBar().showMessage(str(len(rows))+' brushed rows'+(': '+', '.join(map(str,rows[:20])) if rows else ''),12000)
 

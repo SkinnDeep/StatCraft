@@ -307,6 +307,51 @@ class TestStatCraftConnect(unittest.TestCase):
         self.assertTrue(res["success"])
         self.assertEqual(res["rows_updated"], len(conn.fitted_row_ids))
 
+    def test_investigate_selected_observations_full_roundtrip(self):
+        from statcraft.app import Presenter
+        p = Presenter()
+        p.worksheet = self.ws
+        ensure_worksheet_identities(p.worksheet)
+        row_ids = p.worksheet.metadata["row_ids"]
+
+        # Select rows 1, 2, 4 (indices 0, 1, 3)
+        target_rows = [1, 2, 4]
+        row_indices_0 = [r - 1 for r in target_rows]
+        subset_sheet = p.subset_worksheet("Test_Subset", "include", row_indices_0)
+
+        # Verify subset identities & traceability
+        self.assertEqual(subset_sheet.name, "Test_Subset")
+        self.assertEqual(subset_sheet.row_count, 3)
+        self.assertEqual(subset_sheet.metadata.get("source_worksheet"), self.ws.name)
+        self.assertEqual(subset_sheet.metadata.get("source_rows"), [1, 2, 4])
+        self.assertEqual(subset_sheet.metadata.get("source_row_ids"), [row_ids[0], row_ids[1], row_ids[3]])
+
+        # Verify values preserved correctly
+        self.assertEqual(subset_sheet.columns[0].values, [self.ws.columns[0].values[0], self.ws.columns[0].values[1], self.ws.columns[0].values[3]])
+
+    def test_cross_engine_execution_comparison_live(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_regression
+        from statcraft.connect_compare_dialog import run_cross_engine_comparison
+        from statcraft.r_bridge import is_r_available
+
+        if not is_r_available():
+            self.skipTest("R is not installed on this test environment.")
+
+        p = Presenter()
+        p.worksheet = Worksheet("CompareTest", [
+            Column("Y", values=[10.5, 20.2, 31.0, 40.8, 50.1]),
+            Column("X1", values=[1.0, 2.0, 3.0, 4.0, 5.0]),
+            Column("X2", values=[2.0, 3.0, 5.0, 7.0, 9.0]),
+        ])
+        entry = p.multiple_regression(0, [1, 2])
+        conn = create_connected_regression(p.worksheet, 0, [1, 2], entry["result"])
+        comp_res = run_cross_engine_comparison(conn, p.worksheet)
+
+        self.assertTrue(comp_res.get("success"), f"Comparison failed: {comp_res.get('error')}")
+        self.assertTrue(comp_res["comparison"]["aligned"])
+        self.assertLessEqual(comp_res["comparison"]["max_diff"], 1e-4)
+
 
 if __name__ == "__main__":
     unittest.main()
