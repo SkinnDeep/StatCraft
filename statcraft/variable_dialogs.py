@@ -80,6 +80,97 @@ class ProcedureDialog(QDialog):
         super().__init__(parent); self.setWindowTitle(title); self.setMinimumWidth(700)
         self.worksheet=worksheet; self.selectors=list(selectors); self.fields=list(fields)
         self.controls={}; self.parameters=None; self.active_key=None
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8fafc;
+                color: #0f172a;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
+            }
+            QLabel {
+                color: #0f172a;
+                font-size: 9pt;
+            }
+            QLabel#secondary {
+                color: #475569;
+                font-size: 8.5pt;
+                padding-bottom: 4px;
+            }
+            QLabel#error {
+                color: #b91c1c;
+                background-color: #fef2f2;
+                border: 1px solid #fca5a5;
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 8.5pt;
+                font-weight: 500;
+            }
+            QListWidget {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
+                font-size: 8.5pt;
+                padding: 4px;
+            }
+            QListWidget::item {
+                padding: 4px 8px;
+                border-radius: 4px;
+            }
+            QListWidget::item:hover {
+                background-color: #f1f5f9;
+            }
+            QListWidget::item:selected {
+                background-color: #e0f2fe;
+                color: #005a9e;
+                font-weight: 600;
+            }
+            QLineEdit, QComboBox {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 5px;
+                padding: 5px 8px;
+                font-size: 9pt;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 1.5px solid #0078d7;
+                background-color: #ffffff;
+            }
+            QPushButton {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 9pt;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #f1f5f9;
+                border-color: #94a3b8;
+            }
+            QPushButton:pressed {
+                background-color: #e2e8f0;
+            }
+            QPushButton:disabled {
+                background-color: #f8fafc;
+                color: #94a3b8;
+                border-color: #e2e8f0;
+            }
+            QDialogButtonBox QPushButton {
+                min-width: 72px;
+            }
+            QDialogButtonBox QPushButton[text="&OK"], QDialogButtonBox QPushButton[text="OK"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0078d7, stop:1 #005a9e);
+                color: #ffffff;
+                border: 1px solid #005a9e;
+                font-weight: 600;
+            }
+            QDialogButtonBox QPushButton[text="&OK"]:hover, QDialogButtonBox QPushButton[text="OK"]:hover {
+                background: #005a9e;
+            }
+        """)
         layout=QVBoxLayout(self)
         if note:
             info=QLabel(note); info.setWordWrap(True); info.setObjectName('secondary'); layout.addWidget(info)
@@ -108,7 +199,7 @@ class ProcedureDialog(QDialog):
                 control.setPlaceholderText(spec.get('placeholder','Optional' if spec.get('optional') else ''))
             self.controls[spec['key']]=control; form.addRow(spec['label'],control)
         right=QVBoxLayout(); right.addLayout(form); right.addStretch(); body.addLayout(right,2); layout.addLayout(body)
-        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); layout.addWidget(self.error)
+        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.validate); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
         if self.selectors:
@@ -117,6 +208,7 @@ class ProcedureDialog(QDialog):
     def activate(self,key):
         if key==self.active_key: return
         self.active_key=key; self.available.clear()
+        if hasattr(self, 'error'): self.error.setVisible(False)
         spec=next(s for s in self.selectors if s['key']==key)
         for i,column in enumerate(self.worksheet.columns):
             if column.kind in spec.get('kinds',('number',)):
@@ -166,8 +258,13 @@ class ProcedureDialog(QDialog):
         return values
 
     def validate(self):
-        try: self.parameters=self.values()
-        except (ValueError,TypeError,OverflowError) as exc: self.error.setText(str(exc)); return
+        try:
+            self.parameters=self.values()
+            self.error.setVisible(False)
+        except (ValueError,TypeError,OverflowError) as exc:
+            self.error.setText(str(exc))
+            self.error.setVisible(True)
+            return
         self.accept()
 
 
@@ -214,6 +311,76 @@ class ScatterDialog(QDialog):
         self.active='pairs'; self.labels={'title':'','x_label':'','y_label':''}
         self.settings=None
         self.worksheet=worksheet; self.pairs=None
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8fafc;
+                color: #0f172a;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
+            }
+            QLabel {
+                color: #0f172a;
+                font-size: 9pt;
+            }
+            QLabel#error {
+                color: #b91c1c;
+                background-color: #fef2f2;
+                border: 1px solid #fca5a5;
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 8.5pt;
+                font-weight: 500;
+            }
+            QListWidget, QTableWidget {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
+                font-size: 8.5pt;
+            }
+            QHeaderView::section {
+                background-color: #f1f5f9;
+                color: #475569;
+                border: none;
+                border-right: 1px solid #e2e8f0;
+                border-bottom: 1px solid #cbd5e1;
+                padding: 4px 6px;
+                font-weight: 600;
+            }
+            QLineEdit, QComboBox {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 5px;
+                padding: 5px 8px;
+                font-size: 9pt;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 1.5px solid #0078d7;
+            }
+            QPushButton {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 9pt;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #f1f5f9;
+                border-color: #94a3b8;
+            }
+            QDialogButtonBox QPushButton[text="&OK"], QDialogButtonBox QPushButton[text="OK"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0078d7, stop:1 #005a9e);
+                color: #ffffff;
+                border: 1px solid #005a9e;
+                font-weight: 600;
+            }
+            QDialogButtonBox QPushButton[text="&OK"]:hover, QDialogButtonBox QPushButton[text="OK"]:hover {
+                background: #005a9e;
+            }
+        """)
         layout=QVBoxLayout(self); body=QHBoxLayout(); left=QVBoxLayout()
         self.available=QListWidget(); self.available.setMinimumWidth(210)
         for i,c in enumerate(worksheet.columns):
@@ -234,8 +401,8 @@ class ScatterDialog(QDialog):
         right.addLayout(form)
         labels=QPushButton('Labels…'); labels.setAutoDefault(False); labels.clicked.connect(self.edit_labels); right.addWidget(labels)
         hint=QLabel('Click a Y or X cell, then double-click an available variable or click Select.\nEach completed row creates one scatterplot. You can also type C numbers or quoted column names.')
-        hint.setWordWrap(True); right.addWidget(hint); body.addLayout(right,2); layout.addLayout(body)
-        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); layout.addWidget(self.error)
+        hint.setWordWrap(True); hint.setStyleSheet("color: #64748b; font-size: 8pt;"); right.addWidget(hint); body.addLayout(right,2); layout.addLayout(body)
+        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.validate); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
 
@@ -287,5 +454,9 @@ class ScatterDialog(QDialog):
             self.settings=dict(mode=self.mode,group_index=selected[0] if selected else None,order=self.order.currentText(),**self.labels)
             from .scatter import build
             for y,x in self.pairs: build(self.worksheet,x,y,**self.settings)
-        except (ValueError,TypeError) as exc: self.error.setText(str(exc)); return
+            self.error.setVisible(False)
+        except (ValueError,TypeError) as exc:
+            self.error.setText(str(exc))
+            self.error.setVisible(True)
+            return
         self.accept()
