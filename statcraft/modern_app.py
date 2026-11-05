@@ -629,7 +629,15 @@ class ModernWindow(QMainWindow):
 
         self.work_splitter.addWidget(self.worksheet_pane)
         self.work_splitter.setSizes([310, 360])
-        self.splitter.addWidget(self.work_splitter)
+
+        self.work_stack = QStackedWidget()
+        self.work_stack.addWidget(self.work_splitter)
+
+        from .r_workbench_widget import RWorkbenchWidget
+        self.r_workbench = RWorkbenchWidget(self)
+        self.work_stack.addWidget(self.r_workbench)
+
+        self.splitter.addWidget(self.work_stack)
         self.splitter.setSizes([182, 1098])
         self.splitter.setStretchFactor(0, 0); self.splitter.setStretchFactor(1, 1)
         outer.addWidget(self.splitter); self.setCentralWidget(central)
@@ -1210,9 +1218,16 @@ class ModernWindow(QMainWindow):
         self.btn_mode_jmp.setCheckable(True)
         self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
 
+        self.btn_mode_r = QToolButton()
+        self.btn_mode_r.setText("🧬 R")
+        self.btn_mode_r.setToolTip("Switch to R Positron-Style Workbench Mode (Ctrl+Alt+J)")
+        self.btn_mode_r.setCheckable(True)
+        self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
+
         self.btn_mode_minitab.setStyleSheet("""
             QToolButton {
                 border: 1px solid #adadad;
+                border-right: none;
                 border-top-left-radius: 3px;
                 border-bottom-left-radius: 3px;
                 padding: 2px 8px;
@@ -1235,9 +1250,9 @@ class ModernWindow(QMainWindow):
         self.btn_mode_jmp.setStyleSheet("""
             QToolButton {
                 border: 1px solid #adadad;
-                border-left: none;
-                border-top-right-radius: 3px;
-                border-bottom-right-radius: 3px;
+                border-left: 1px solid #d4d4d4;
+                border-right: 1px solid #d4d4d4;
+                border-radius: 0;
                 padding: 2px 8px;
                 font-family: 'Segoe UI';
                 font-size: 8.5pt;
@@ -1255,25 +1270,54 @@ class ModernWindow(QMainWindow):
             }
         """)
 
+        self.btn_mode_r.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-left: none;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover {
+                background-color: #f0fdf4;
+            }
+            QToolButton:checked {
+                background-color: #15803d;
+                color: #ffffff;
+                border-color: #166534;
+            }
+        """)
+
         mode_layout.addWidget(self.btn_mode_minitab)
         mode_layout.addWidget(self.btn_mode_jmp)
+        mode_layout.addWidget(self.btn_mode_r)
         toolbar.addWidget(mode_box)
 
-        # Global shortcut Ctrl+Alt+J to toggle mode
+        # Global shortcut Ctrl+Alt+J to toggle modes (Minitab -> JMP -> R -> Minitab)
         self.toggle_mode_action = QAction(self)
         self.toggle_mode_action.setShortcut(QKeySequence("Ctrl+Alt+J"))
-        self.toggle_mode_action.triggered.connect(lambda: self.set_ui_mode("jmp" if getattr(self, "_ui_mode", "minitab") == "minitab" else "minitab"))
+        def _cycle_mode():
+            curr = getattr(self, "_ui_mode", "minitab")
+            nxt = "jmp" if curr == "minitab" else ("r" if curr == "jmp" else "minitab")
+            self.set_ui_mode(nxt)
+        self.toggle_mode_action.triggered.connect(_cycle_mode)
         self.addAction(self.toggle_mode_action)
 
     def set_ui_mode(self, mode: str):
         mode = mode.lower() if isinstance(mode, str) else "minitab"
-        if mode not in ("minitab", "jmp"):
+        if mode not in ("minitab", "jmp", "r"):
             mode = "minitab"
         self._ui_mode = mode
 
-        if hasattr(self, "btn_mode_minitab") and hasattr(self, "btn_mode_jmp"):
+        if hasattr(self, "btn_mode_minitab") and hasattr(self, "btn_mode_jmp") and hasattr(self, "btn_mode_r"):
             self.btn_mode_minitab.setChecked(mode == "minitab")
             self.btn_mode_jmp.setChecked(mode == "jmp")
+            self.btn_mode_r.setChecked(mode == "r")
 
         bar = self.menuBar()
         bar.clear()
@@ -1288,6 +1332,11 @@ class ModernWindow(QMainWindow):
             if mode == "jmp" and hasattr(self, "jmp_panel"):
                 self.jmp_panel.refresh()
 
+        if hasattr(self, "work_stack"):
+            self.work_stack.setCurrentIndex(1 if mode == "r" else 0)
+            if mode == "r" and hasattr(self, "r_workbench"):
+                self.r_workbench.refresh_environment()
+
         if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
             self.refresh()
 
@@ -1295,7 +1344,7 @@ class ModernWindow(QMainWindow):
         settings = QSettings("StatCraft", "StatCraft")
         settings.setValue("ui_mode", mode)
 
-        mode_label = "JMP Platform" if mode == "jmp" else "Minitab Classic"
+        mode_label = "R Workbench" if mode == "r" else ("JMP Platform" if mode == "jmp" else "Minitab Classic")
         if hasattr(self, "status_sheet_label"):
             ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
             self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")

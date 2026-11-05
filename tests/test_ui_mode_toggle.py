@@ -51,6 +51,7 @@ class UIModeToggleTests(unittest.TestCase):
         self.assertEqual(self.win.sidebar_stack.currentIndex(), 0)
         self.assertTrue(self.win.btn_mode_minitab.isChecked())
         self.assertFalse(self.win.btn_mode_jmp.isChecked())
+        self.assertFalse(self.win.btn_mode_r.isChecked())
 
         # Switch to JMP Platform
         self.win.set_ui_mode("jmp")
@@ -58,6 +59,15 @@ class UIModeToggleTests(unittest.TestCase):
         self.assertEqual(self.win.sidebar_stack.currentIndex(), 1)
         self.assertFalse(self.win.btn_mode_minitab.isChecked())
         self.assertTrue(self.win.btn_mode_jmp.isChecked())
+        self.assertFalse(self.win.btn_mode_r.isChecked())
+
+        # Switch to R Mode
+        self.win.set_ui_mode("r")
+        self.assertEqual(self.win._ui_mode, "r")
+        self.assertEqual(self.win.work_stack.currentIndex(), 1)
+        self.assertTrue(self.win.btn_mode_r.isChecked())
+        self.assertFalse(self.win.btn_mode_minitab.isChecked())
+        self.assertFalse(self.win.btn_mode_jmp.isChecked())
 
         # Verify JMP Table Panel sync
         self.assertEqual(self.win.jmp_panel.lbl_table_name.text(), "Big Class")

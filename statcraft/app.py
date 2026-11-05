@@ -5423,7 +5423,29 @@ class Presenter:
                 raise ValueError("Syntax: RANK C1 C2")
             indices = resolve_variables(tokens[0], self.worksheet, ("number",))
             return self.rank_column(indices[0], tokens[1])
-        raise ValueError("Unsupported session command '" + verb + "'. Supported: DESCRIBE, INFO, LET, NAME, CORRELATION, NORMALITY, REGRESS, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK.")
+        if verb in ("RSCR", "RSCRIPT", "R"):
+            import os
+            from pathlib import Path
+            from .r_bridge import execute_r_code
+            code = rest.strip()
+            if (code.startswith('"') and code.endswith('"')) or (code.startswith("'") and code.endswith("'")):
+                target_path = code[1:-1]
+            else:
+                target_path = code
+            if os.path.isfile(target_path):
+                code = Path(target_path).read_text(encoding="utf-8")
+            res = execute_r_code(code, worksheet=self.worksheet)
+            session_out = f"R Output:\n{res.get('stdout', '')}"
+            if res.get('stderr'):
+                session_out += f"\nR Diagnostics:\n{res['stderr']}"
+            return self._record("R Script Output", {
+                "analysis": "r_script",
+                "session_text": session_out,
+                "stdout": res.get("stdout", ""),
+                "stderr": res.get("stderr", ""),
+                "plot_path": res.get("plot_path"),
+            })
+        raise ValueError("Unsupported session command '" + verb + "'. Supported: DESCRIBE, INFO, LET, NAME, CORRELATION, NORMALITY, REGRESS, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK, RSCR.")
 
 
 def format_entry(entry):
