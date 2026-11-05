@@ -16,7 +16,7 @@ import urllib.error
 from pathlib import Path
 from typing import Callable, Optional
 
-STATCRAFT_VERSION = "107.0.0"
+STATCRAFT_VERSION = "108.0.0"
 DEFAULT_GITHUB_REPO = "SkinnDeep/StatCraft"
 
 

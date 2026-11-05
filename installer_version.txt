@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(106, 0, 0, 0),
-    prodvers=(106, 0, 0, 0),
+    filevers=(108, 0, 0, 0),
+    prodvers=(108, 0, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         '040904b0',
         [StringStruct('CompanyName', 'StatCraft Open Source Project'),
         StringStruct('FileDescription', 'StatCraft Setup & Installation Wizard'),
-        StringStruct('FileVersion', '106.0.0.0'),
+        StringStruct('FileVersion', '108.0.0.0'),
         StringStruct('InternalName', 'StatCraft-Setup'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 StatCraft Contributors. MIT License.'),
         StringStruct('OriginalFilename', 'StatCraft-Setup.exe'),
         StringStruct('ProductName', 'StatCraft'),
-        StringStruct('ProductVersion', '106.0.0.0')])
+        StringStruct('ProductVersion', '108.0.0.0')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

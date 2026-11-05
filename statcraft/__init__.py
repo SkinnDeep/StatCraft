@@ -1,2 +1,2 @@
 """StatCraft original statistical workspace."""
-__version__ = "107.0.0"
+__version__ = "108.0.0"
