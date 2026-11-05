@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
@@ -75,8 +75,10 @@ class DSDParetoEffectsWidget(GraphInteractionMixin, QWidget):
             painter.drawText(QRectF(0, 50, w, h - 50), Qt.AlignmentFlag.AlignCenter, "No model terms available.")
             return
 
-        # Margins
-        margin_left = 140
+        # Margins dynamically scaled to fit longest term label
+        fm = QFontMetrics(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        max_term_w = max([fm.horizontalAdvance(str(eff.get("term", ""))) for eff in effects] + [120])
+        margin_left = max(140, max_term_w + 24)
         margin_right = 50
         margin_top = 55
         margin_bottom = 60

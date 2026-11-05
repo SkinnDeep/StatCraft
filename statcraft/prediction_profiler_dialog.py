@@ -210,6 +210,38 @@ class PredictionProfilerDialog(QDialog):
         self.refresh_profiler()
 
     def _build_ui(self):
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8fafc;
+                color: #0f172a;
+            }
+            QLabel {
+                color: #0f172a;
+            }
+            QWidget#profilerContainer {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+            QDoubleSpinBox, QComboBox {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 3px 6px;
+            }
+            QPushButton {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #f1f5f9;
+            }
+        """)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
@@ -218,18 +250,18 @@ class PredictionProfilerDialog(QDialog):
         top_bar = QHBoxLayout()
 
         title_lbl = QLabel("<b>Prediction Profiler</b>")
-        title_lbl.setStyleSheet("font-size: 14px; color: #1e293b;")
+        title_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #005a9e;")
         top_bar.addWidget(title_lbl)
 
         top_bar.addSpacing(16)
 
         self.opt_btn = QPushButton("⚡ Maximize Desirability")
-        self.opt_btn.setStyleSheet("background-color: #0284c7; color: white; font-weight: bold; padding: 5px 12px; border-radius: 4px;")
+        self.opt_btn.setStyleSheet("background-color: #0284c7; color: white; font-weight: bold; padding: 5px 12px; border-radius: 4px; border: none;")
         self.opt_btn.clicked.connect(self.on_maximize_desirability)
         top_bar.addWidget(self.opt_btn)
 
         self.reset_btn = QPushButton("↺ Reset Midpoints")
-        self.reset_btn.setStyleSheet("padding: 5px 10px;")
+        self.reset_btn.setStyleSheet("padding: 5px 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; color: #334155;")
         self.reset_btn.clicked.connect(self.on_reset_midpoints)
         top_bar.addWidget(self.reset_btn)
 
@@ -254,8 +286,10 @@ class PredictionProfilerDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
 
         container = QWidget()
+        container.setObjectName("profilerContainer")
         grid = QGridLayout(container)
         grid.setSpacing(8)
 
