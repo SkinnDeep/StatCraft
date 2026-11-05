@@ -5,15 +5,16 @@
 <img src="StatCraft.png" width="128" height="128" alt="StatCraft Logo" />
 
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
-**A powerful desktop alternative to Minitab® and JMP® with native .MPX/.MTW and .JMP file compatibility, JMP Fit Y by X, interactive Prediction Profiler, CAD 3D response surfaces, and enterprise-grade reliability.**
+**Desktop statistics and quality engineering software with Minitab project import, JMP-style analysis, an R workbench, interactive prediction profilers, and 3D response surfaces.**
 
-[![Version](https://img.shields.io/badge/version-109.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/github/v/release/SkinnDeep/StatCraft)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v109.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v109.0.0) •
+[Download Latest Release](https://github.com/SkinnDeep/StatCraft/releases/latest) •
+[Project Site](https://skinndeep.github.io/StatCraft/) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -24,9 +25,9 @@
 
 ## Overview
 
-**StatCraft** is a modern, standalone desktop statistical analysis suite built for engineers, data scientists, quality professionals, and researchers. It provides a complete, 100% free and open-source alternative to legacy proprietary tools like Minitab® and JMP®, featuring direct compatibility with standard **MPX/MTW** projects and worksheets as well as **JMP** data tables, sub-millisecond calculation speeds, and an innovative CAD-grade interactive 3D visualization engine.
+**StatCraft** is a free, open-source desktop statistical analysis suite for engineering, quality, and research. Its workspaces cover Minitab-style procedures, JMP-style analysis, and interactive R scripting. File compatibility varies by format and project contents.
 
-Whether you need quick descriptive statistics, hypothesis testing, JMP Fit Y by X (Bivariate, Oneway Means Diamonds, Contingency), Six Sigma control charts, complex Design of Experiments (DOE, Custom D-Optimal, Definitive Screening), or response surface optimization, StatCraft delivers authentic, production-ready results in an intuitive interface.
+Use StatCraft for descriptive statistics, hypothesis tests, quality control charts, DOE, response surface optimization, and JMP-style Fit Y by X (bivariate, one-way, and contingency analyses).
 
 ---
 
@@ -45,7 +46,7 @@ StatCraft features a custom, high-speed 3D viewport for Response Surface Methodo
 - 🎯 **Automated Peak & Minimum Detection**:
   - Visual beacon pinheads and drop stems identify global maximums ($\Delta$) and minimums ($\nabla$).
   - One-click inspection callout cards displaying fitted response $\hat{Y}$, factor coordinates, and active hold settings.
-- ⚡ **160+ FPS Performance**:
+- ⚡ **Adaptive 3D Rendering**:
   - Adaptive mesh decimation during rapid orbit and pan ensures buttery smooth interaction without UI stutter.
   - Non-occluding transparent reference frame preserves full view of surfaces from any angle.
 
@@ -130,9 +131,9 @@ StatCraft features a custom, high-speed 3D viewport for Response Surface Methodo
   - Worksheet merging and splitting.
 
 ### 6. File Compatibility & Export
-- **MPX File Compatibility**:
-  - Directly open, edit, and navigate `.mpx` and `.mwx` project containers.
-  - Preserves native variable bindings, column formatting, and metadata across edits.
+- **Minitab files**. Open supported `.mpx` projects and `.mwx` worksheets. Read the import notes for supported edits and saved outputs for that file.
+- **JMP data**. Open supported `.jmp` tables and `.jsl` files that declare table data. JSL macros and general script execution require JMP.
+- **R Workbench**. Select **R Mode** in the toolbar to edit scripts, run commands, view plots, and work with the active worksheet as `df`. Install R locally to run scripts. Use **R Workbench** to locate the executable if automatic detection misses it.
 - **Office & Presentation Export**:
   - Export worksheets and reports to Microsoft Excel (`.xlsx`), Word (`.docx`), and PowerPoint (`.pptx`).
   - High-resolution PDF generation and print preview.
@@ -142,8 +143,8 @@ StatCraft features a custom, high-speed 3D viewport for Response Surface Methodo
 ## Installation & Setup
 
 ### Option 1: Lightweight Web Installer (Recommended)
-Download **`StatCraft-Setup-v104.0.0-Windows-x64.exe`** from the [Latest Releases](https://github.com/SkinnDeep/StatCraft/releases):
-1. Run `StatCraft-Setup-v104.0.0-Windows-x64.exe`.
+Download the Windows setup EXE from the [latest GitHub release](https://github.com/SkinnDeep/StatCraft/releases/latest).
+1. Run the downloaded `StatCraft-Setup-*-Windows-x64.exe`.
 2. Follow the modern setup wizard to install StatCraft to your user directory (no administrator elevation required). The installer automatically downloads and verifies the application package directly from GitHub releases.
 3. StatCraft creates Desktop and Start Menu shortcuts, registers in Windows **Add/Remove Programs**, and configures background update checks.
 4. Future updates can be checked and applied anytime via **`Help > Check for Updates…`**.
@@ -154,13 +155,13 @@ Download **`StatCraft-Setup-v104.0.0-Windows-x64.exe`** from the [Latest Release
 > - Simply click **"More info"** &rarr; **"Run anyway"**.
 > - This is standard for newly released open-source software on GitHub. As downloads and clean telemetry accumulate with Microsoft, this prompt clears automatically.
 
-*Silent / Automated Deployment:*
+*Silent deployment example for v109.0.0. Use the filename you downloaded.*
 ```powershell
-StatCraft-Setup-v104.0.0-Windows-x64.exe --silent --dir "$env:LOCALAPPDATA\StatCraft"
+.\StatCraft-Setup-v109.0.0-Windows-x64.exe --silent --dir "$env:LOCALAPPDATA\StatCraft"
 ```
 
 ### Option 2: Standalone Portable Binary
-Download **`StatCraft-v104.0.0-Windows-x64.exe`**. No installation required—simply double-click and run directly anywhere.
+Download the standalone Windows EXE from the [latest GitHub release](https://github.com/SkinnDeep/StatCraft/releases/latest) and run it directly.
 
 ### Uninstallation
 StatCraft integrates cleanly with standard Windows application management:
@@ -210,8 +211,8 @@ Releases are fully automated with zero manual browser uploads required:
 ### Method 1: Cloud Automation (GitHub Actions)
 Pushing any version tag automatically triggers GitHub Actions to build both the standalone application and web setup installer, create the release on GitHub, and attach the binaries:
 ```bash
-git tag v109.0.0
-git push origin v109.0.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 You can also trigger a release build on demand from the **Actions** tab on GitHub by selecting **Build & Publish Release** &rarr; **Run workflow**.
 
