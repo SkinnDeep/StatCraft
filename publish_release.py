@@ -28,7 +28,7 @@ def get_current_version(repo_root: Path) -> str:
         match = re.search(r'STATCRAFT_VERSION\s*=\s*["\']([^"\']+)["\']', text)
         if match:
             return match.group(1).strip()
-    return "108.0.0"
+    return "109.0.0"
 
 
 def get_github_token() -> str | None:

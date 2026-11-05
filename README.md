@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab® and JMP® with native .MPX/.MTW and .JMP file compatibility, JMP Fit Y by X, interactive Prediction Profiler, CAD 3D response surfaces, and enterprise-grade reliability.**
 
-[![Version](https://img.shields.io/badge/version-108.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-109.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v108.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v108.0.0) •
+[Download Release (v109.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v109.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -210,8 +210,8 @@ Releases are fully automated with zero manual browser uploads required:
 ### Method 1: Cloud Automation (GitHub Actions)
 Pushing any version tag automatically triggers GitHub Actions to build both the standalone application and web setup installer, create the release on GitHub, and attach the binaries:
 ```bash
-git tag v108.0.0
-git push origin v108.0.0
+git tag v109.0.0
+git push origin v109.0.0
 ```
 You can also trigger a release build on demand from the **Actions** tab on GitHub by selecting **Build & Publish Release** &rarr; **Run workflow**.
 

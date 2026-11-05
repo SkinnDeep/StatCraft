@@ -1402,6 +1402,106 @@ class ModernWindow(QMainWindow):
         self.addToolBar(toolbar)
         self.main_toolbar = toolbar
 
+        # Primary Mode Switcher & Dark Mode Toggle (Always visible at the front)
+        mode_box = QWidget()
+        mode_box.setObjectName("modeToggleBox")
+        mode_layout = QHBoxLayout(mode_box)
+        mode_layout.setContentsMargins(4, 0, 8, 0)
+        mode_layout.setSpacing(2)
+
+        lbl_mode = QLabel("MODE:")
+        lbl_mode.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
+        lbl_mode.setStyleSheet("color: #0284c7; padding-right: 2px;")
+        mode_layout.addWidget(lbl_mode)
+
+        self.btn_mode_minitab = QToolButton()
+        self.btn_mode_minitab.setText("Minitab")
+        self.btn_mode_minitab.setToolTip("Minitab Mode: Structured Quality & Engineering (Ctrl+Alt+J)")
+        self.btn_mode_minitab.setCheckable(True)
+        self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
+
+        self.btn_mode_jmp = QToolButton()
+        self.btn_mode_jmp.setText("JMP")
+        self.btn_mode_jmp.setToolTip("JMP Mode: Interactive Visual Platforms (Ctrl+Alt+J)")
+        self.btn_mode_jmp.setCheckable(True)
+        self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
+
+        self.btn_mode_r = QToolButton()
+        self.btn_mode_r.setText("R Mode")
+        self.btn_mode_r.setToolTip("R Mode: Positron-Style Script & REPL Workbench (Ctrl+Alt+J)")
+        self.btn_mode_r.setCheckable(True)
+        self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
+
+        self.btn_mode_minitab.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-right: none;
+                border-top-left-radius: 3px;
+                border-bottom-left-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover { background-color: #e5f1fb; }
+            QToolButton:checked { background-color: #00569a; color: #ffffff; border-color: #00447c; }
+        """)
+
+        self.btn_mode_jmp.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-left: 1px solid #d4d4d4;
+                border-right: 1px solid #d4d4d4;
+                border-radius: 0;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover { background-color: #e1f5fe; }
+            QToolButton:checked { background-color: #0277bd; color: #ffffff; border-color: #01579b; }
+        """)
+
+        self.btn_mode_r.setStyleSheet("""
+            QToolButton {
+                border: 1px solid #adadad;
+                border-left: none;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+                padding: 2px 8px;
+                font-family: 'Segoe UI';
+                font-size: 8.5pt;
+                font-weight: 600;
+                background-color: #f7f7f7;
+                color: #222222;
+            }
+            QToolButton:hover { background-color: #f0fdf4; }
+            QToolButton:checked { background-color: #15803d; color: #ffffff; border-color: #166534; }
+        """)
+
+        mode_layout.addWidget(self.btn_mode_minitab)
+        mode_layout.addWidget(self.btn_mode_jmp)
+        mode_layout.addWidget(self.btn_mode_r)
+        mode_layout.addSpacing(6)
+        self.btn_theme_toggle = QToolButton()
+        self.btn_theme_toggle.setText("☀️ Light" if getattr(self, "_dark_mode", False) else "🌙 Dark")
+        self.btn_theme_toggle.setToolTip("Toggle Dark / Light Theme (Ctrl+Shift+D)")
+        self.btn_theme_toggle.setCheckable(True)
+        self.btn_theme_toggle.setChecked(getattr(self, "_dark_mode", False))
+        self.btn_theme_toggle.clicked.connect(self.toggle_dark_mode)
+        self.btn_theme_toggle.setStyleSheet(
+            "QToolButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
+            if getattr(self, "_dark_mode", False) else
+            "QToolButton { border: 1px solid #adadad; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #f7f7f7; color: #222222; } QToolButton:hover { background-color: #e5f1fb; }"
+        )
+        mode_layout.addWidget(self.btn_theme_toggle)
+        toolbar.addWidget(mode_box)
+        toolbar.addSeparator()
+
         # Standard Toolbar (8445) — 13 buttons
         toolbar.addAction(self.open_action)
         toolbar.addAction(self.save_action)
@@ -1436,126 +1536,7 @@ class ModernWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.clear_action)
 
-        # Right-aligned spacer and UI Mode switcher toggle
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toolbar.addWidget(spacer)
 
-        mode_box = QWidget()
-        mode_box.setObjectName("modeToggleBox")
-        mode_layout = QHBoxLayout(mode_box)
-        mode_layout.setContentsMargins(4, 0, 4, 0)
-        mode_layout.setSpacing(2)
-
-        lbl_mode = QLabel("Mode:")
-        lbl_mode.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
-        lbl_mode.setStyleSheet("color: #444444; padding-right: 2px;")
-        mode_layout.addWidget(lbl_mode)
-
-        self.btn_mode_minitab = QToolButton()
-        self.btn_mode_minitab.setText("⊞ Minitab Mode")
-        self.btn_mode_minitab.setToolTip("Minitab Mode: Structured Six Sigma & Quality Engineering interface (Ctrl+Alt+J)")
-        self.btn_mode_minitab.setCheckable(True)
-        self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
-
-        self.btn_mode_jmp = QToolButton()
-        self.btn_mode_jmp.setText("📊 JMP Mode")
-        self.btn_mode_jmp.setToolTip("JMP Mode: Interactive Visual Exploratory & Platform interface (Ctrl+Alt+J)")
-        self.btn_mode_jmp.setCheckable(True)
-        self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
-
-        self.btn_mode_r = QToolButton()
-        self.btn_mode_r.setText("🧬 R Mode")
-        self.btn_mode_r.setToolTip("R Mode: Interactive Script, Live REPL Console & Data Science Workbench (Ctrl+Alt+J)")
-        self.btn_mode_r.setCheckable(True)
-        self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
-
-        self.btn_mode_minitab.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-right: none;
-                border-top-left-radius: 3px;
-                border-bottom-left-radius: 3px;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover {
-                background-color: #e5f1fb;
-            }
-            QToolButton:checked {
-                background-color: #00569a;
-                color: #ffffff;
-                border-color: #00447c;
-            }
-        """)
-
-        self.btn_mode_jmp.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-left: 1px solid #d4d4d4;
-                border-right: 1px solid #d4d4d4;
-                border-radius: 0;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover {
-                background-color: #e1f5fe;
-            }
-            QToolButton:checked {
-                background-color: #0277bd;
-                color: #ffffff;
-                border-color: #01579b;
-            }
-        """)
-
-        self.btn_mode_r.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-left: none;
-                border-top-right-radius: 3px;
-                border-bottom-right-radius: 3px;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover {
-                background-color: #f0fdf4;
-            }
-            QToolButton:checked {
-                background-color: #15803d;
-                color: #ffffff;
-                border-color: #166534;
-            }
-        """)
-
-        mode_layout.addWidget(self.btn_mode_minitab)
-        mode_layout.addWidget(self.btn_mode_jmp)
-        mode_layout.addWidget(self.btn_mode_r)
-        mode_layout.addSpacing(6)
-        self.btn_theme_toggle = QToolButton()
-        self.btn_theme_toggle.setText("☀️ Light" if getattr(self, "_dark_mode", False) else "🌙 Dark")
-        self.btn_theme_toggle.setToolTip("Toggle Dark / Light Theme for Minitab, JMP, and R Modes (Ctrl+Shift+D)")
-        self.btn_theme_toggle.setCheckable(True)
-        self.btn_theme_toggle.setChecked(getattr(self, "_dark_mode", False))
-        self.btn_theme_toggle.clicked.connect(self.toggle_dark_mode)
-        self.btn_theme_toggle.setStyleSheet(
-            "QToolButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
-            if getattr(self, "_dark_mode", False) else
-            "QToolButton { border: 1px solid #adadad; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #f7f7f7; color: #222222; } QToolButton:hover { background-color: #e5f1fb; }"
-        )
-        mode_layout.addWidget(self.btn_theme_toggle)
-        toolbar.addWidget(mode_box)
 
         # Global shortcut Ctrl+Shift+D to toggle theme
         self.toggle_theme_action = QAction(self)
@@ -1592,22 +1573,25 @@ class ModernWindow(QMainWindow):
         else:
             self._populate_minitab_menubar(bar)
 
+        is_dark = getattr(self, "_dark_mode", False)
         if hasattr(self, "sidebar_stack"):
             if mode == "jmp":
                 self.sidebar_stack.setCurrentIndex(1)
                 if hasattr(self, "jmp_panel"):
+                    self.jmp_panel.set_dark_mode(is_dark)
                     self.jmp_panel.refresh()
             elif mode == "r":
                 self.sidebar_stack.setCurrentIndex(2)
                 if hasattr(self, "r_explorer_panel"):
-                    self.r_explorer_panel.set_dark_mode(getattr(self, "_dark_mode", False))
+                    self.r_explorer_panel.set_dark_mode(is_dark)
                     self.r_explorer_panel.refresh_all()
             else:
                 self.sidebar_stack.setCurrentIndex(0)
 
         if hasattr(self, "work_stack"):
             self.work_stack.setCurrentIndex(1 if mode == "r" else 0)
-            if mode == "r" and hasattr(self, "r_workbench"):
+            if mode == "r" and hasattr(self, "r_workbench") and self.r_workbench:
+                self.r_workbench.set_dark_mode(is_dark)
                 self.r_workbench.refresh_environment()
 
         if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
@@ -1642,12 +1626,17 @@ class ModernWindow(QMainWindow):
             self.dark_mode_action.setChecked(is_dark)
         if hasattr(self, "dark_mode_action_jmp") and self.dark_mode_action_jmp:
             self.dark_mode_action_jmp.setChecked(is_dark)
-        if hasattr(self, "jmp_panel") and self.jmp_panel:
+
+        # Lazy, instant panel updates without background lag
+        active_mode = getattr(self, "_ui_mode", "minitab")
+        if active_mode == "jmp" and hasattr(self, "jmp_panel") and self.jmp_panel:
             self.jmp_panel.set_dark_mode(is_dark)
-        if hasattr(self, "r_workbench") and self.r_workbench:
-            self.r_workbench.set_dark_mode(is_dark)
-        if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
-            self.r_explorer_panel.set_dark_mode(is_dark)
+        elif active_mode == "r":
+            if hasattr(self, "r_workbench") and self.r_workbench:
+                self.r_workbench.set_dark_mode(is_dark)
+            if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
+                self.r_explorer_panel.set_dark_mode(is_dark)
+
         if hasattr(self, "entry_dir_label"):
             self.entry_dir_label.setStyleSheet(
                 "background: transparent; color: #a1a1aa; font-size: 9pt; font-weight: 600;" if is_dark else
@@ -1661,7 +1650,7 @@ class ModernWindow(QMainWindow):
             self.column_names.viewport().update()
         if hasattr(self, "table"):
             self.table.viewport().update()
-        self.refresh()
+        self.update()
 
     def run_r_script_dialog(self):
         """Prompt to choose an R script file, switch to R Mode and execute."""

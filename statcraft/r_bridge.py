@@ -746,3 +746,59 @@ def install_r_via_winget(progress_callback: Optional[Callable[[str], None]] = No
         return proc.returncode == 0
     except Exception:
         return False
+
+
+def get_r_help_text(topic: str) -> str:
+    """Fetch formatted help text for a given R topic (e.g. 'lm', 'plot', 'summary')."""
+    clean_topic = re.sub(r'^[?]', '', topic.strip())
+    if not clean_topic or not is_r_available():
+        return f"Help unavailable: R is not active or invalid topic '{clean_topic}'."
+
+    code = f'''
+    tryCatch({{
+        rd <- utils::help("{clean_topic}")
+        if (length(rd) == 0) {{
+            cat("No documentation found for '{clean_topic}'.")
+        }} else {{
+            txt <- utils:::.getHelpFile(rd)
+            tools::Rd2txt(txt, out = stdout())
+        }}
+    }}, error = function(e) {{
+        cat("Error retrieving documentation for '{clean_topic}': ", conditionMessage(e), "\\n")
+    }})
+    '''
+    res = execute_r_code(code)
+    out = res.get("stdout", "").strip()
+    return out if out else f"No documentation found for '{clean_topic}'."
+
+
+def download_and_install_r_direct(progress_callback: Optional[Callable[[str], None]] = None) -> bool:
+    """Download official Windows R installer directly from CRAN and run setup."""
+    import tempfile
+    import urllib.request
+
+    installer_url = "https://cloud.r-project.org/bin/windows/base/R-4.4.2-win.exe"
+    tmp_exe = Path(tempfile.gettempdir()) / "R-Setup-Latest.exe"
+
+    if progress_callback:
+        progress_callback("Connecting to official CRAN repository (cloud.r-project.org)...")
+
+    try:
+        def reporthook(blocknum, blocksize, totalsize):
+            if totalsize > 0 and progress_callback and blocknum % 100 == 0:
+                percent = min(100, int(blocknum * blocksize * 100 / totalsize))
+                mb = round(blocknum * blocksize / (1024 * 1024), 1)
+                total_mb = round(totalsize / (1024 * 1024), 1)
+                progress_callback(f"Downloading R ({percent}% - {mb} MB of {total_mb} MB)...")
+
+        urllib.request.urlretrieve(installer_url, str(tmp_exe), reporthook=reporthook)
+
+        if progress_callback:
+            progress_callback("Launching R installer...")
+
+        proc = subprocess.run([str(tmp_exe), "/SILENT"], timeout=300)
+        return proc.returncode == 0
+    except Exception as e:
+        if progress_callback:
+            progress_callback(f"Direct download error: {e}")
+        return False
