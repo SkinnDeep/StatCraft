@@ -604,7 +604,7 @@ class ModernWindow(QMainWindow):
         self._use_hidden_in_dialogs = False
         self._report_pad_entries = []
         self._prepare_blank()
-        self._ui_mode = QSettings("StatCraft", "StatCraft").value("ui_mode", "minitab")
+        self._ui_mode = "minitab"
         self.setWindowTitle("StatCraft - Untitled")
         self.resize(1280, 760); self.setMinimumSize(920, 520)
         self.setFont(QFont("Segoe UI", 9))
@@ -1403,105 +1403,7 @@ class ModernWindow(QMainWindow):
         self.addToolBar(toolbar)
         self.main_toolbar = toolbar
 
-        # Primary Mode Switcher & Dark Mode Toggle (Always visible at the front)
-        mode_box = QWidget()
-        mode_box.setObjectName("modeToggleBox")
-        mode_layout = QHBoxLayout(mode_box)
-        mode_layout.setContentsMargins(4, 0, 8, 0)
-        mode_layout.setSpacing(2)
 
-        lbl_mode = QLabel("MODE:")
-        lbl_mode.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
-        lbl_mode.setStyleSheet("color: #0284c7; padding-right: 2px;")
-        mode_layout.addWidget(lbl_mode)
-
-        self.btn_mode_minitab = QToolButton()
-        self.btn_mode_minitab.setText("Minitab")
-        self.btn_mode_minitab.setToolTip("Minitab Mode: Structured Quality & Engineering (Ctrl+Alt+J)")
-        self.btn_mode_minitab.setCheckable(True)
-        self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
-
-        self.btn_mode_jmp = QToolButton()
-        self.btn_mode_jmp.setText("JMP")
-        self.btn_mode_jmp.setToolTip("JMP Mode: Interactive Visual Platforms (Ctrl+Alt+J)")
-        self.btn_mode_jmp.setCheckable(True)
-        self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
-
-        self.btn_mode_r = QToolButton()
-        self.btn_mode_r.setText("R Mode")
-        self.btn_mode_r.setToolTip("R Mode: Positron-Style Script & REPL Workbench (Ctrl+Alt+J)")
-        self.btn_mode_r.setCheckable(True)
-        self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
-
-        self.btn_mode_minitab.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-right: none;
-                border-top-left-radius: 3px;
-                border-bottom-left-radius: 3px;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover { background-color: #e5f1fb; }
-            QToolButton:checked { background-color: #00569a; color: #ffffff; border-color: #00447c; }
-        """)
-
-        self.btn_mode_jmp.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-left: 1px solid #d4d4d4;
-                border-right: 1px solid #d4d4d4;
-                border-radius: 0;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover { background-color: #e1f5fe; }
-            QToolButton:checked { background-color: #0277bd; color: #ffffff; border-color: #01579b; }
-        """)
-
-        self.btn_mode_r.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #adadad;
-                border-left: none;
-                border-top-right-radius: 3px;
-                border-bottom-right-radius: 3px;
-                padding: 2px 8px;
-                font-family: 'Segoe UI';
-                font-size: 8.5pt;
-                font-weight: 600;
-                background-color: #f7f7f7;
-                color: #222222;
-            }
-            QToolButton:hover { background-color: #f0fdf4; }
-            QToolButton:checked { background-color: #15803d; color: #ffffff; border-color: #166534; }
-        """)
-
-        mode_layout.addWidget(self.btn_mode_minitab)
-        mode_layout.addWidget(self.btn_mode_jmp)
-        mode_layout.addWidget(self.btn_mode_r)
-        mode_layout.addSpacing(6)
-        self.btn_theme_toggle = QToolButton()
-        self.btn_theme_toggle.setText("☀️ Light" if getattr(self, "_dark_mode", False) else "🌙 Dark")
-        self.btn_theme_toggle.setToolTip("Toggle Dark / Light Theme (Ctrl+Shift+D)")
-        self.btn_theme_toggle.setCheckable(True)
-        self.btn_theme_toggle.setChecked(getattr(self, "_dark_mode", False))
-        self.btn_theme_toggle.clicked.connect(self.toggle_dark_mode)
-        self.btn_theme_toggle.setStyleSheet(
-            "QToolButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
-            if getattr(self, "_dark_mode", False) else
-            "QToolButton { border: 1px solid #adadad; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #f7f7f7; color: #222222; } QToolButton:hover { background-color: #e5f1fb; }"
-        )
-        mode_layout.addWidget(self.btn_theme_toggle)
-        toolbar.addWidget(mode_box)
-        toolbar.addSeparator()
 
         # Standard Toolbar (8445) — 13 buttons
         toolbar.addAction(self.open_action)
@@ -1537,6 +1439,51 @@ class ModernWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.clear_action)
 
+        # Right-aligned Mode Switcher & Dark Mode Toggle
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+
+        mode_box = QWidget()
+        mode_box.setObjectName("modeToggleBox")
+        mode_layout = QHBoxLayout(mode_box)
+        mode_layout.setContentsMargins(4, 0, 4, 0)
+        mode_layout.setSpacing(2)
+
+        self.btn_mode_minitab = QToolButton()
+        self.btn_mode_minitab.setText("Minitab")
+        self.btn_mode_minitab.setToolTip("Minitab Mode: Quality, Engineering & SPC (Ctrl+Alt+J)")
+        self.btn_mode_minitab.setCheckable(True)
+        self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
+
+        self.btn_mode_jmp = QToolButton()
+        self.btn_mode_jmp.setText("JMP")
+        self.btn_mode_jmp.setToolTip("JMP Mode: Interactive Visual Platforms (Ctrl+Alt+J)")
+        self.btn_mode_jmp.setCheckable(True)
+        self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
+
+        self.btn_mode_r = QToolButton()
+        self.btn_mode_r.setText("R")
+        self.btn_mode_r.setToolTip("R Workbench: Positron-Style Scripting & REPL (Ctrl+Alt+J)")
+        self.btn_mode_r.setCheckable(True)
+        self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
+
+        self.btn_theme_toggle = QToolButton()
+        self.btn_theme_toggle.setText("Light" if getattr(self, "_dark_mode", False) else "Dark")
+        self.btn_theme_toggle.setToolTip("Toggle Dark / Light Theme (Ctrl+Shift+D)")
+        self.btn_theme_toggle.setCheckable(True)
+        self.btn_theme_toggle.setChecked(getattr(self, "_dark_mode", False))
+        self.btn_theme_toggle.clicked.connect(self.toggle_dark_mode)
+
+        self._update_mode_button_styles()
+
+        mode_layout.addWidget(self.btn_mode_minitab)
+        mode_layout.addWidget(self.btn_mode_jmp)
+        mode_layout.addWidget(self.btn_mode_r)
+        mode_layout.addSpacing(6)
+        mode_layout.addWidget(self.btn_theme_toggle)
+        toolbar.addWidget(mode_box)
+
 
 
         # Global shortcut Ctrl+Shift+D to toggle theme
@@ -1554,6 +1501,29 @@ class ModernWindow(QMainWindow):
             self.set_ui_mode(nxt)
         self.toggle_mode_action.triggered.connect(_cycle_mode)
         self.addAction(self.toggle_mode_action)
+
+    def _update_mode_button_styles(self):
+        is_dark = getattr(self, "_dark_mode", False)
+        base_style = (
+            "QToolButton { border: 1px solid #3f3f46; border-radius: 4px; padding: 2px 10px; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #a1a1aa; } "
+            "QToolButton:hover { background-color: #3f3f46; color: #f4f4f5; } "
+            "QToolButton:checked { background-color: #0284c7; color: #ffffff; border-color: #0284c7; }"
+            if is_dark else
+            "QToolButton { border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 10px; font-size: 8.5pt; font-weight: 600; background-color: #f8fafc; color: #475569; } "
+            "QToolButton:hover { background-color: #e2e8f0; color: #0f172a; } "
+            "QToolButton:checked { background-color: #0284c7; color: #ffffff; border-color: #0284c7; }"
+        )
+        if hasattr(self, "btn_mode_minitab"): self.btn_mode_minitab.setStyleSheet(base_style)
+        if hasattr(self, "btn_mode_jmp"): self.btn_mode_jmp.setStyleSheet(base_style)
+        if hasattr(self, "btn_mode_r"): self.btn_mode_r.setStyleSheet(base_style)
+        if hasattr(self, "btn_theme_toggle"):
+            theme_style = (
+                "QToolButton { border: 1px solid #3f3f46; border-radius: 4px; padding: 2px 8px; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
+                if is_dark else
+                "QToolButton { border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 8.5pt; font-weight: 600; background-color: #f8fafc; color: #334155; } QToolButton:hover { background-color: #e2e8f0; }"
+            )
+            self.btn_theme_toggle.setStyleSheet(theme_style)
+            self.btn_theme_toggle.setText("Light" if is_dark else "Dark")
 
     def set_ui_mode(self, mode: str):
         mode = mode.lower() if isinstance(mode, str) else "minitab"
@@ -1575,18 +1545,24 @@ class ModernWindow(QMainWindow):
             self._populate_minitab_menubar(bar)
 
         is_dark = getattr(self, "_dark_mode", False)
+        if hasattr(self, "_update_mode_button_styles"):
+            self._update_mode_button_styles()
+
         if hasattr(self, "sidebar_stack"):
             if mode == "jmp":
+                self.sidebar_stack.show()
                 self.sidebar_stack.setCurrentIndex(1)
                 if hasattr(self, "jmp_panel"):
                     self.jmp_panel.set_dark_mode(is_dark)
                     self.jmp_panel.refresh()
             elif mode == "r":
+                self.sidebar_stack.show()
                 self.sidebar_stack.setCurrentIndex(2)
-                if hasattr(self, "r_explorer_panel"):
+                if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
                     self.r_explorer_panel.set_dark_mode(is_dark)
                     self.r_explorer_panel.refresh_all()
             else:
+                self.sidebar_stack.show()
                 self.sidebar_stack.setCurrentIndex(0)
 
         if hasattr(self, "work_stack"):
@@ -1628,15 +1604,12 @@ class ModernWindow(QMainWindow):
         if hasattr(self, "dark_mode_action_jmp") and self.dark_mode_action_jmp:
             self.dark_mode_action_jmp.setChecked(is_dark)
 
-        # Lazy, instant panel updates without background lag
-        active_mode = getattr(self, "_ui_mode", "minitab")
-        if active_mode == "jmp" and hasattr(self, "jmp_panel") and self.jmp_panel:
+        if hasattr(self, "jmp_panel") and self.jmp_panel:
             self.jmp_panel.set_dark_mode(is_dark)
-        elif active_mode == "r":
-            if hasattr(self, "r_workbench") and self.r_workbench:
-                self.r_workbench.set_dark_mode(is_dark)
-            if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
-                self.r_explorer_panel.set_dark_mode(is_dark)
+        if hasattr(self, "r_workbench") and self.r_workbench:
+            self.r_workbench.set_dark_mode(is_dark)
+        if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
+            self.r_explorer_panel.set_dark_mode(is_dark)
 
         if hasattr(self, "entry_dir_label"):
             self.entry_dir_label.setStyleSheet(
@@ -4722,7 +4695,7 @@ class ModernWindow(QMainWindow):
         layout.addLayout(badge_row)
         layout.addWidget(label(entry.get("title", "Result"), "pageHeading"))
 
-        # --- StatCraft Connect Bar ---
+        # --- Clean StatCraft Connect Header Action ---
         conn_dict = entry.get("connected_analysis")
         if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
             from .connect import create_connected_regression
@@ -4739,52 +4712,42 @@ class ModernWindow(QMainWindow):
             conn_obj = ConnectedAnalysis.from_dict(conn_dict)
             status, status_msg = check_analysis_freshness(conn_obj, self.presenter.worksheet)
 
-            connect_bar = QFrame()
-            connect_bar.setObjectName("connectBar")
+            # Build a quiet, single-row action strip beside the heading
+            hdr_strip = QHBoxLayout()
+            hdr_strip.setContentsMargins(0, 0, 0, 4)
+            hdr_strip.setSpacing(8)
+
+            if status != "current":
+                warn_badge = QLabel("Data Modified Since Fit" if status == "stale" else "Column Missing")
+                warn_color = "#f59e0b" if status == "stale" else "#ef4444"
+                warn_badge.setStyleSheet(f"color: {warn_color}; font-size: 8.5pt; font-weight: 600; padding: 2px 6px; border: 1px solid {warn_color}; border-radius: 3px;")
+                warn_badge.setToolTip(status_msg)
+                hdr_strip.addWidget(warn_badge)
+
+            hdr_strip.addStretch(1)
+
+            btn_open = QToolButton()
+            btn_open.setText("Open in… ▾")
+            btn_open.setToolTip("Continue analysis in Interactive Explorer (JMP) or R Workbench")
             is_dark = getattr(self, "_dark_mode", False)
-            connect_bar.setStyleSheet(
-                "QFrame#connectBar { background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 4px; }"
+            btn_open.setStyleSheet(
+                "QToolButton { background: #27272a; color: #38bdf8; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 10px; font-weight: 600; font-size: 8.5pt; }"
+                "QToolButton:hover { background: #3f3f46; border-color: #0284c7; }"
                 if is_dark else
-                "QFrame#connectBar { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px; }"
+                "QToolButton { background: #f8fafc; color: #0284c7; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 10px; font-weight: 600; font-size: 8.5pt; }"
+                "QToolButton:hover { background: #e0f2fe; border-color: #0284c7; }"
             )
-            cb_lay = QHBoxLayout(connect_bar)
-            cb_lay.setContentsMargins(10, 4, 10, 4)
-            cb_lay.setSpacing(10)
+            btn_open.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            open_menu = QMenu(btn_open)
+            open_menu.addAction("Interactive Explorer (JMP)", lambda e=entry: self.connect_open_explorer(e))
+            open_menu.addAction("R Workbench", lambda e=entry: self.connect_open_in_r(e))
+            open_menu.addSeparator()
+            open_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda e=entry: self.connect_apply_predictions(e))
+            open_menu.addAction("Compare Implementations (StatCraft vs R)", lambda e=entry: self.connect_compare_implementations(e))
+            btn_open.setMenu(open_menu)
+            hdr_strip.addWidget(btn_open)
 
-            c_tag = QLabel("🔗 STATCRAFT CONNECT")
-            c_tag.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 10px;" if is_dark else "color: #0284c7; font-weight: bold; font-size: 10px;")
-            cb_lay.addWidget(c_tag)
-
-            pill_color = "#16a34a" if status == "current" else ("#d97706" if status == "stale" else "#dc2626")
-            pill_text = "🟢 Synchronized" if status == "current" else ("🟡 Stale (Data Modified)" if status == "stale" else "🔴 Column Missing")
-            status_pill = QLabel(pill_text)
-            status_pill.setStyleSheet(f"color: {pill_color}; font-weight: 600; font-size: 10.5px;")
-            status_pill.setToolTip(status_msg)
-            cb_lay.addWidget(status_pill)
-            cb_lay.addStretch(1)
-
-            btn_exp = QToolButton()
-            btn_exp.setText("📊 Interactive Explorer")
-            btn_exp.setStyleSheet("background: #0284c7; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
-            btn_exp.setToolTip("Open in JMP-style Interactive Explorer (Bivariate / Prediction Profiler)")
-            btn_exp.clicked.connect(lambda checked=False, e=entry: self.connect_open_explorer(e))
-            cb_lay.addWidget(btn_exp)
-
-            btn_r = QToolButton()
-            btn_r.setText("⚡ R Workbench")
-            btn_r.setStyleSheet("background: #059669; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
-            btn_r.setToolTip("Transfer model formula and bindings to R Workbench")
-            btn_r.clicked.connect(lambda checked=False, e=entry: self.connect_open_in_r(e))
-            cb_lay.addWidget(btn_r)
-
-            btn_pred = QToolButton()
-            btn_pred.setText("📥 Apply Predictions")
-            btn_pred.setStyleSheet("background: #475569; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
-            btn_pred.setToolTip("Store fitted values and residuals back into the active worksheet aligned by observation ID")
-            btn_pred.clicked.connect(lambda checked=False, e=entry: self.connect_apply_predictions(e))
-            cb_lay.addWidget(btn_pred)
-
-            layout.addWidget(connect_bar)
+            layout.addLayout(hdr_strip)
         rendered = set()
         if result.get("analysis") == "cross_correlation":
             layout.addWidget(label("Cross Correlations", "sectionHeading"))
@@ -5639,7 +5602,7 @@ class ModernWindow(QMainWindow):
         # StatCraft Connect submenu
         if target_entry.get("connected_analysis") or target_entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"):
             menu.addSeparator()
-            connect_menu = menu.addMenu("🔗 StatCraft Connect")
+            connect_menu = menu.addMenu("StatCraft Connect")
             connect_menu.addAction("Statistical Dialog (Minitab Mode)...", lambda: self.connect_open_dialog(target_entry))
             connect_menu.addAction("Interactive Explorer (JMP Mode)...", lambda: self.connect_open_explorer(target_entry))
             connect_menu.addAction("R Workbench (R Mode)...", lambda: self.connect_open_in_r(target_entry))

@@ -678,6 +678,19 @@ class RWorkbenchWidget(QWidget):
         self.btn_templates.clicked.connect(self._show_templates_menu)
         hdr_layout.addWidget(self.btn_templates)
 
+        # Integrated Model Connection Tag & Apply Button
+        self.connect_tag = QLabel("")
+        self.connect_tag.setStyleSheet("color: #38bdf8; font-weight: 600; font-size: 8.5pt; padding-left: 8px;")
+        self.connect_tag.hide()
+        hdr_layout.addWidget(self.connect_tag)
+
+        self.btn_sync_top = QPushButton("Sync to Worksheet")
+        self.btn_sync_top.setStyleSheet("background-color: #0284c7; color: white; font-weight: 600; border-radius: 4px; padding: 3px 8px; font-size: 8.5pt;")
+        self.btn_sync_top.setToolTip("Store R fitted values and residuals back into the active worksheet")
+        self.btn_sync_top.clicked.connect(self.apply_connected_predictions)
+        self.btn_sync_top.hide()
+        hdr_layout.addWidget(self.btn_sync_top)
+
         root_layout.addWidget(self.hdr_frame)
 
         # 2. R Not Detected Banner (Hidden if R is present)
@@ -705,40 +718,20 @@ class RWorkbenchWidget(QWidget):
         self.btn_cran = QPushButton("CRAN")
         self.btn_cran.clicked.connect(lambda: webbrowser.open("https://cloud.r-project.org/"))
         b_layout.addWidget(self.btn_cran)
+
+        btn_dismiss = QPushButton("✕")
+        btn_dismiss.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px; border: none; padding: 2px 6px;")
+        btn_dismiss.setToolTip("Dismiss notice")
+        btn_dismiss.clicked.connect(self.r_banner.hide)
+        b_layout.addWidget(btn_dismiss)
+
         root_layout.addWidget(self.r_banner)
 
-        # StatCraft Connect Banner (shown when linked to a model)
+        # Compact connect_banner (hidden, 0 height)
         self.connect_banner = QFrame()
-        self.connect_banner.setObjectName("connectBanner")
-        self.connect_banner.setStyleSheet("""
-            QFrame#connectBanner {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0f172a, stop:1 #1e293b);
-                border-bottom: 2px solid #0284c7;
-                padding: 4px 10px;
-            }
-        """)
-        cb_lay = QHBoxLayout(self.connect_banner)
-        cb_lay.setContentsMargins(12, 4, 12, 4)
-        cb_lay.setSpacing(10)
-        self.cb_title = QLabel("🔗 STATCRAFT CONNECT : Active Model")
-        self.cb_title.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 11px;")
-        cb_lay.addWidget(self.cb_title)
-        cb_lay.addStretch(1)
-
-        self.btn_apply_connect = QPushButton("📥 Apply Predictions to Worksheet")
-        self.btn_apply_connect.setStyleSheet("background: #0284c7; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px;")
-        self.btn_apply_connect.setToolTip("Store R fitted values and residuals back into the active worksheet aligned by observation ID")
-        self.btn_apply_connect.clicked.connect(self.apply_connected_predictions)
-        cb_lay.addWidget(self.btn_apply_connect)
-
-        btn_dismiss_connect = QPushButton("✕")
-        btn_dismiss_connect.setStyleSheet("background: transparent; color: #94a3b8; font-weight: bold; font-size: 12px; border: none;")
-        btn_dismiss_connect.setToolTip("Dismiss Connect banner")
-        btn_dismiss_connect.clicked.connect(self.connect_banner.hide)
-        cb_lay.addWidget(btn_dismiss_connect)
-
         self.connect_banner.hide()
-        root_layout.addWidget(self.connect_banner)
+        self.cb_title = QLabel()
+        self.btn_apply_connect = QPushButton()
 
         # 3. Main Splitters (4 Quadrants)
         main_h_split = QSplitter(Qt.Orientation.Horizontal)
@@ -1076,8 +1069,11 @@ class RWorkbenchWidget(QWidget):
         resp = connected.get("response_name") if isinstance(connected, dict) else getattr(connected, "response_name", "Y")
         r_script = connected.get("r_script") if isinstance(connected, dict) else getattr(connected, "r_script", "")
 
-        self.cb_title.setText(f"🔗 STATCRAFT CONNECT : {title}   |   Response: {resp}")
-        self.connect_banner.show()
+        if hasattr(self, "connect_tag"):
+            self.connect_tag.setText(f"Model: {title}")
+            self.connect_tag.show()
+        if hasattr(self, "btn_sync_top"):
+            self.btn_sync_top.show()
 
         if r_script:
             self.editor.setPlainText(r_script)
