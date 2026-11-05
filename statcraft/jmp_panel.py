@@ -744,9 +744,10 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 9. VIEW
     view_m = bar.addMenu("&View")
-    mode_sub = view_m.addMenu("UI Style")
-    _act(mode_sub, "Minitab Style (Classic)", lambda: win.set_ui_mode("minitab"))
-    _act(mode_sub, "JMP Style (Platform)", lambda: win.set_ui_mode("jmp"))
+    mode_sub = view_m.addMenu("Workspace Mode")
+    _act(mode_sub, "Minitab Mode (Quality & SPC)", lambda: win.set_ui_mode("minitab"))
+    _act(mode_sub, "JMP Mode (Visual Platforms)", lambda: win.set_ui_mode("jmp"))
+    _act(mode_sub, "R Mode (Data Science Workbench)", lambda: win.set_ui_mode("r"))
     view_m.addSeparator()
     _act(view_m, "Toggle Table Panel", win.toggle_navigator)
     _act(view_m, "Command Line / Script Editor", win.toggle_command_line)
@@ -766,8 +767,8 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 11. HELP
     help_m = bar.addMenu("&Help")
-    _act(help_m, "StatCraft & JMP Guide…", lambda: win._module_notice("Help", "StatCraft provides comprehensive alternatives to both Minitab and JMP.\n\nToggle between Minitab and JMP modes anytime using the UI Style toggle at the top!"))
-    _act(help_m, "Keyboard Shortcuts…", lambda: win._module_notice("Keyboard Shortcuts", "Ctrl+N: New Worksheet\nCtrl+O: Open File\nCtrl+S: Save\nCtrl+E: Edit Last Dialog\nCtrl+G: Go To Row\nCtrl+Alt+J: Toggle Minitab/JMP UI Mode"))
+    _act(help_m, "StatCraft Guide…", lambda: win._module_notice("Help", "StatCraft provides a unified statistical workbench supporting Minitab Mode, JMP Mode, and R Mode.\n\nSwitch seamlessly between modes anytime using the Mode toggle at the top or Ctrl+Alt+J!"))
+    _act(help_m, "Keyboard Shortcuts…", lambda: win._module_notice("Keyboard Shortcuts", "Ctrl+N: New Worksheet\nCtrl+O: Open File\nCtrl+S: Save\nCtrl+E: Edit Last Dialog\nCtrl+G: Go To Row\nCtrl+Alt+J: Toggle Workspace Mode (Minitab / JMP / R)"))
     _act(help_m, "Check for Updates…", win.check_for_updates_dialog)
     _act(help_m, "About StatCraft…", win.about)
 

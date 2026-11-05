@@ -1062,9 +1062,10 @@ class ModernWindow(QMainWindow):
 
         # 7. View menu (`RT_MENU 8445`: Navigator, Command Line/History, Data and Output, Data Only, Output Only, Zoom)
         view = bar.addMenu("&View")
-        ui_style_menu = view.addMenu("UI Style")
-        self._action(ui_style_menu, "Minitab Style (Classic)", lambda: self.set_ui_mode("minitab"))
-        self._action(ui_style_menu, "JMP Style (Platform)", lambda: self.set_ui_mode("jmp"))
+        mode_menu = view.addMenu("Workspace Mode")
+        self._action(mode_menu, "Minitab Mode (Quality & SPC)", lambda: self.set_ui_mode("minitab"))
+        self._action(mode_menu, "JMP Mode (Visual Platforms)", lambda: self.set_ui_mode("jmp"))
+        self._action(mode_menu, "R Mode (Data Science Workbench)", lambda: self.set_ui_mode("r"))
         view.addSeparator()
         self.view_nav_action = QAction("Navigator / Table Panel", self, checkable=True, checked=True)
         self.view_nav_action.triggered.connect(self.toggle_navigator)
@@ -1201,26 +1202,26 @@ class ModernWindow(QMainWindow):
         mode_layout.setContentsMargins(4, 0, 4, 0)
         mode_layout.setSpacing(2)
 
-        lbl_mode = QLabel("UI:")
+        lbl_mode = QLabel("Mode:")
         lbl_mode.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
         lbl_mode.setStyleSheet("color: #444444; padding-right: 2px;")
         mode_layout.addWidget(lbl_mode)
 
         self.btn_mode_minitab = QToolButton()
-        self.btn_mode_minitab.setText("⊞ Minitab")
-        self.btn_mode_minitab.setToolTip("Switch to Minitab Classic UI Mode (Ctrl+Alt+J)")
+        self.btn_mode_minitab.setText("⊞ Minitab Mode")
+        self.btn_mode_minitab.setToolTip("Minitab Mode: Structured Six Sigma & Quality Engineering interface (Ctrl+Alt+J)")
         self.btn_mode_minitab.setCheckable(True)
         self.btn_mode_minitab.clicked.connect(lambda: self.set_ui_mode("minitab"))
 
         self.btn_mode_jmp = QToolButton()
-        self.btn_mode_jmp.setText("📊 JMP")
-        self.btn_mode_jmp.setToolTip("Switch to JMP Platform UI Mode (Ctrl+Alt+J)")
+        self.btn_mode_jmp.setText("📊 JMP Mode")
+        self.btn_mode_jmp.setToolTip("JMP Mode: Interactive Visual Exploratory & Platform interface (Ctrl+Alt+J)")
         self.btn_mode_jmp.setCheckable(True)
         self.btn_mode_jmp.clicked.connect(lambda: self.set_ui_mode("jmp"))
 
         self.btn_mode_r = QToolButton()
-        self.btn_mode_r.setText("🧬 R")
-        self.btn_mode_r.setToolTip("Switch to R Positron-Style Workbench Mode (Ctrl+Alt+J)")
+        self.btn_mode_r.setText("🧬 R Mode")
+        self.btn_mode_r.setToolTip("R Mode: Interactive Script, Live REPL Console & Data Science Workbench (Ctrl+Alt+J)")
         self.btn_mode_r.setCheckable(True)
         self.btn_mode_r.clicked.connect(lambda: self.set_ui_mode("r"))
 
@@ -1344,7 +1345,7 @@ class ModernWindow(QMainWindow):
         settings = QSettings("StatCraft", "StatCraft")
         settings.setValue("ui_mode", mode)
 
-        mode_label = "R Workbench" if mode == "r" else ("JMP Platform" if mode == "jmp" else "Minitab Classic")
+        mode_label = "R Mode (Data Science)" if mode == "r" else ("JMP Mode (Visual Platforms)" if mode == "jmp" else "Minitab Mode (Quality & SPC)")
         if hasattr(self, "status_sheet_label"):
             ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
             self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")
