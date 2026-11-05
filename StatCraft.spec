@@ -73,8 +73,8 @@ if sys.platform == 'darwin':
             'CFBundleName': 'StatCraft',
             'CFBundleDisplayName': 'StatCraft',
             'CFBundleIdentifier': 'com.statcraft.desktop',
-            'CFBundleVersion': '105.0.0',
-            'CFBundleShortVersionString': '105.0.0',
+            'CFBundleVersion': '106.0.0',
+            'CFBundleShortVersionString': '106.0.0',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '11.0',
         }

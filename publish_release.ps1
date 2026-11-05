@@ -7,7 +7,7 @@
 .EXAMPLE
     .\publish_release.ps1
     .\publish_release.ps1 -SkipBuild
-    .\publish_release.ps1 -Version "105.0.0"
+    .\publish_release.ps1 -Version "106.0.0"
 #>
 [CmdletBinding()]
 param (
