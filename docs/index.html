@@ -388,6 +388,7 @@
       <!-- Showcase Tabs -->
       <div class="flex overflow-x-auto no-scrollbar sm:flex-wrap items-center sm:justify-center gap-2 mb-8 px-2 py-2 -mx-2 sm:mx-0">
         <button onclick="switchTab('jmp_ui')" id="tab-jmp_ui" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">JMP Platform UI Toggle</button>
+        <button onclick="switchTab('jmp_dist')" id="tab-jmp_dist" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Distribution (JMP)</button>
         <button onclick="switchTab('sixpack')" id="tab-sixpack" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Capability Sixpack</button>
         <button onclick="switchTab('jmp_biv')" id="tab-jmp_biv" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Bivariate Fit (JMP)</button>
         <button onclick="switchTab('jmp_one')" id="tab-jmp_one" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Oneway Diamonds (JMP)</button>
@@ -478,6 +479,13 @@
                 <td class="p-3.5 sm:p-5 text-slate-400">Fixed Minitab Layout</td>
                 <td class="p-3.5 sm:p-5 text-slate-400">Fixed JMP Layout</td>
                 <td class="p-3.5 sm:p-5 text-slate-400">Fixed Web Layout</td>
+              </tr>
+              <tr class="hover:bg-slate-800/20">
+                <td class="p-3.5 sm:p-5 text-white">JMP Distribution & Quantiles</td>
+                <td class="p-3.5 sm:p-5 text-emerald-400 font-bold bg-brand-500/5 border-x border-brand-500/10">Full Parity (Vertical Outlier Box Plot, Normal Curve, 11 Quantiles)</td>
+                <td class="p-3.5 sm:p-5 text-slate-400">Horizontal Only (Standard Boxplot)</td>
+                <td class="p-3.5 sm:p-5 text-slate-400">Signature Platform</td>
+                <td class="p-3.5 sm:p-5 text-slate-400">Not Supported</td>
               </tr>
               <tr class="hover:bg-slate-800/20">
                 <td class="p-3.5 sm:p-5 text-white">JMP Fit Y by X & Means Diamonds</td>
@@ -771,6 +779,10 @@
       jmp_ui: {
         img: 'images/jmp-platform-ui.png',
         caption: 'One-Click JMP Platform Mode: Authentic JMP table panel with executable scripts (▶), dynamic column modeling types (▲ Continuous, ▮ Nominal, 📶 Ordinal), row state management, and full JMP menu bar hierarchy.'
+      },
+      jmp_dist: {
+        img: 'images/jmp-distribution.png',
+        caption: 'JMP Distribution Platform: Authentic vertical layout combining Outlier Box Plot (IQR & whiskers), frequency histogram, fitted normal density curve, and exact 11 JMP quantiles with interactive Red Triangle controls.'
       },
       sixpack: {
         img: 'images/sixpack.png',

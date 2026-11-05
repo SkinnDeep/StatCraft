@@ -3753,6 +3753,30 @@ class Presenter:
             recipe={"action": "fit_y_by_x", "parameters": parameters}
         )
 
+    def jmp_distribution(self, column_indices, confidence=0.95):
+        from .jmp_distribution_engine import compute_jmp_distribution
+        from .jmp_distribution_report import format_jmp_distribution_report, get_jmp_distribution_structured_tables
+
+        result = compute_jmp_distribution(
+            self.worksheet,
+            column_indices=column_indices,
+            confidence=confidence
+        )
+        result["analysis"] = "jmp_distribution"
+        result["tables"] = get_jmp_distribution_structured_tables(result)
+        result["session_text"] = format_jmp_distribution_report({"result": result})
+
+        parameters = {
+            "column_indices": list(column_indices),
+            "confidence": confidence
+        }
+        title = result.get("title", "Distributions")
+        return self._record(
+            title,
+            result,
+            recipe={"action": "jmp_distribution", "parameters": parameters}
+        )
+
     def cart_tree(self, response_index, predictor_indices, tree_type='auto', max_depth=5, min_split_size=10, min_leaf_size=5):
         from .tree_engine import fit_decision_tree
         from .tree_report import format_tree_report, get_tree_structured_tables

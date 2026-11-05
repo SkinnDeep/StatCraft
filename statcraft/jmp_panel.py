@@ -410,7 +410,7 @@ class JMPTablePanel(QWidget):
         self.list_scripts.clear()
         scripts = [
             ("Fit Y by X (Bivariate & Oneway)", lambda: self.main_window.fit_y_by_x_dialog()),
-            ("Distribution (Descriptive & Histograms)", lambda: self.main_window.describe()),
+            ("Distribution (Descriptive & Histograms)", lambda: self.main_window.jmp_distribution_dialog()),
             ("Prediction Profiler", lambda: self.main_window.prediction_profiler("regression")),
             ("Fit Model (Regression & GLM)", lambda: self.main_window.multiple_regression()),
             ("Partition (Decision Tree)", lambda: self.main_window.cart_tree_dialog() if hasattr(self.main_window, "cart_tree_dialog") else self.main_window.describe()),
@@ -691,7 +691,7 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 6. ANALYZE
     ana_m = bar.addMenu("&Analyze")
-    _act(ana_m, "Distribution (Descriptive & Histograms)…", win.describe, icon="play_script")
+    _act(ana_m, "Distribution (Descriptive & Histograms)…", win.jmp_distribution_dialog, icon="play_script")
     _act(ana_m, "Fit Y by X (Bivariate, Oneway, Contingency)…", win.fit_y_by_x_dialog, icon="play_script")
     fit_m = ana_m.addMenu("Fit Model")
     _act(fit_m, "Multiple Regression…", win.multiple_regression)
@@ -716,7 +716,7 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 7. GRAPH
     graph_m = bar.addMenu("&Graph")
-    _act(graph_m, "Graph Builder (Scatter Plot)…", lambda: win.graph("scatter"), icon="play_script")
+    _act(graph_m, "Graph Builder…", lambda: win.graph("builder"), icon="play_script")
     _act(graph_m, "Prediction Profiler…", lambda: win.prediction_profiler("regression"), icon="play_script")
     _act(graph_m, "Contour Plot…", lambda: win.model_contour_plot("regression"))
     _act(graph_m, "Surface Plot (3D Response Surface)…", lambda: win.model_surface_plot("rsm"))

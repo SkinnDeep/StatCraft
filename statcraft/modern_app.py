@@ -807,6 +807,7 @@ class ModernWindow(QMainWindow):
         # 5. Stat menu
         stat = bar.addMenu("&Stat")
         self._action(stat, "Fit &Y by X (JMP Platform)…", self.fit_y_by_x_dialog, None, "scatter", True)
+        self._action(stat, "Distribution (JMP Platform)…", self.jmp_distribution_dialog, None, "graphical_summary", True)
         basic = stat.addMenu("Basic Statistics")
         summary = self._action(basic, "Display Descriptive Statistics…", self.describe, None, "summary", True)
         self.store_descriptive_action = self._action(basic, "Store Descriptive Statistics…", self.store_descriptive_dialog, None, "summary", True)
@@ -2600,6 +2601,16 @@ class ModernWindow(QMainWindow):
             if entry:
                 self.show_result(entry)
 
+    def jmp_distribution_dialog(self):
+        self._commit_editor()
+        from .jmp_distribution_dialog import JMPDistributionDialog
+        dlg = JMPDistributionDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.jmp_distribution(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
     def cart_tree_dialog(self):
         self._commit_editor()
         from .tree_dialogs import DecisionTreeDialog
@@ -4299,7 +4310,7 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
             session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
@@ -4351,7 +4362,7 @@ class ModernWindow(QMainWindow):
             layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
             layout.addWidget(self._result_table(anova_headers, anova_rows))
 
-        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process', 'fit_y_by_x') and result.get('tables'):
+        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution') and result.get('tables'):
             for tbl in result['tables']:
                 layout.addWidget(label(tbl['title'], 'sectionHeading'))
                 layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
@@ -4658,6 +4669,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'fit_y_by_x':
                     from .fit_y_by_x_chart import FitYByXChartWidget
                     chart = FitYByXChartWidget(entry)
+                elif result.get('analysis') == 'jmp_distribution':
+                    from .jmp_distribution_chart import JMPDistributionWidget
+                    chart = JMPDistributionWidget(entry)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation'):
                     from .design_eval_chart import DesignEvaluationChartWidget
                     chart = DesignEvaluationChartWidget(entry)
@@ -4707,7 +4721,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
-                elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(560)
+                elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
                     chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
                 chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
