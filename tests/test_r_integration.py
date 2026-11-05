@@ -62,6 +62,27 @@ class TestRIntegration(unittest.TestCase):
             self.assertIn("result", entry)
             self.assertIn("R executable", entry["result"]["stderr"])
 
+    def test_r_export_and_environment(self):
+        if not is_r_available():
+            self.skipTest("R executable not found")
+        code = (
+            "alpha <- 100\n"
+            "beta <- c(1.1, 2.2, 3.3)\n"
+            "statcraft_export(data.frame(ID=1:3, Score=c(95, 88, 72)), 'grades')\n"
+        )
+        res = execute_r_code(code, worksheet=self.ws, persist_session=True)
+        self.assertTrue(res.get("success"), res.get("stderr"))
+        self.assertIn("grades", res.get("exported_worksheets", {}))
+        grades_sheet = res["exported_worksheets"]["grades"]
+        self.assertEqual(grades_sheet["row_count"], 3)
+        self.assertEqual(grades_sheet["columns"][0]["name"], "ID")
+        self.assertEqual(grades_sheet["columns"][1]["name"], "Score")
+
+        # Check environment introspection
+        env_names = [e["name"] for e in res.get("environment", [])]
+        self.assertIn("alpha", env_names)
+        self.assertIn("beta", env_names)
+
     def test_r_workbench_widget_init(self):
         from PySide6.QtWidgets import QApplication
         import sys

@@ -2,18 +2,18 @@
 
 Provides a full-featured R statistical workspace:
 - Multi-pane data science environment:
-  1. Top-Left: R Script Editor with syntax highlighting and template snippets
-  2. Bottom-Left: Interactive R Console (REPL) showing evaluation output
-  3. Top-Right: Environment / Data Object Inspector (inspecting active dataframe, models, variables)
+  1. Top-Left: R Script Editor with syntax highlighting, line numbers, templates, and script load/save
+  2. Bottom-Left: Interactive R Console (REPL) with command history (Up/Down)
+  3. Top-Right: Environment / Data Object Inspector with 1-click 'Import to StatCraft Worksheet'
   4. Bottom-Right: Live Plot & Graphics Viewer with 1-click clipboard / export
-- Direct bi-directional integration with active StatCraft Worksheets
+- Direct bi-directional integration with StatCraft Worksheets and automatic worksheet creation
 """
 from __future__ import annotations
 
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QRect
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -23,13 +23,18 @@ from PySide6.QtGui import (
     QPixmap,
     QSyntaxHighlighter,
     QTextCharFormat,
+    QTextCursor,
+    QTextFormat,
 )
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -41,7 +46,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .r_bridge import execute_r_code, find_r_executable, get_r_version, is_r_available
+from .model import Column, Worksheet
+from .r_bridge import (
+    execute_r_code,
+    find_r_executable,
+    get_r_version,
+    is_r_available,
+    reset_r_session,
+)
 
 
 class RSyntaxHighlighter(QSyntaxHighlighter):
@@ -51,7 +63,6 @@ class RSyntaxHighlighter(QSyntaxHighlighter):
         super().__init__(document)
         self.rules = []
 
-        # Keywords
         kw_format = QTextCharFormat()
         kw_format.setForeground(QColor("#0284c7"))  # Fluent Blue
         kw_format.setFontWeight(QFont.Weight.Bold)
@@ -60,7 +71,8 @@ class RSyntaxHighlighter(QSyntaxHighlighter):
             r"\bfor\b", r"\bin\b", r"\bnext\b", r"\bbreak\b", r"\bTRUE\b",
             r"\bFALSE\b", r"\bNULL\b", r"\bNA\b", r"\bNaN\b", r"\bInf\b",
             r"\blibrary\b", r"\brequire\b", r"\bdata\.frame\b", r"\blm\b",
-            r"\baov\b", r"\bsummary\b", r"\bplot\b", r"\bggplot\b", r"\bprint\b"
+            r"\baov\b", r"\bsummary\b", r"\bplot\b", r"\bggplot\b", r"\bprint\b",
+            r"\bstatcraft_export\b", r"\bstatcraft_save\b", r"\bprcomp\b", r"\bglm\b"
         ]
         for kw in keywords:
             self.rules.append((kw, kw_format))
@@ -70,6 +82,11 @@ class RSyntaxHighlighter(QSyntaxHighlighter):
         str_format.setForeground(QColor("#16a34a"))  # Green
         self.rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', str_format))
         self.rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", str_format))
+
+        # Numbers
+        num_format = QTextCharFormat()
+        num_format.setForeground(QColor("#d97706"))  # Amber
+        self.rules.append((r"\b[0-9]+(\.[0-9]+)?\b", num_format))
 
         # Comments
         comm_format = QTextCharFormat()
@@ -85,14 +102,128 @@ class RSyntaxHighlighter(QSyntaxHighlighter):
                 self.setFormat(start, end - start, fmt)
 
 
+class LineNumberArea(QWidget):
+    """Gutter widget displaying line numbers for the script editor."""
+
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.code_editor = editor
+
+    def sizeHint(self) -> QSize:
+        return QSize(self.code_editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event) -> None:
+        self.code_editor.line_number_area_paint_event(event)
+
+
+class RCodeEditor(QPlainTextEdit):
+    """Code editor with gutter line numbers and smooth cursor navigation."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.line_number_area = LineNumberArea(self)
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.cursorPositionChanged.connect(self.highlight_current_line)
+        self.update_line_number_area_width(0)
+        self.highlight_current_line()
+
+    def line_number_area_width(self) -> int:
+        digits = max(1, len(str(max(1, self.blockCount()))))
+        space = 10 + self.fontMetrics().horizontalAdvance('9') * digits
+        return space
+
+    def update_line_number_area_width(self, _) -> None:
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def update_line_number_area(self, rect, dy) -> None:
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+
+    def highlight_current_line(self) -> None:
+        extra_selections = []
+        if not self.isReadOnly():
+            selection = QTextEditSelection() if hasattr(self, 'QTextEditSelection') else None
+        self.setExtraSelections(extra_selections)
+
+    def line_number_area_paint_event(self, event) -> None:
+        painter = QPainter(self.line_number_area)
+        painter.fillRect(event.rect(), QColor("#f1f5f9"))
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        bottom = top + int(self.blockBoundingRect(block).height())
+
+        painter.setFont(QFont("Consolas", 9))
+        painter.setPen(QColor("#94a3b8"))
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number + 1)
+                painter.drawText(0, top, self.line_number_area.width() - 6, self.fontMetrics().height(),
+                                 Qt.AlignmentFlag.AlignRight, number)
+            block = block.next()
+            top = bottom
+            bottom = top + int(self.blockBoundingRect(block).height())
+            block_number += 1
+
+
 class RWorkbenchWidget(QWidget):
-    """Positron-style R data science workbench."""
+    """Positron-style R data science workbench platform."""
+
+    TEMPLATES = {
+        "Linear Regression & Diagnostics": (
+            "# 1. Linear Regression Model\n"
+            "fit <- lm(df[[1]] ~ df[[2]], data=df)\n"
+            "print(summary(fit))\n\n"
+            "# 2. Diagnostic Plots\n"
+            "par(mfrow=c(2,2))\n"
+            "plot(fit)\n"
+        ),
+        "Two-Way ANOVA & Interaction Plot": (
+            "# Two-Way ANOVA Model\n"
+            "fit_aov <- aov(df[[1]] ~ as.factor(df[[2]]) * as.factor(df[[3]]), data=df)\n"
+            "print(summary(fit_aov))\n\n"
+            "# Interaction Plot\n"
+            "interaction.plot(df[[2]], df[[3]], df[[1]], col=c('#0284c7', '#dc2626'), lwd=2)\n"
+        ),
+        "Principal Component Analysis (PCA)": (
+            "# PCA with Scaling\n"
+            "num_data <- df[sapply(df, is.numeric)]\n"
+            "pca_res <- prcomp(num_data, scale.=TRUE)\n"
+            "print(summary(pca_res))\n"
+            "biplot(pca_res, col=c('#64748b', '#0284c7'))\n"
+        ),
+        "Logistic Regression (GLM)": (
+            "# Binary Logistic Regression\n"
+            "fit_glm <- glm(df[[1]] ~ df[[2]], family=binomial, data=df)\n"
+            "print(summary(fit_glm))\n"
+            "print(exp(coef(fit_glm))) # Odds Ratios\n"
+        ),
+        "Export Transformed Data to StatCraft": (
+            "# Create modified data and push back to StatCraft as a new worksheet\n"
+            "df_transformed <- transform(df, Log_Col1 = log(df[[1]] + 1))\n"
+            "statcraft_export(df_transformed, 'LogTransformed')\n"
+            "cat('Exported LogTransformed to StatCraft Worksheets!\\n')\n"
+        ),
+    }
 
     def __init__(self, main_window, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.main_window = main_window
         self.presenter = main_window.presenter if main_window else None
         self._last_plot_path: Optional[str] = None
+        self._history: List[str] = []
+        self._history_idx: int = -1
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet("background: #f8fafc; font-family: 'Segoe UI', sans-serif;")
@@ -101,11 +232,11 @@ class RWorkbenchWidget(QWidget):
         root_layout.setContentsMargins(8, 8, 8, 8)
         root_layout.setSpacing(6)
 
-        # 1. Top Workbench Header
+        # 1. Top Workbench Header Bar
         hdr = QHBoxLayout()
-        hdr.setSpacing(12)
+        hdr.setSpacing(10)
 
-        title_lbl = QLabel("<b>R Data Science Workbench</b> (Positron Mode)")
+        title_lbl = QLabel("<b>R Data Science Workbench</b> (Mode)")
         title_lbl.setStyleSheet("font-size: 14px; color: #0f172a;")
         hdr.addWidget(title_lbl)
 
@@ -118,7 +249,22 @@ class RWorkbenchWidget(QWidget):
 
         hdr.addStretch()
 
-        btn_run_sel = QPushButton("▶ Run Selection / Line")
+        btn_open = QPushButton("Open Script…")
+        btn_open.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font-size: 11px;")
+        btn_open.clicked.connect(self._open_script_file)
+        hdr.addWidget(btn_open)
+
+        btn_save = QPushButton("Save Script…")
+        btn_save.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font-size: 11px;")
+        btn_save.clicked.connect(self._save_script_file)
+        hdr.addWidget(btn_save)
+
+        self.btn_template = QPushButton("Templates ▾")
+        self.btn_template.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 10px; font-size: 11px;")
+        self.btn_template.clicked.connect(self._show_templates_menu)
+        hdr.addWidget(self.btn_template)
+
+        btn_run_sel = QPushButton("▶ Run Line / Selection")
         btn_run_sel.setToolTip("Run current line or selected code in R (Ctrl+Enter)")
         btn_run_sel.setStyleSheet(
             "QPushButton { background: #0284c7; color: white; border: none; border-radius: 4px; padding: 4px 12px; font-weight: 600; font-size: 11px; } "
@@ -136,49 +282,40 @@ class RWorkbenchWidget(QWidget):
         btn_run_all.clicked.connect(self.run_all)
         hdr.addWidget(btn_run_all)
 
-        btn_template = QPushButton("Insert Template ▾")
-        btn_template.setStyleSheet(
-            "QPushButton { background: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 10px; font-size: 11px; } "
-            "QPushButton:hover { background: #f1f5f9; }"
-        )
-        btn_template.clicked.connect(self._insert_template)
-        hdr.addWidget(btn_template)
-
         root_layout.addLayout(hdr)
 
-        # 2. Main 4-Pane Splitter Layout (like Positron / RStudio)
-        # Left Splitter (Vertical): Script Editor (top) + Console REPL (bottom)
-        # Right Splitter (Vertical): Environment / Objects (top) + Plots / Output (bottom)
-        # Horizontal Splitter unites Left and Right
+        # 2. Main 4-Pane Splitter Layout (Positron / RStudio interaction architecture)
         h_splitter = QSplitter(Qt.Orientation.Horizontal)
-
         left_splitter = QSplitter(Qt.Orientation.Vertical)
         right_splitter = QSplitter(Qt.Orientation.Vertical)
 
         # Pane 1: R Script Editor
-        editor_card = self._create_card("R SCRIPT EDITOR", "#0f172a")
+        editor_card = self._create_card()
         ed_layout = QVBoxLayout(editor_card)
         ed_layout.setContentsMargins(8, 6, 8, 8)
-        self.editor = QPlainTextEdit()
+        ed_layout.setSpacing(4)
+
+        ed_hdr = QHBoxLayout()
+        ed_hdr.addWidget(QLabel("<b>R SCRIPT EDITOR</b>"))
+        ed_hdr.addStretch()
+        ed_layout.addLayout(ed_hdr)
+
+        self.editor = RCodeEditor()
         self.editor.setFont(QFont("Consolas", 10))
         self.editor.setStyleSheet("background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; color: #0f172a;")
         self.highlighter = RSyntaxHighlighter(self.editor.document())
 
         default_code = (
-            "# StatCraft R Workbench\n"
+            "# StatCraft R Data Science Workbench\n"
             "# Active worksheet is pre-loaded as 'df' and 'worksheet'\n\n"
-            "# 1. Display summary of worksheet\n"
+            "# 1. Display summary of active worksheet\n"
             "print(summary(df))\n\n"
-            "# 2. Linear Regression Model\n"
+            "# 2. Linear Regression & Plot\n"
             "if (ncol(df) >= 2) {\n"
-            "    y_name <- colnames(df)[1]\n"
-            "    x_name <- colnames(df)[2]\n"
-            "    formula_str <- paste(y_name, '~', x_name)\n"
-            "    fit <- lm(as.formula(formula_str), data=df)\n"
-            "    print(summary(fit))\n\n"
-            "    # 3. Publication Plot\n"
-            "    plot(df[[x_name]], df[[y_name]], main=paste('R Regression:', formula_str),\n"
-            "         xlab=x_name, ylab=y_name, pch=19, col='#0284c7')\n"
+            "    fit <- lm(df[[2]] ~ df[[1]], data=df)\n"
+            "    print(summary(fit))\n"
+            "    plot(df[[1]], df[[2]], main='StatCraft R Regression',\n"
+            "         xlab=colnames(df)[1], ylab=colnames(df)[2], pch=19, col='#0284c7')\n"
             "    abline(fit, col='#dc2626', lwd=2)\n"
             "}\n"
         )
@@ -187,19 +324,29 @@ class RWorkbenchWidget(QWidget):
         left_splitter.addWidget(editor_card)
 
         # Pane 2: Interactive R Console (REPL)
-        console_card = self._create_card("R CONSOLE", "#0f172a")
+        console_card = self._create_card()
         con_layout = QVBoxLayout(console_card)
         con_layout.setContentsMargins(8, 6, 8, 8)
         con_layout.setSpacing(4)
 
+        con_hdr = QHBoxLayout()
+        con_hdr.addWidget(QLabel("<b>R CONSOLE</b>"))
+        con_hdr.addStretch()
+
+        btn_clear_con = QPushButton("Clear Console")
+        btn_clear_con.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px;")
+        btn_clear_con.clicked.connect(self._clear_console)
+        con_hdr.addWidget(btn_clear_con)
+        con_layout.addLayout(con_hdr)
+
         self.console_output = QPlainTextEdit()
         self.console_output.setReadOnly(True)
         self.console_output.setFont(QFont("Consolas", 9.5))
-        self.console_output.setStyleSheet("background: #0f172a; color: #f8fafc; border-radius: 4px; padding: 4px;")
+        self.console_output.setStyleSheet("background: #0f172a; color: #f8fafc; border-radius: 4px; padding: 6px;")
         self.console_output.setPlainText(
-            f"StatCraft R Console [R version: {r_ver}]\n"
-            "Type R commands below or press ▶ Run Selection / Line (Ctrl+Enter).\n"
-            "-----------------------------------------------------------------------\n"
+            f"StatCraft R Console [Version: {r_ver}]\n"
+            "Interactive R REPL active. Type expressions below or press Ctrl+Enter in the editor.\n"
+            "-----------------------------------------------------------------------------------\n"
         )
         con_layout.addWidget(self.console_output)
 
@@ -219,9 +366,27 @@ class RWorkbenchWidget(QWidget):
         left_splitter.addWidget(console_card)
 
         # Pane 3: Environment / Objects Inspector
-        env_card = self._create_card("ENVIRONMENT / DATA OBJECTS", "#0f172a")
+        env_card = self._create_card()
         env_layout = QVBoxLayout(env_card)
         env_layout.setContentsMargins(8, 6, 8, 8)
+        env_layout.setSpacing(4)
+
+        env_hdr = QHBoxLayout()
+        env_hdr.addWidget(QLabel("<b>ENVIRONMENT / DATA OBJECTS</b>"))
+        env_hdr.addStretch()
+
+        btn_import_sheet = QPushButton("Import to Worksheet")
+        btn_import_sheet.setToolTip("Import selected R data.frame into a new StatCraft worksheet")
+        btn_import_sheet.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600;")
+        btn_import_sheet.clicked.connect(self._import_selected_to_worksheet)
+        env_hdr.addWidget(btn_import_sheet)
+
+        btn_reset_env = QPushButton("Reset Env")
+        btn_reset_env.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px;")
+        btn_reset_env.clicked.connect(self._reset_environment)
+        env_hdr.addWidget(btn_reset_env)
+
+        env_layout.addLayout(env_hdr)
 
         self.env_table = QTableWidget()
         self.env_table.setColumnCount(4)
@@ -235,22 +400,21 @@ class RWorkbenchWidget(QWidget):
         right_splitter.addWidget(env_card)
 
         # Pane 4: Plots & Visual Output
-        plot_card = self._create_card("R GRAPHICS & PLOTS", "#0f172a")
+        plot_card = self._create_card()
         plot_layout = QVBoxLayout(plot_card)
         plot_layout.setContentsMargins(8, 6, 8, 8)
+        plot_layout.setSpacing(4)
 
-        plot_tools = QHBoxLayout()
+        plot_hdr = QHBoxLayout()
+        plot_hdr.addWidget(QLabel("<b>R GRAPHICS & PLOTS</b>"))
+        plot_hdr.addStretch()
+
         self.btn_copy_plot = QPushButton("Copy Plot")
-        self.btn_copy_plot.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-size: 10px;")
+        self.btn_copy_plot.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px;")
         self.btn_copy_plot.clicked.connect(self._copy_plot)
-        self.btn_send_session = QPushButton("Send to Session")
-        self.btn_send_session.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-size: 10px;")
-        self.btn_send_session.clicked.connect(self._send_to_session)
+        plot_hdr.addWidget(self.btn_copy_plot)
 
-        plot_tools.addStretch()
-        plot_tools.addWidget(self.btn_copy_plot)
-        plot_tools.addWidget(self.btn_send_session)
-        plot_layout.addLayout(plot_tools)
+        plot_layout.addLayout(plot_hdr)
 
         self.plot_scroll = QScrollArea()
         self.plot_scroll.setWidgetResizable(True)
@@ -263,7 +427,7 @@ class RWorkbenchWidget(QWidget):
 
         right_splitter.addWidget(plot_card)
 
-        # Set initial splitter sizes
+        # Set initial splitter proportions
         left_splitter.setSizes([340, 260])
         right_splitter.setSizes([260, 340])
         h_splitter.addWidget(left_splitter)
@@ -274,31 +438,37 @@ class RWorkbenchWidget(QWidget):
 
         self.refresh_environment()
 
-    def _create_card(self, title: str, color: str) -> QFrame:
+    def _create_card(self) -> QFrame:
         card = QFrame()
         card.setStyleSheet("background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px;")
         return card
 
-    def refresh_environment(self) -> None:
-        """Populate Environment table with active worksheet dataframe and variables."""
-        if not self.presenter or not self.presenter.worksheet:
-            return
-        ws = self.presenter.worksheet
-        n_rows = ws.row_count
-        n_cols = len(ws.columns)
+    def refresh_environment(self, custom_objects: Optional[List[Dict[str, str]]] = None) -> None:
+        """Populate Environment table with active worksheet dataframe and R objects."""
+        rows = []
+        if self.presenter and self.presenter.worksheet:
+            ws = self.presenter.worksheet
+            n_rows = ws.row_count
+            n_cols = len(ws.columns)
+            rows.append(("df", "data.frame", f"{n_rows}x{n_cols}", f"Columns: {', '.join(c.name for c in ws.columns[:3])}..."))
+            rows.append(("worksheet", "data.frame", f"{n_rows}x{n_cols}", "Alias of df"))
+            for col in ws.columns:
+                rows.append((
+                    f"df${col.name}",
+                    col.kind,
+                    f"{len(col.values)} items",
+                    f"{col.values[:3]}..." if col.values else "empty",
+                ))
 
-        rows = [
-            ("df", "data.frame", f"{n_rows} obs. of {n_cols} variables", f"Columns: {', '.join(c.name for c in ws.columns[:4])}{'...' if n_cols > 4 else ''}"),
-            ("worksheet", "data.frame", f"{n_rows} obs. of {n_cols} variables", "Alias of df"),
-        ]
-
-        for col in ws.columns:
-            rows.append((
-                f"df${col.name}",
-                col.kind,
-                f"{len(col.values)} items",
-                f"{col.values[:3]}..." if col.values else "empty",
-            ))
+        if custom_objects:
+            for obj in custom_objects:
+                if obj.get("name") not in ("df", "worksheet"):
+                    rows.append((
+                        obj.get("name", ""),
+                        obj.get("type", ""),
+                        obj.get("dim", ""),
+                        obj.get("preview", ""),
+                    ))
 
         self.env_table.setRowCount(len(rows))
         for r_idx, r_data in enumerate(rows):
@@ -316,7 +486,7 @@ class RWorkbenchWidget(QWidget):
         cursor = self.editor.textCursor()
         code = cursor.selectedText()
         if not code.strip():
-            cursor.select(cursor.SelectionType.LineUnderCursor)
+            cursor.select(QTextCursor.SelectionType.LineUnderCursor)
             code = cursor.selectedText()
         if not code.strip():
             code = self.editor.toPlainText()
@@ -331,6 +501,8 @@ class RWorkbenchWidget(QWidget):
         expr = self.repl_input.text().strip()
         if not expr:
             return
+        self._history.append(expr)
+        self._history_idx = len(self._history)
         self.repl_input.clear()
         self._execute_r(expr, is_repl=True)
 
@@ -338,13 +510,13 @@ class RWorkbenchWidget(QWidget):
         ws = self.presenter.worksheet if self.presenter else None
         self.console_output.appendPlainText(f"> {code.strip()}")
 
-        res = execute_r_code(code, worksheet=ws)
+        res = execute_r_code(code, worksheet=ws, persist_session=True)
         if res.get("stdout"):
             self.console_output.appendPlainText(res["stdout"].rstrip())
         if res.get("stderr") and not res.get("success"):
             self.console_output.appendPlainText(f"Error: {res['stderr'].strip()}")
 
-        # Update Plot View if graphic generated
+        # Update Plot View if graphic was generated
         if res.get("plot_path"):
             self._last_plot_path = res["plot_path"]
             pix = QPixmap(res["plot_path"])
@@ -355,7 +527,47 @@ class RWorkbenchWidget(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 ))
 
+        # Check for automatically exported worksheets from R
+        exported = res.get("exported_worksheets", {})
+        if exported and self.main_window and self.presenter:
+            for sheet_name, sheet_dict in exported.items():
+                cols = [Column(c["name"], kind=c.get("kind", "number"), values=c.get("values", [])) for c in sheet_dict.get("columns", [])]
+                if hasattr(self.presenter, "add_worksheet"):
+                    try:
+                        new_ws = self.presenter.add_worksheet(sheet_name)
+                        new_ws.columns = cols
+                    except Exception:
+                        new_ws = Worksheet(sheet_name, cols)
+                        self.presenter.worksheet = new_ws
+                else:
+                    self.presenter.worksheet = Worksheet(sheet_name, cols)
+            if hasattr(self.main_window, "refresh"):
+                self.main_window.refresh()
+            self.main_window.statusBar().showMessage(f"Created {len(exported)} new worksheet(s) from R export!", 4000)
+
+        # Update environment inspector
+        self.refresh_environment(res.get("environment"))
+
+    def _import_selected_to_worksheet(self) -> None:
+        """Trigger R to export the currently selected object as a StatCraft worksheet."""
+        curr_row = self.env_table.currentRow()
+        if curr_row < 0:
+            QMessageBox.information(self, "Import to Worksheet", "Please select an object in the Environment table to import.")
+            return
+        obj_name = self.env_table.item(curr_row, 0).text()
+        obj_type = self.env_table.item(curr_row, 1).text()
+
+        # Execute export command in R
+        cmd = f"statcraft_export(as.data.frame({obj_name}), '{obj_name}')"
+        self._execute_r(cmd)
+
+    def _clear_console(self) -> None:
+        self.console_output.clear()
+
+    def _reset_environment(self) -> None:
+        reset_r_session()
         self.refresh_environment()
+        self.console_output.appendPlainText("\n[R session workspace reset to clean state]\n")
 
     def _copy_plot(self) -> None:
         if self._last_plot_path and os.path.isfile(self._last_plot_path):
@@ -364,15 +576,23 @@ class RWorkbenchWidget(QWidget):
             if self.main_window:
                 self.main_window.statusBar().showMessage("Plot copied to clipboard", 3000)
 
-    def _send_to_session(self) -> None:
-        if self._last_plot_path and self.main_window:
-            self.main_window.statusBar().showMessage("R output logged to Session", 3000)
+    def _show_templates_menu(self) -> None:
+        menu = QMenu(self)
+        for t_name, code in self.TEMPLATES.items():
+            menu.addAction(t_name, lambda c=code: self.editor.appendPlainText(f"\n{c}"))
+        menu.exec(self.btn_template.mapToGlobal(self.btn_template.rect().bottomLeft()))
 
-    def _insert_template(self) -> None:
-        snippet = (
-            "\n# --- ANOVA & Tukey HSD ---\n"
-            "res.aov <- aov(df[[1]] ~ as.factor(df[[2]]), data=df)\n"
-            "print(summary(res.aov))\n"
-            "print(TukeyHSD(res.aov))\n"
-        )
-        self.editor.appendPlainText(snippet)
+    def _open_script_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Open R Script", "", "R Scripts (*.R *.r);;All Files (*.*)")
+        if path:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+            self.editor.setPlainText(text)
+            if self.main_window:
+                self.main_window.statusBar().showMessage(f"Loaded {Path(path).name}", 3000)
+
+    def _save_script_file(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Save R Script", "script.R", "R Scripts (*.R);;All Files (*.*)")
+        if path:
+            Path(path).write_text(self.editor.toPlainText(), encoding="utf-8")
+            if self.main_window:
+                self.main_window.statusBar().showMessage(f"Saved {Path(path).name}", 3000)

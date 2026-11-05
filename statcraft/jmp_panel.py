@@ -411,12 +411,15 @@ class JMPTablePanel(QWidget):
         scripts = [
             ("Fit Y by X (Bivariate & Oneway)", lambda: self.main_window.fit_y_by_x_dialog()),
             ("Distribution (Descriptive & Histograms)", lambda: self.main_window.jmp_distribution_dialog()),
+            ("Control Chart Builder (Interactive SPC)", lambda: self.main_window.control_chart_builder_dialog()),
+            ("Process Screening Dashboard", lambda: self.main_window.process_screening_dialog()),
             ("Prediction Profiler", lambda: self.main_window.prediction_profiler("regression")),
             ("Fit Model (Regression & GLM)", lambda: self.main_window.multiple_regression()),
             ("Partition (Decision Tree)", lambda: self.main_window.cart_tree_dialog() if hasattr(self.main_window, "cart_tree_dialog") else self.main_window.describe()),
             ("Wheeler EMP Gauge Study", lambda: self.main_window.emp_dialog() if hasattr(self.main_window, "emp_dialog") else None),
             ("Definitive Screening Design (DSD)", lambda: self.main_window.analyze_dsd_dialog()),
             ("D-Optimal Custom Design", lambda: self.main_window.create_d_optimal_dialog()),
+            ("R Data Science Workbench", lambda: self.main_window.set_ui_mode("r")),
             ("3D Surface Plot", lambda: self.main_window.model_surface_plot("rsm")),
             ("Correlation Heatmap", lambda: self.main_window.correlation()),
         ]

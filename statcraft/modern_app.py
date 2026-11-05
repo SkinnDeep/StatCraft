@@ -1051,6 +1051,12 @@ class ModernWindow(QMainWindow):
         self._action(tables_menu, "Chi-Square Test for &Association...", self.chi_square_association_dialog, None, None, True)
         self._action(tables_menu, "&Tally Individual Variables...", self.tally_dialog, None, None, True)
 
+        # 5i. R Integration menu
+        stat.addSeparator()
+        r_menu = stat.addMenu("&R Integration")
+        self._action(r_menu, "Open &R Workbench Mode...", lambda: self.set_ui_mode("r"), None, None, True)
+        self._action(r_menu, "Run &R Script...", self.run_r_script_dialog, None, None, True)
+
         # 6. Graph menu
         graph = bar.addMenu("&Graph")
         from .graph_catalog import MENU
@@ -1349,6 +1355,23 @@ class ModernWindow(QMainWindow):
         if hasattr(self, "status_sheet_label"):
             ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
             self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")
+
+    def run_r_script_dialog(self):
+        """Prompt to choose an R script file, switch to R Mode and execute."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Run R Script",
+            "",
+            "R Scripts (*.R *.r);;All Files (*.*)",
+        )
+        if not path:
+            return
+        content = Path(path).read_text(encoding="utf-8", errors="replace")
+        self.set_ui_mode("r")
+        if hasattr(self, "r_workbench") and self.r_workbench:
+            self.r_workbench.editor.setPlainText(content)
+            self.r_workbench.run_all()
+            self.statusBar().showMessage(f"Executed R script: {Path(path).name}", 4000)
 
     def _module_notice(self, title, message):
         QMessageBox.information(self, title, message)

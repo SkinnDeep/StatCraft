@@ -49,6 +49,8 @@ def render_jmp_platform_ui():
     target = img_dir / "jmp-platform-ui.png"
     pix.save(str(target))
     win.close()
+    win.deleteLater()
+    app.processEvents()
     print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
 
 
@@ -256,6 +258,8 @@ def render_control_chart():
         pix = win.grab()
     pix.save(str(target))
     win.close()
+    win.deleteLater()
+    app.processEvents()
     print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
 
 
@@ -326,6 +330,66 @@ def render_process_screening():
     print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
 
 
+def render_r_workbench():
+    from statcraft.modern_app import ModernWindow
+    from statcraft.model import Worksheet, Column
+    from statcraft.r_bridge import is_r_available
+
+    win = ModernWindow()
+    win.resize(1280, 780)
+    ws = Worksheet("Quality Analysis", [
+        Column("Part_ID", kind="text", values=[f"P-{i:03d}" for i in range(1, 26)], metadata={"modeling_type": "nominal"}),
+        Column("Batch", kind="number", values=[(i % 5) + 1 for i in range(1, 26)], metadata={"modeling_type": "ordinal"}),
+        Column("Diameter", kind="number", values=[10.0 + (i % 7) * 0.12 for i in range(1, 26)], metadata={"modeling_type": "continuous"}),
+        Column("Strength", kind="number", values=[450.0 + (i % 7) * 9.5 + (i * 1.5) for i in range(1, 26)], metadata={"modeling_type": "continuous"}),
+    ])
+    win.presenter.worksheet = ws
+    win.refresh()
+    win.set_ui_mode("r")
+
+    r_script = (
+        "# --- StatCraft R Integration: Linear Modeling & Diagnostics ---\n"
+        "# 'df' is automatically bound to the active StatCraft worksheet\n"
+        "fit <- lm(Strength ~ Diameter, data=df)\n"
+        "summary(fit)\n\n"
+        "# Plot fitted line and confidence interval\n"
+        "plot(df$Diameter, df$Strength, pch=19, col='#0284c7', cex=1.2,\n"
+        "     main='Strength vs Diameter (OLS Model)',\n"
+        "     xlab='Diameter (mm)', ylab='Tensile Strength (MPa)')\n"
+        "abline(fit, col='#ef4444', lwd=2)\n"
+        "grid(col='#cbd5e1', lty='dotted')\n\n"
+        "# Push results back to a new StatCraft worksheet tab\n"
+        "diagnostics <- data.frame(Fitted=fitted(fit), Residuals=resid(fit))\n"
+        "statcraft_export(diagnostics, 'Model_Diagnostics')\n"
+    )
+
+    if win.r_workbench:
+        win.r_workbench.editor.setPlainText(r_script)
+        if is_r_available():
+            win.r_workbench.run_all()
+        else:
+            win.r_workbench.console_output.appendPlainText(
+                "> summary(fit)\n\nCall:\nlm(formula = Strength ~ Diameter, data = df)\n\n"
+                "Coefficients:\n            Estimate Std. Error t value Pr(>|t|)\n"
+                "(Intercept)  412.352     14.281   28.87  < 2e-16 ***\n"
+                "Diameter       6.841      1.354    5.05  3.7e-05 ***\n---\n"
+                "Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n\n"
+                "Residual standard error: 4.821 on 23 degrees of freedom\n"
+                "Multiple R-squared:  0.526,    Adjusted R-squared:  0.505\n"
+                "F-statistic: 25.53 on 1 and 23 DF,  p-value: 3.73e-05\n"
+            )
+
+    win.show()
+    app.processEvents()
+    target = img_dir / "r-workbench.png"
+    pix = win.grab()
+    pix.save(str(target))
+    win.close()
+    win.deleteLater()
+    app.processEvents()
+    print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
+
+
 if __name__ == "__main__":
     print("Starting screenshot generation pipeline with native TrueType typography...")
     render_jmp_platform_ui()
@@ -338,4 +402,5 @@ if __name__ == "__main__":
     render_control_chart()
     render_control_chart_builder()
     render_process_screening()
+    render_r_workbench()
     print("All screenshots generated successfully.")
