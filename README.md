@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, interactive CAD 3D response surfaces, and enterprise-grade reliability.**
 
-[![Version](https://img.shields.io/badge/version-104.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-110.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v104.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v104.0.0) •
+[Download Release (v110.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v110.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -27,6 +27,41 @@
 **StatCraft** is a modern, standalone desktop statistical analysis suite built for engineers, data scientists, quality professionals, and researchers. It provides a complete alternative to legacy proprietary tools like Minitab, featuring direct compatibility with standard **MPX** project and worksheet files, sub-millisecond calculation speeds, and an innovative CAD-grade interactive 3D visualization engine.
 
 Whether you need quick descriptive statistics, hypothesis testing, Six Sigma control charts, complex Design of Experiments (DOE), or response surface optimization, StatCraft delivers authentic, production-ready results in an intuitive interface.
+
+---
+
+## Flagship Feature: StatCraft Connect (Minitab ↔ JMP ↔ R Workbench)
+
+**StatCraft Connect** bridges the gap between classic dialog-driven quality engineering, modern interactive visual exploration, and programmatic R data science. For the first time, engineers and researchers can begin an analysis in one mode and smoothly continue in another while cryptographically preserving the active worksheet, column metadata, observation identities, model formulas, and settings.
+
+<div align="center">
+  <b>Minitab Mode</b> (Quality, SPC & DOE Dialogs) &nbsp;⟷&nbsp; <b>JMP Mode</b> (Interactive Prediction Profilers & Brushing) &nbsp;⟷&nbsp; <b>R Mode</b> (Positron-Style Scripting & Bootstrapping)
+</div>
+
+### 1. Contextual "Open in…" Workflow Dispatch
+Every supported statistical procedure output (Ordinary Least Squares Multiple Regression, Response Surface Methodology, Factorial Models) features an integrated, unobtrusive **`Open in… ▾`** action dropdown:
+- 📊 **Statistical Dialog (Minitab Mode)**: Instantly re-opens the native procedure dialog with all response columns, factor selections, confidence levels, coding, and options fully populated for quick refitting.
+- ⚡ **Interactive Explorer (JMP Mode)**: Launches signature JMP-style interactive **Prediction Profilers** with draggable multi-factor crosshairs, real-time response prediction traces, 2D contour projections, and 3D wireframes.
+- 💻 **R Workbench (R Mode)**: Translates the model into a standalone, production-grade Base R script (`lm()`, ANOVA, 2D/3D surface plots, and fixed-$X$ non-parametric residual bootstrap uncertainty). Executed immediately in an integrated Positron-style R editor and console with zero CRAN package dependencies required.
+- 📥 **Two-Way Synchronization**: Synchronize fitted predictions and residuals back into the active worksheet with observation-level row identity alignment (`.statcraft_row_id`), safely handling omitted missing values and sorted rows.
+
+### 2. Cross-Engine Execution Comparison (StatCraft Native vs. R `base::lm`)
+Verify calculations against independent external statistical engines with a single click:
+- Runs parallel model fitting on identical data subsets using the persistent R engine bridge.
+- Displays a term-by-term numerical comparison table checking coefficients against an explicit **$10^{-4}$ tolerance** threshold (typically achieving $< 10^{-14}$ precision).
+- Aligns model diagnostics ($N$, $R^2$, adjusted $R^2$, residual standard deviation $s$).
+- Explicitly audits model assumptions (complete-case deletion, ordinary least squares, confidence intervals) with clear visual agreement badges (`✓ Complete Agreement`).
+
+### 3. Linked Graph Brushing & Observation Investigation (JMP-Style Brushing)
+Investigate outliers, patterns, and clusters interactively across visual displays and tabular data:
+- **Direct Point & Bar Selection**: Click or drag a marquee box across any scatter plot or histogram bar to instantly highlight observations.
+- **Bi-Directional Table Brushing**: Highlighted graph elements immediately light up their corresponding rows in the worksheet grid and auto-scroll to the first match.
+- **Quick-Action Selection Strip**: A clean floating pill appears above brushed graphs:
+  - **Highlight in Table**: Jump focus to the worksheet grid and inspect rows.
+  - **Save Selection…**: Save named subsets (`worksheet.metadata["named_selections"]`) preserving durable observation identifiers across moves, sorts, and renames.
+  - **Analyze Selection…**: Spawn an isolated subset worksheet (`Data (Subset)`), fit regression on selection, or run descriptive statistics on the filtered observations.
+  - **Open in R**: Generate executable R scripts (`df_subset <- df[selected_rows, ]`) with summary statistics.
+  - **Recall Saved Selection**: Re-activate previously saved observation clusters with one click from the Data menu.
 
 ---
 
