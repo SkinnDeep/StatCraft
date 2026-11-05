@@ -403,6 +403,65 @@ class TestStatCraftConnect(unittest.TestCase):
         self.assertEqual(len(p.history), orig_hist_count + 1, "Original history must be preserved!")
         self.assertTrue(len(replay_res["convergence"]["shifts"]) > 0)
 
+    def test_minitab_session_commands_extended(self):
+        from statcraft.app import Presenter
+        ws = Worksheet("QualityData", [
+            Column("Response", "number", [10.2, 11.5, 9.8, 12.1, 10.9, 11.0]),
+            Column("Subgroup", "number", [1, 1, 2, 2, 3, 3]),
+            Column("Batch2", "number", [10.8, 11.2, 10.1, 11.9, 11.4, 11.1]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+
+        # 1. Test ONEWAY
+        e_oneway = p.execute_session_command("ONEWAY C1 C2")
+        self.assertIsNotNone(e_oneway)
+        self.assertEqual(e_oneway["recipe"]["action"], "oneway_anova")
+
+        # 2. Test TTEST (1-Sample T)
+        e_ttest = p.execute_session_command("TTEST C1")
+        self.assertIsNotNone(e_ttest)
+        self.assertEqual(e_ttest["recipe"]["action"], "one_sample_t")
+
+        # 3. Test TWOSAMPLE (2-Sample T)
+        e_two = p.execute_session_command("TWOSAMPLE C1 C3")
+        self.assertIsNotNone(e_two)
+        self.assertEqual(e_two["recipe"]["action"], "two_sample_t")
+
+        # 4. Test XBARCHART (Xbar-R chart)
+        e_xbar = p.execute_session_command("XBARCHART C1 C2")
+        self.assertIsNotNone(e_xbar)
+        self.assertEqual(e_xbar["recipe"]["action"], "xbar_r_stacked")
+
+    def test_formula_indicator_and_navigator_badge(self):
+        from statcraft.app import Presenter
+        from statcraft.modern_worksheet import WorksheetHeaderView
+        from PySide6.QtCore import Qt
+
+        ws = Worksheet("FormulaData", [
+            Column("X", "number", [1.0, 2.0, 3.0]),
+            Column("Y", "number", [2.0, 4.0, 6.0]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+
+        # Assign formula to C2
+        p.assign_formula(1, "C1 * 2")
+        self.assertEqual(ws.columns[1].metadata.get("formula"), "C1 * 2")
+
+        formula_cols = {i for i, c in enumerate(ws.columns) if c.metadata.get("formula")}
+        self.assertEqual(formula_cols, {1})
+
+        header = WorksheetHeaderView(Qt.Orientation.Horizontal)
+        header.formula_columns = formula_cols
+        self.assertIn(1, header.formula_columns)
+        self.assertNotIn(0, header.formula_columns)
+
+        # Verify Navigator Connect badge condition
+        reg_entry = p.multiple_regression(1, [0])
+        is_connect = bool(reg_entry.get("connected_analysis") or reg_entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
+        self.assertTrue(is_connect)
+
 
 if __name__ == "__main__":
     unittest.main()

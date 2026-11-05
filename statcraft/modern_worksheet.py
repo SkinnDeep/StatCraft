@@ -14,7 +14,7 @@ def _is_dark_active(widget=None) -> bool:
     return False
 
 """Worksheet key navigation, active cell editor, and Standard statistical column/row selection painting."""
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QHeaderView, QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableWidget,
@@ -43,6 +43,7 @@ class WorksheetHeaderView(QHeaderView):
         super().__init__(orientation, parent)
         self.selected_sections = set()
         self.active_sections = set()
+        self.formula_columns = set()
         self.setSectionsClickable(True)
         self.setHighlightSections(False)
 
@@ -91,7 +92,35 @@ class WorksheetHeaderView(QHeaderView):
         font.setBold(bold)
         painter.setFont(font)
         painter.setPen(fg)
-        painter.drawText(rect.adjusted(2, 0, -2, 0), Qt.AlignmentFlag.AlignCenter, label_text)
+
+        has_formula = self.orientation() == Qt.Orientation.Horizontal and logicalIndex in getattr(self, 'formula_columns', set())
+        text_right_margin = -26 if (has_formula and rect.width() >= 42) else -2
+        painter.drawText(rect.adjusted(2, 0, text_right_margin, 0), Qt.AlignmentFlag.AlignCenter, label_text)
+
+        # Dynamic calculated column formula indicator badge (f(x))
+        if has_formula and rect.width() >= 36:
+            pill_w = 22
+            pill_h = 13
+            pill_x = rect.right() - pill_w - 3
+            pill_y = rect.top() + (rect.height() - pill_h) // 2
+            pill_rect = QRectF(pill_x, pill_y, pill_w, pill_h)
+
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            if dark:
+                painter.setBrush(QColor("#064e3b"))
+                painter.setPen(QPen(QColor("#059669"), 1))
+            else:
+                painter.setBrush(QColor("#dcfce7"))
+                painter.setPen(QPen(QColor("#16a34a"), 1))
+            painter.drawRoundedRect(pill_rect, 3, 3)
+
+            fx_font = QFont(self.font())
+            fx_font.setPointSize(6.5)
+            fx_font.setBold(True)
+            painter.setFont(fx_font)
+            painter.setPen(QColor("#6ee7b7") if dark else QColor("#15803d"))
+            painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, "f(x)")
+
         painter.restore()
 
 

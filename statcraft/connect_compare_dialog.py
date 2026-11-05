@@ -29,6 +29,21 @@ from .connect_r import compare_implementations
 from .r_bridge import is_r_available, execute_r_code
 
 
+def _is_dark_active(widget=None) -> bool:
+    if widget is not None:
+        try:
+            win = widget.window()
+            if win and hasattr(win, "_dark_mode"):
+                return bool(win._dark_mode)
+        except Exception:
+            pass
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app:
+        return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
+    return False
+
+
 def run_cross_engine_comparison(
     connected: ConnectedAnalysis,
     worksheet: Any,
@@ -132,41 +147,56 @@ class CompareImplementationsDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
+        dark = _is_dark_active(self)
+
         # Header Card
         header_card = QFrame()
-        header_card.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;")
+        if dark:
+            header_card.setStyleSheet("background-color: #18181b; border: 1px solid #27272a; border-radius: 6px; padding: 8px;")
+        else:
+            header_card.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;")
         h_layout = QHBoxLayout(header_card)
         h_layout.setContentsMargins(10, 8, 10, 8)
 
         v_info = QVBoxLayout()
         v_info.setSpacing(4)
         title_lbl = QLabel(f"<b>Model:</b> {self.connected.title}")
-        title_lbl.setStyleSheet("font-size: 11pt; color: #0f172a;")
+        title_lbl.setStyleSheet("font-size: 11pt; color: #f4f4f5;" if dark else "font-size: 11pt; color: #0f172a;")
         meta_lbl = QLabel(
             f"<b>Engines:</b> StatCraft Native ({self.connected.analysis_type}) vs. R <code>base::lm</code> | "
             f"<b>N:</b> {len(self.connected.fitted_row_ids)} observations"
         )
-        meta_lbl.setStyleSheet("color: #475569; font-size: 9pt;")
+        meta_lbl.setStyleSheet("color: #a1a1aa; font-size: 9pt;" if dark else "color: #475569; font-size: 9pt;")
         v_info.addWidget(title_lbl)
         v_info.addWidget(meta_lbl)
         h_layout.addLayout(v_info, 1)
 
         aligned = self.comparison.get("aligned", False)
-        status_badge = QLabel("  ✓ Complete Agreement  " if aligned else "  ⚠ Discrepancy Detected  ")
+        status_badge = QLabel("  [OK] Complete Agreement  " if aligned else "  [!] Discrepancy Detected  ")
         if aligned:
-            status_badge.setStyleSheet(
-                "background-color: #dcfce7; color: #15803d; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
-            )
+            if dark:
+                status_badge.setStyleSheet(
+                    "background-color: #064e3b; color: #6ee7b7; border: 1px solid #059669; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
+                )
+            else:
+                status_badge.setStyleSheet(
+                    "background-color: #dcfce7; color: #15803d; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
+                )
         else:
-            status_badge.setStyleSheet(
-                "background-color: #fef3c7; color: #b45309; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
-            )
+            if dark:
+                status_badge.setStyleSheet(
+                    "background-color: #451a03; color: #fcd34d; border: 1px solid #b45309; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
+                )
+            else:
+                status_badge.setStyleSheet(
+                    "background-color: #fef3c7; color: #b45309; font-weight: bold; border-radius: 4px; padding: 6px 12px; font-size: 10pt;"
+                )
         h_layout.addWidget(status_badge, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(header_card)
 
         # Coefficients Comparison Table
         table_lbl = QLabel("<b>Parameter Estimates & Tolerances</b>")
-        table_lbl.setStyleSheet("font-size: 9.5pt; color: #1e293b;")
+        table_lbl.setStyleSheet("font-size: 9.5pt; color: #f4f4f5;" if dark else "font-size: 9.5pt; color: #1e293b;")
         layout.addWidget(table_lbl)
 
         self.table = QTableWidget()
@@ -207,12 +237,12 @@ class CompareImplementationsDialog(QDialog):
             tol_item = QTableWidgetItem(f"{self.comparison.get('tolerance', 1e-4):.1e}")
             tol_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-            status_str = "✓ Aligned" if item.get("aligned") else "Discrepancy"
+            status_str = "Aligned" if item.get("aligned") else "Discrepancy"
             status_item = QTableWidgetItem(status_str)
             if item.get("aligned"):
-                status_item.setForeground(QColor("#15803d"))
+                status_item.setForeground(QColor("#6ee7b7" if dark else "#15803d"))
             else:
-                status_item.setForeground(QColor("#b45309"))
+                status_item.setForeground(QColor("#fcd34d" if dark else "#b45309"))
 
             self.table.setItem(row_idx, 0, term_item)
             self.table.setItem(row_idx, 1, sc_item)
@@ -243,10 +273,10 @@ class CompareImplementationsDialog(QDialog):
         n_r = int(self.r_stats.get("n", n_sc))
 
         metrics = [
-            ("Sample Size (N)", f"{n_sc}", f"{n_r}", "✓ Equal" if n_sc == n_r else "Mismatch"),
-            ("R-Squared", f"{r2_sc:.6f}" if r2_sc is not None else "—", f"{r2_r:.6f}" if r2_r is not None else "—", "✓ Aligned"),
-            ("Adjusted R-Squared", f"{adj_sc:.6f}" if adj_sc is not None else "—", f"{adj_r:.6f}" if adj_r is not None else "—", "✓ Aligned"),
-            ("Residual Std Error (s)", f"{s_sc:.6f}" if s_sc is not None else "—", f"{s_r:.6f}" if s_r is not None else "—", "✓ Aligned"),
+            ("Sample Size (N)", f"{n_sc}", f"{n_r}", "Equal" if n_sc == n_r else "Mismatch"),
+            ("R-Squared", f"{r2_sc:.6f}" if r2_sc is not None else "—", f"{r2_r:.6f}" if r2_r is not None else "—", "Aligned"),
+            ("Adjusted R-Squared", f"{adj_sc:.6f}" if adj_sc is not None else "—", f"{adj_r:.6f}" if adj_r is not None else "—", "Aligned"),
+            ("Residual Std Error (s)", f"{s_sc:.6f}" if s_sc is not None else "—", f"{s_r:.6f}" if s_r is not None else "—", "Aligned"),
         ]
 
         for row_i, (m_name, sc_s, r_s, stat_s) in enumerate(metrics, start=1):
@@ -254,7 +284,8 @@ class CompareImplementationsDialog(QDialog):
             diag_layout.addWidget(QLabel(sc_s), row_i, 1)
             diag_layout.addWidget(QLabel(r_s), row_i, 2)
             lbl = QLabel(stat_s)
-            lbl.setStyleSheet("color: #15803d; font-weight: bold;" if "✓" in stat_s else "color: #b45309;")
+            is_good = stat_s in ("Equal", "Aligned")
+            lbl.setStyleSheet(f"color: {'#6ee7b7' if dark else '#15803d'}; font-weight: bold;" if is_good else f"color: {'#fcd34d' if dark else '#b45309'};")
             diag_layout.addWidget(lbl, row_i, 3)
 
         layout.addWidget(diag_group)

@@ -730,6 +730,13 @@ class ModernWindow(QMainWindow):
         cmd_layout.addWidget(label("History", "sectionHeading"))
         self.command_history_view = QPlainTextEdit(); self.command_history_view.setReadOnly(True)
         self.command_history_view.setFont(QFont("Consolas", 8.5))
+        def _on_hist_change():
+            c = self.command_history_view.textCursor()
+            line = c.block().text().strip()
+            if line.startswith("MTB > "): line = line[6:].strip()
+            elif line.startswith("SUBC > "): line = line[7:].strip()
+            if line: self.command_editor.setPlainText(line)
+        self.command_history_view.cursorPositionChanged.connect(_on_hist_change)
         cmd_layout.addWidget(self.command_history_view, 1)
         self.output_splitter.addWidget(self.command_line_pane)
         self.output_splitter.setStretchFactor(0, 3); self.output_splitter.setStretchFactor(1, 1)
@@ -1008,6 +1015,11 @@ class ModernWindow(QMainWindow):
         data.addSeparator()
         self._action(data, "Rename Column…", self.rename_column, None, None, True)
         self._action(data, "Change Data Type…", self.change_type, None, None, True)
+        col_prop_menu = data.addMenu("Column Properties")
+        self._action(col_prop_menu, "Value Order…", self.column_value_order_dialog, None, None, True)
+        self._action(col_prop_menu, "Description…", self.column_description_dialog, None, None, True)
+        self._action(col_prop_menu, "Assign Formula…", self.assign_formula_dialog, None, "assign_formula", True)
+        self._action(col_prop_menu, "Conditional Formatting…", self.conditional_formatting_dialog, None, None, True)
         self._action(data, "Worksheet Information", self.show_worksheet_information, None, "worksheet")
         self._action(data, "Stored Constants…", self.stored_constants, None, "constants", True)
         data.addSeparator()
@@ -1866,6 +1878,13 @@ class ModernWindow(QMainWindow):
         self.table.setHorizontalHeaderLabels(headers)
         self._displayed_date_columns = {i for i, c in enumerate(sheet.columns) if c.kind == 'date'}
         self.column_names.setHorizontalHeaderLabels(headers)
+        formula_cols = {i for i, c in enumerate(sheet.columns) if c.metadata.get('formula')}
+        if hasattr(self.table.horizontalHeader(), 'formula_columns'):
+            self.table.horizontalHeader().formula_columns = formula_cols
+            self.table.horizontalHeader().viewport().update()
+        if hasattr(self.col_header_view, 'formula_columns'):
+            self.col_header_view.formula_columns = formula_cols
+            self.col_header_view.viewport().update()
         self._update_corner_arrow()
         self.column_names.setFixedHeight(self.column_names.horizontalHeader().sizeHint().height() + self.column_names.rowHeight(0) + 3)
         start = self.page * self.PAGE_SIZE
@@ -2003,10 +2022,13 @@ class ModernWindow(QMainWindow):
                     parent_node.setExpanded(True)
                     sheet_nodes[sname] = parent_node
                 stale = self.presenter.result_stale(entry, cache)
-                title = entry.get("title", "Result") + ("  *" if stale is True else "")
+                is_connect = bool(entry.get("connected_analysis") or entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
+                connect_badge = "  [Connect]" if is_connect else ""
+                title = entry.get("title", "Result") + connect_badge + ("  *" if stale is True else "")
                 node = QTreeWidgetItem(parent_node, [title])
                 node.setFont(0, normal_font)
-                node.setToolTip(0, entry.get("time", ""))
+                tip_conn = "\n• StatCraft Connect: Right-click for Dialog, JMP Explorer, R Workbench" if is_connect else ""
+                node.setToolTip(0, entry.get("time", "") + tip_conn)
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
@@ -2040,10 +2062,13 @@ class ModernWindow(QMainWindow):
         else:
             for entry in entries:
                 stale = self.presenter.result_stale(entry, cache)
-                title = entry.get("title", "Result") + ("  *" if stale is True else "")
+                is_connect = bool(entry.get("connected_analysis") or entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
+                connect_badge = "  [Connect]" if is_connect else ""
+                title = entry.get("title", "Result") + connect_badge + ("  *" if stale is True else "")
                 node = QTreeWidgetItem(self.navigator, [title])
                 node.setFont(0, normal_font)
-                node.setToolTip(0, (entry.get("worksheet_name") or sheet.name) + " · " + entry.get("time", ""))
+                tip_conn = "\n• StatCraft Connect: Right-click for Dialog, JMP Explorer, R Workbench" if is_connect else ""
+                node.setToolTip(0, (entry.get("worksheet_name") or sheet.name) + " · " + entry.get("time", "") + tip_conn)
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
@@ -2647,8 +2672,11 @@ class ModernWindow(QMainWindow):
         raw = self.command_editor.toPlainText().strip()
         if not raw: return
         for line in raw.splitlines():
-            if line.strip():
-                self._call(lambda l=line: self.presenter.execute_session_command(l), result=True)
+            cmd = line.strip()
+            if cmd:
+                self.command_history_view.appendPlainText(f"MTB > {cmd}")
+                self._call(lambda l=cmd: self.presenter.execute_session_command(l), result=True)
+        self.command_editor.clear()
 
     def undo(self):
         self._commit_editor()
@@ -6096,30 +6124,130 @@ class ModernWindow(QMainWindow):
         c = max(0, min(self.table.currentColumn(), len(self.presenter.worksheet.columns) - 1))
         col = self.presenter.worksheet.columns[c]
         order_meta = col.metadata.get("value_order", {})
-        if col.kind!='text':return
-        dialog = QDialog(self); dialog.setWindowTitle(f"Value Order — C{c + 1} ({col.name})"); dialog.setMinimumWidth(400)
+        if col.kind != 'text':
+            QMessageBox.information(
+                self,
+                "Value Order",
+                f"Value Order customization is designed for categorical text columns.\n\n"
+                f"Column C{c + 1} ({col.name}) is a '{col.kind}' column, which orders naturally."
+            )
+            return
+
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QRadioButton, QListWidget,
+            QListWidgetItem, QPushButton, QDialogButtonBox, QLabel, QGroupBox
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Value Order — C{c + 1} ({col.name})")
+        dialog.setMinimumWidth(440)
         layout = QVBoxLayout(dialog)
-        rb_alpha = QRadioButton("Alphabetical (default)")
-        rb_first = QRadioButton("Worksheet occurrence order")
-        rb_custom = QRadioButton("User-specified order (one value per line):")
+
+        rb_alpha = QRadioButton("Alphabetical order (default)")
+        rb_first = QRadioButton("Order of occurrence in worksheet")
+        rb_custom = QRadioButton("User-specified order")
+
         mode = order_meta.get("mode", "alphabetical")
         rb_alpha.setChecked(mode == "alphabetical")
         rb_first.setChecked(mode == "occurrence")
         rb_custom.setChecked(mode == "custom")
-        custom_edit = QPlainTextEdit('\n'.join(order_meta.get('values',list(dict.fromkeys(v for v in col.values if v is not None and v.strip())))))
-        custom_edit.setMinimumHeight(120)
-        layout.addWidget(rb_alpha); layout.addWidget(rb_first); layout.addWidget(rb_custom); layout.addWidget(custom_edit)
+
+        layout.addWidget(rb_alpha)
+        layout.addWidget(rb_first)
+        layout.addWidget(rb_custom)
+
+        observed = list(dict.fromkeys(v for v in col.values if v is not None and str(v).strip()))
+        custom_saved = order_meta.get("values", [])
+
+        list_group = QGroupBox("Category Ordering")
+        list_layout = QHBoxLayout(list_group)
+
+        order_list = QListWidget()
+        order_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+
+        def populate_list(vals):
+            order_list.clear()
+            for v in vals:
+                order_list.addItem(QListWidgetItem(str(v)))
+            if order_list.count() > 0:
+                order_list.setCurrentRow(0)
+
+        if mode == "custom" and custom_saved:
+            unlisted = sorted([v for v in observed if v not in custom_saved], key=lambda x: (x.casefold(), x))
+            populate_list(custom_saved + unlisted)
+        elif mode == "occurrence":
+            populate_list(observed)
+        else:
+            populate_list(sorted(observed, key=lambda x: (x.casefold(), x)))
+
+        list_layout.addWidget(order_list, 1)
+
+        btn_box = QVBoxLayout()
+        btn_top = QPushButton("Move to Top")
+        btn_up = QPushButton("Move Up")
+        btn_down = QPushButton("Move Down")
+        btn_bottom = QPushButton("Move to Bottom")
+        btn_box.addWidget(btn_top)
+        btn_box.addWidget(btn_up)
+        btn_box.addWidget(btn_down)
+        btn_box.addWidget(btn_bottom)
+        btn_box.addStretch()
+        list_layout.addLayout(btn_box)
+
+        layout.addWidget(list_group)
+
+        def move_row(delta):
+            row = order_list.currentRow()
+            if row < 0: return
+            target_row = max(0, min(order_list.count() - 1, row + delta))
+            if target_row == row: return
+            item = order_list.takeItem(row)
+            order_list.insertItem(target_row, item)
+            order_list.setCurrentRow(target_row)
+            rb_custom.setChecked(True)
+
+        def move_extreme(top):
+            row = order_list.currentRow()
+            if row < 0: return
+            target_row = 0 if top else order_list.count() - 1
+            if target_row == row: return
+            item = order_list.takeItem(row)
+            order_list.insertItem(target_row, item)
+            order_list.setCurrentRow(target_row)
+            rb_custom.setChecked(True)
+
+        btn_top.clicked.connect(lambda: move_extreme(True))
+        btn_bottom.clicked.connect(lambda: move_extreme(False))
+        btn_up.clicked.connect(lambda: move_row(-1))
+        btn_down.clicked.connect(lambda: move_row(1))
+
+        def on_mode_toggled():
+            if rb_alpha.isChecked():
+                populate_list(sorted(observed, key=lambda x: (x.casefold(), x)))
+            elif rb_first.isChecked():
+                populate_list(observed)
+
+        rb_alpha.toggled.connect(on_mode_toggled)
+        rb_first.toggled.connect(on_mode_toggled)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         layout.addWidget(buttons)
-        error=label('','error');layout.addWidget(error)
+        error = label('', 'error')
+        layout.addWidget(error)
+
         def accept_order():
             chosen = "custom" if rb_custom.isChecked() else "occurrence" if rb_first.isChecked() else "alphabetical"
-            vals = custom_edit.toPlainText().splitlines()
-            try:self.presenter.set_column_value_order(c,chosen,vals)
-            except ValueError as exc:error.setText(str(exc));return
+            vals = [order_list.item(i).text() for i in range(order_list.count())]
+            try:
+                self.presenter.set_column_value_order(c, chosen, vals)
+            except ValueError as exc:
+                error.setText(str(exc))
+                return
             self.refresh()
             dialog.accept()
-        buttons.accepted.connect(accept_order); buttons.rejected.connect(dialog.reject)
+
+        buttons.accepted.connect(accept_order)
+        buttons.rejected.connect(dialog.reject)
         dialog.exec()
 
     def column_width_dialog(self):

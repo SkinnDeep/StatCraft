@@ -5481,6 +5481,30 @@ class Presenter:
             if len(indices) < 2:
                 raise ValueError("Syntax: REGRESS C_response C_predictor1 [C_predictor2 ...]")
             return self.multiple_regression(indices[0], indices[1:])
+        if verb in ("ONEWAY", "AOVONEWAY", "ANOVA"):
+            indices = resolve_variables(rest, self.worksheet, ("number",))
+            if len(indices) == 2:
+                return self.oneway_anova(response_index=indices[0], factor_index=indices[1])
+            elif len(indices) > 2:
+                return self.oneway_anova_unstacked(indices)
+            raise ValueError("Syntax: ONEWAY C_response C_factor or ONEWAY C1 C2 C3...")
+        if verb in ("TTEST", "TINTERVAL"):
+            indices = resolve_variables(rest, self.worksheet, ("number",))
+            if not indices:
+                raise ValueError("Syntax: TTEST C1 [C2 ...]")
+            return self.one_sample_t({"sample_cols": indices})
+        if verb in ("TWOSAMPLE", "TWOSAMPLE-T"):
+            indices = resolve_variables(rest, self.worksheet, ("number",))
+            if len(indices) != 2:
+                raise ValueError("Syntax: TWOSAMPLE C1 C2")
+            return self.two_sample_t({"data_format": 1, "sample1_col": indices[0], "sample2_col": indices[1]})
+        if verb in ("XBARCHART", "XBAR-R"):
+            indices = resolve_variables(rest, self.worksheet, ("number",))
+            if len(indices) == 2:
+                return self.xbar_r_stacked(response_index=indices[0], factor_index=indices[1])
+            elif len(indices) > 2:
+                return self.xbar_r_rows(indices)
+            raise ValueError("Syntax: XBARCHART C_response C_subgroup or XBARCHART C1 C2 ...")
         if verb == "SORT":
             indices = resolve_variables(rest, self.worksheet, ("number", "text", "date"))
             if len(indices) < 1:
@@ -5522,7 +5546,7 @@ class Presenter:
                 "stderr": res.get("stderr", ""),
                 "plot_path": res.get("plot_path"),
             })
-        raise ValueError("Unsupported session command '" + verb + "'. Supported: DESCRIBE, INFO, LET, NAME, CORRELATION, NORMALITY, REGRESS, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK, RSCR.")
+        raise ValueError("Unsupported session command '" + verb + "'. Supported: DESCRIBE, INFO, LET, NAME, CORRELATION, NORMALITY, REGRESS, ONEWAY, TTEST, TWOSAMPLE, XBARCHART, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK, RSCR.")
 
 
 def format_entry(entry):
