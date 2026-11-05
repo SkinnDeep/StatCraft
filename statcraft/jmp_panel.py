@@ -323,7 +323,8 @@ class JMPTablePanel(QWidget):
         c_layout.addWidget(sec_cols)
 
         # Filter bar
-        filter_box = QWidget()
+        self.filter_box = QWidget()
+        filter_box = self.filter_box
         filter_box.setStyleSheet("background-color: #ffffff; padding: 3px 6px; border-bottom: 1px solid #e0e0e0;")
         fb_layout = QHBoxLayout(filter_box)
         fb_layout.setContentsMargins(0, 0, 0, 0)
@@ -347,7 +348,8 @@ class JMPTablePanel(QWidget):
         sec_rows = self._create_section_header("▾ Rows", tooltip="Row state summary and actions")
         c_layout.addWidget(sec_rows)
 
-        rows_box = QWidget()
+        self.rows_box = QWidget()
+        rows_box = self.rows_box
         rows_box.setStyleSheet("background-color: #ffffff; border-top: 1px solid #f0f0f0; padding: 6px 8px;")
         r_layout = QVBoxLayout(rows_box)
         r_layout.setContentsMargins(6, 4, 6, 6)
@@ -383,6 +385,59 @@ class JMPTablePanel(QWidget):
         layout.addWidget(scroll, 1)
 
         self._populate_scripts()
+
+    @property
+    def is_dark(self) -> bool:
+        return getattr(self, "_is_dark", False)
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        self._is_dark = is_dark
+        if is_dark:
+            self.setStyleSheet("""
+                QWidget#jmpTablePanel { background-color: #18181b; border-right: 1px solid #27272a; }
+                QWidget#jmpHeader { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369a1, stop:1 #0284c7); color: #ffffff; border-bottom: 1px solid #0284c7; }
+                QLabel#jmpHeaderTitle { color: #ffffff; font-size: 9.5pt; font-weight: 700; }
+                QLabel#jmpHeaderSub { color: #e0f2fe; font-size: 8pt; }
+                QWidget#jmpSectionHeader { background-color: #1f1f23; border-top: 1px solid #27272a; border-bottom: 1px solid #27272a; }
+                QLabel#jmpSectionTitle { font-size: 8.5pt; font-weight: 600; color: #f4f4f5; }
+                QListWidget { background-color: #18181b; border: none; font-family: 'Segoe UI', -apple-system, sans-serif; font-size: 8.5pt; color: #f4f4f5; }
+                QListWidget::item { padding: 5px 8px; border-bottom: 1px solid #27272a; color: #e4e4e7; }
+                QListWidget::item:hover { background-color: #27272a; color: #ffffff; }
+                QListWidget::item:selected { background-color: #094771; color: #ffffff; font-weight: 600; }
+                QLineEdit#jmpFilter { background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 6px; font-size: 8.5pt; }
+                QLineEdit#jmpFilter:focus { border-color: #0284c7; }
+                QPushButton.jmpMiniBtn { background-color: #27272a; border: 1px solid #3f3f46; border-radius: 4px; font-size: 8pt; padding: 2px 6px; min-width: 40px; color: #e4e4e7; }
+                QPushButton.jmpMiniBtn:hover { background-color: #3f3f46; border-color: #0284c7; color: #38bdf8; }
+            """)
+            if hasattr(self, "filter_box"):
+                self.filter_box.setStyleSheet("background-color: #18181b; padding: 3px 6px; border-bottom: 1px solid #27272a;")
+            if hasattr(self, "rows_box"):
+                self.rows_box.setStyleSheet("background-color: #18181b; border-top: 1px solid #27272a; padding: 6px 8px;")
+            for lbl in (getattr(self, "lbl_row_all", None), getattr(self, "lbl_row_sel", None), getattr(self, "lbl_row_excl", None)):
+                if lbl: lbl.setStyleSheet("color: #a1a1aa;")
+        else:
+            self.setStyleSheet("""
+                QWidget#jmpTablePanel { background-color: #f8fafc; border-right: 1px solid #e2e8f0; }
+                QWidget#jmpHeader { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0369a1); color: #ffffff; border-bottom: 1px solid #0284c7; }
+                QLabel#jmpHeaderTitle { color: #ffffff; font-size: 9.5pt; font-weight: 700; }
+                QLabel#jmpHeaderSub { color: #e0f2fe; font-size: 8pt; }
+                QWidget#jmpSectionHeader { background-color: #f1f5f9; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
+                QLabel#jmpSectionTitle { font-size: 8.5pt; font-weight: 600; color: #334155; }
+                QListWidget { background-color: #ffffff; border: none; font-family: 'Segoe UI', -apple-system, sans-serif; font-size: 8.5pt; color: #1e293b; }
+                QListWidget::item { padding: 5px 8px; border-bottom: 1px solid #f8fafc; color: #1e293b; }
+                QListWidget::item:hover { background-color: #f1f5f9; }
+                QListWidget::item:selected { background-color: #e0f2fe; color: #0369a1; font-weight: 600; }
+                QLineEdit#jmpFilter { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 6px; font-size: 8.5pt; }
+                QLineEdit#jmpFilter:focus { border-color: #0284c7; }
+                QPushButton.jmpMiniBtn { background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 8pt; padding: 2px 6px; min-width: 40px; color: #334155; }
+                QPushButton.jmpMiniBtn:hover { background-color: #e0f2fe; border-color: #0284c7; color: #0369a1; }
+            """)
+            if hasattr(self, "filter_box"):
+                self.filter_box.setStyleSheet("background-color: #ffffff; padding: 3px 6px; border-bottom: 1px solid #e0e0e0;")
+            if hasattr(self, "rows_box"):
+                self.rows_box.setStyleSheet("background-color: #ffffff; border-top: 1px solid #f0f0f0; padding: 6px 8px;")
+            for lbl in (getattr(self, "lbl_row_all", None), getattr(self, "lbl_row_sel", None), getattr(self, "lbl_row_excl", None)):
+                if lbl: lbl.setStyleSheet("color: #424242;")
 
     def _create_section_header(self, title_or_widget: str | QLabel, tooltip: str = "") -> QWidget:
         sec = QWidget()
@@ -749,6 +804,11 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 9. VIEW
     view_m = bar.addMenu("&View")
+    dark_act = _act(view_m, "Dark Mode", win.toggle_dark_mode, QKeySequence("Ctrl+Shift+D"))
+    dark_act.setCheckable(True)
+    dark_act.setChecked(getattr(win, "_dark_mode", False))
+    win.dark_mode_action_jmp = dark_act
+    view_m.addSeparator()
     mode_sub = view_m.addMenu("Workspace Mode")
     _act(mode_sub, "Minitab Mode (Quality & SPC)", lambda: win.set_ui_mode("minitab"))
     _act(mode_sub, "JMP Mode (Visual Platforms)", lambda: win.set_ui_mode("jmp"))

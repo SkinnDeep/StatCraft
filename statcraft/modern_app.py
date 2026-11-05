@@ -136,15 +136,39 @@ class WelcomeLogoBanner(QWidget):
         p.end()
 
 
-class ModernWindow(QMainWindow):
-    PAGE_SIZE = 300
 
-    def __init__(self, presenter=None):
-        super().__init__()
-        app = QApplication.instance()
-        app.styleHints().setColorScheme(Qt.ColorScheme.Light)
-        palette = QPalette()
-        # Active and Inactive light theme color roles (immune to host OS dark mode bleed)
+def apply_theme_palette(app, is_dark: bool) -> None:
+    if not app:
+        return
+    app.styleHints().setColorScheme(Qt.ColorScheme.Dark if is_dark else Qt.ColorScheme.Light)
+    palette = QPalette()
+    if is_dark:
+        for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+            palette.setColor(grp, QPalette.ColorRole.Window, QColor('#18181b'))
+            palette.setColor(grp, QPalette.ColorRole.WindowText, QColor('#f4f4f5'))
+            palette.setColor(grp, QPalette.ColorRole.Base, QColor('#1f1f23'))
+            palette.setColor(grp, QPalette.ColorRole.AlternateBase, QColor('#27272a'))
+            palette.setColor(grp, QPalette.ColorRole.ToolTipBase, QColor('#09090b'))
+            palette.setColor(grp, QPalette.ColorRole.ToolTipText, QColor('#f4f4f5'))
+            palette.setColor(grp, QPalette.ColorRole.Text, QColor('#f4f4f5'))
+            palette.setColor(grp, QPalette.ColorRole.Button, QColor('#27272a'))
+            palette.setColor(grp, QPalette.ColorRole.ButtonText, QColor('#f4f4f5'))
+            palette.setColor(grp, QPalette.ColorRole.BrightText, QColor('#ffffff'))
+            palette.setColor(grp, QPalette.ColorRole.Light, QColor('#3f3f46'))
+            palette.setColor(grp, QPalette.ColorRole.Midlight, QColor('#27272a'))
+            palette.setColor(grp, QPalette.ColorRole.Dark, QColor('#09090b'))
+            palette.setColor(grp, QPalette.ColorRole.Mid, QColor('#18181b'))
+            palette.setColor(grp, QPalette.ColorRole.Shadow, QColor('#000000'))
+            palette.setColor(grp, QPalette.ColorRole.Highlight, QColor('#0284c7'))
+            palette.setColor(grp, QPalette.ColorRole.HighlightedText, QColor('#ffffff'))
+            palette.setColor(grp, QPalette.ColorRole.PlaceholderText, QColor('#71717a'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Window, QColor('#18181b'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor('#71717a'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor('#71717a'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor('#71717a'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor('#18181b'))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor('#18181b'))
+    else:
         for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
             palette.setColor(grp, QPalette.ColorRole.Window, QColor('#f8fafc'))
             palette.setColor(grp, QPalette.ColorRole.WindowText, QColor('#1e293b'))
@@ -164,41 +188,207 @@ class ModernWindow(QMainWindow):
             palette.setColor(grp, QPalette.ColorRole.Highlight, QColor('#e0f2fe'))
             palette.setColor(grp, QPalette.ColorRole.HighlightedText, QColor('#0369a1'))
             palette.setColor(grp, QPalette.ColorRole.PlaceholderText, QColor('#94a3b8'))
-        # Disabled color roles
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Window, QColor('#f8fafc'))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor('#94a3b8'))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor('#94a3b8'))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor('#94a3b8'))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor('#f1f5f9'))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor('#f1f5f9'))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor('#e2e8f0'))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor('#94a3b8'))
-        app.setPalette(palette)
-        self.presenter = presenter or Presenter()
-        self.page = 0
-        self.selected_entry = None
-        self._refreshing = False
-        self._last_dialog_action = None
-        self._find_state = {"query": "", "match_case": False, "whole_word": False, "direction": "down"}
-        self._navigator_group_by_sheet = True
-        self._navigator_sort_mode = "oldest"  # 'newest', 'oldest', 'name'
-        self._zoom_percent = 100
-        self._worksheet_zoom = 100
-        self._output_zoom_levels = {}
-        self._view_mode = "both"  # 'both', 'data', 'output'
-        self._selected_columns = set()
-        self._selected_rows = set()
-        self._hidden_columns = set()
-        self._use_hidden_in_dialogs = False
-        self._report_pad_entries = []
-        self._prepare_blank()
-        self._ui_mode = QSettings("StatCraft", "StatCraft").value("ui_mode", "minitab")
-        self.setWindowTitle("StatCraft - Untitled")
-        self.resize(1280, 760); self.setMinimumSize(920, 520)
-        self.setFont(QFont("Segoe UI", 9))
-        icon = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])) / "StatCraft.ico"
-        if icon.is_file(): self.setWindowIcon(QIcon(str(icon)))
-        self.setStyleSheet("""
+    app.setPalette(palette)
+
+
+def get_theme_stylesheet(is_dark: bool) -> str:
+    if is_dark:
+        return """
+            QMainWindow, QDialog { background-color: #18181b; color: #f4f4f5; }
+            QWidget { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif; font-size: 9pt; color: #f4f4f5; }
+            QMenuBar { background-color: #18181b; border-bottom: 1px solid #27272a; padding: 2px 4px; }
+            QMenuBar::item { padding: 4px 10px; background: transparent; border-radius: 4px; color: #e4e4e7; }
+            QMenuBar::item:selected { background-color: #27272a; color: #38bdf8; }
+            QMenu { background-color: #1f1f23; border: 1px solid #3f3f46; border-radius: 6px; padding: 4px; color: #f4f4f5; }
+            QMenu::item { padding: 6px 28px 6px 24px; border-radius: 4px; color: #e4e4e7; }
+            QMenu::item:selected { background-color: #0284c7; color: #ffffff; }
+            QMenu::separator { height: 1px; background-color: #3f3f46; margin: 4px 6px; }
+            QToolBar { background-color: #18181b; border-top: none; border-bottom: 1px solid #27272a; padding: 2px 6px; spacing: 3px; }
+            QToolBar::separator { width: 1px; background-color: #3f3f46; margin: 4px 5px; }
+            QToolButton { padding: 4px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #e4e4e7; }
+            QToolButton:hover { background-color: #27272a; border: 1px solid #3f3f46; color: #38bdf8; }
+            QToolButton:pressed, QToolButton:checked { background-color: #27272a; border: 1px solid #0284c7; color: #38bdf8; }
+            QSplitter::handle { background-color: #27272a; }
+            QSplitter::handle:horizontal { width: 2px; }
+            QSplitter::handle:vertical { height: 2px; }
+            QSplitter::handle:hover { background-color: #0284c7; }
+            QWidget#navigatorPane { background-color: #18181b; border-right: 1px solid #27272a; }
+            QWidget#navigatorHeader { background-color: #1f1f23; border-bottom: 1px solid #27272a; }
+            QLabel#navigatorTitle { font-size: 9.5pt; font-weight: 600; color: #f4f4f5; padding-left: 6px; }
+            QTreeWidget { background-color: #18181b; border: none; padding: 4px 0px; font-size: 9pt; color: #e4e4e7; outline: 0; }
+            QTreeWidget::item { padding: 5px 8px; border-left: 3px solid transparent; border-radius: 3px; color: #d4d4d8; margin: 1px 4px; }
+            QTreeWidget::item:hover { background-color: #27272a; color: #ffffff; }
+            QTreeWidget::item:selected { background-color: #094771; color: #ffffff; font-weight: 600; border-left: 3px solid #38bdf8; }
+            QWidget#outputPane, QWidget#welcomeStage, QWidget#welcomeCard { background-color: #09090b; }
+            QWidget#outputHeaderBar { background-color: #18181b; border-bottom: 1px solid #27272a; }
+            QToolButton#outputDropdownBtn {
+                background-color: #27272a; border: 1px solid #3f3f46; border-radius: 4px;
+                padding: 3px 8px; font-size: 9pt; font-weight: 600; color: #e4e4e7;
+            }
+            QToolButton#outputDropdownBtn:hover { background-color: #3f3f46; border-color: #0284c7; color: #38bdf8; }
+            QPushButton#watermarkLink {
+                background: transparent; border: none; color: #a1a1aa;
+                font-size: 9.5pt; font-weight: 600; text-align: left; padding: 1px 2px;
+            }
+            QPushButton#watermarkLink:hover { color: #38bdf8; text-decoration: underline; }
+            QLabel#watermarkKey { background: transparent; color: #a1a1aa; font-size: 9.5pt; font-weight: 600; }
+            QTableWidget {
+                background-color: #18181b; color: #f4f4f5; gridline-color: #27272a; border: none;
+                selection-background-color: #094771; selection-color: #ffffff;
+                font-size: 9pt;
+            }
+            QTableWidget#columnNamesTable {
+                background-color: #1f1f23; color: #f4f4f5; gridline-color: #27272a;
+                border-top: 1px solid #3f3f46; border-bottom: 1px solid #3f3f46;
+            }
+            QHeaderView::section {
+                background-color: #27272a; color: #d4d4d8; border: none;
+                border-right: 1px solid #3f3f46; border-bottom: 1px solid #3f3f46;
+                padding: 2px 6px; font-weight: 500; font-size: 8.5pt;
+            }
+            QHeaderView::section:hover { background-color: #3f3f46; color: #ffffff; }
+            QWidget#sheetChromeBar { background-color: #18181b; border-top: 1px solid #27272a; }
+            QPushButton#chromeNavButton {
+                background-color: #18181b; border: none; border-right: 1px solid #27272a;
+                padding: 3px 6px; min-height: 20px; color: #a1a1aa; font-size: 8.5pt;
+            }
+            QPushButton#chromeNavButton:hover { background-color: #27272a; color: #38bdf8; }
+            QTabWidget::pane { background-color: #18181b; border: none; }
+            QTabBar::tab {
+                background-color: #27272a; color: #a1a1aa; padding: 6px 16px;
+                border: 1px solid #3f3f46; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px;
+                margin-right: 2px; font-size: 9pt;
+            }
+            QTabBar::tab:hover { background-color: #3f3f46; color: #ffffff; }
+            QTabBar::tab:selected {
+                background-color: #18181b; color: #ffffff; border-color: #3f3f46;
+                border-top: 3px solid #0284c7; font-weight: 600;
+            }
+            QTabBar#worksheetTabs { background-color: #18181b; }
+            QTabBar#worksheetTabs::tab {
+                background-color: #27272a; color: #a1a1aa; padding: 4px 16px;
+                border: none; border-right: 1px solid #3f3f46; font-size: 8.5pt;
+            }
+            QTabBar#worksheetTabs::tab:hover { background-color: #3f3f46; color: #ffffff; }
+            QTabBar#worksheetTabs::tab:selected {
+                background-color: #18181b; color: #38bdf8;
+                border-bottom: 3px solid #38bdf8; font-weight: 600;
+            }
+            QWidget#resultCard { background-color: #1f1f23; border: 1px solid #27272a; border-radius: 4px; }
+            QLabel#worksheetBadge {
+                background-color: #27272a; color: #e4e4e7; border-bottom: 1px solid #3f3f46;
+                padding: 6px 12px; font-size: 8.5pt; font-weight: 700;
+            }
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px;
+                padding: 4px 8px; min-height: 20px; selection-background-color: #094771; selection-color: #ffffff;
+            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 1px solid #0284c7; background-color: #27272a;
+            }
+            QLineEdit:disabled, QComboBox:disabled {
+                background-color: #18181b; color: #71717a; border-color: #27272a;
+            }
+            QComboBox::drop-down { border: none; width: 20px; background: transparent; }
+            QComboBox::down-arrow {
+                width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+                border-top: 5px solid #a1a1aa; margin-right: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #1f1f23; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px;
+                selection-background-color: #094771; selection-color: #ffffff; padding: 2px;
+            }
+            QListWidget { background-color: #1f1f23; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; }
+            QListWidget::item { padding: 4px 6px; border-radius: 2px; }
+            QListWidget::item:hover { background-color: #27272a; color: #ffffff; }
+            QListWidget::item:selected { background-color: #094771; color: #ffffff; }
+            QGroupBox {
+                background-color: #1f1f23; color: #f4f4f5; border: 1px solid #27272a;
+                border-radius: 6px; margin-top: 14px; padding: 12px 10px 10px 10px; font-weight: 600;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin; subcontrol-position: top left; left: 10px;
+                padding: 0 4px; background-color: #1f1f23; color: #38bdf8;
+            }
+            QRadioButton, QCheckBox { color: #f4f4f5; spacing: 6px; background: transparent; }
+            QRadioButton:disabled, QCheckBox:disabled { color: #71717a; }
+            QRadioButton::indicator {
+                width: 14px; height: 14px; border-radius: 7px;
+                border: 1px solid #71717a; background-color: #27272a;
+            }
+            QRadioButton::indicator:hover { border-color: #0284c7; }
+            QRadioButton::indicator:checked {
+                border: 1px solid #0284c7;
+                background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #0284c7, stop:0.55 #0284c7, stop:0.65 #27272a, stop:1 #27272a);
+            }
+            QCheckBox::indicator {
+                width: 14px; height: 14px; border-radius: 3px;
+                border: 1px solid #71717a; background-color: #27272a;
+            }
+            QCheckBox::indicator:hover { border-color: #0284c7; }
+            QCheckBox::indicator:checked {
+                border-color: #0284c7; background-color: #0284c7;
+            }
+            QPushButton {
+                background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px;
+                padding: 4px 14px; min-height: 22px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #3f3f46; border-color: #52525b; color: #ffffff; }
+            QPushButton:pressed { background-color: #18181b; border-color: #0284c7; }
+            QPushButton:default { background-color: #0284c7; color: #ffffff; border: 1px solid #0369a1; font-weight: 600; }
+            QPushButton:default:hover { background-color: #0369a1; }
+            QPushButton:disabled { background-color: #18181b; color: #71717a; border-color: #27272a; }
+            QLabel#pageHeading { font-size: 11.5pt; font-weight: 700; color: #f4f4f5; }
+            QLabel#sectionHeading, QLabel#dialogHeading { font-size: 10pt; font-weight: 700; color: #38bdf8; }
+            QLabel#secondary { color: #a1a1aa; font-size: 8.5pt; }
+            QLabel#error { color: #f87171; }
+            QWidget#commandLinePane { background-color: #18181b; border-left: 1px solid #27272a; }
+            QStatusBar {
+                background: #18181b; color: #f4f4f5; border-top: 1px solid #27272a; min-height: 24px;
+            }
+            QStatusBar::item { border: none; }
+            QStatusBar QLabel { color: #f4f4f5; background: transparent; font-size: 8.5pt; padding: 0 6px; }
+            QStatusBar QToolButton {
+                color: #f4f4f5; background: transparent; border: 1px solid transparent;
+                padding: 2px 6px; border-radius: 3px; font-size: 8.5pt;
+            }
+            QStatusBar QToolButton:hover { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.35); }
+            QStatusBar QToolButton:checked { background: rgba(0, 0, 0, 0.4); border-color: #0284c7; }
+            QSlider#zoomSlider::groove:horizontal { height: 3px; background: rgba(255, 255, 255, 0.25); border-radius: 1px; }
+            QSlider#zoomSlider::handle:horizontal { width: 8px; height: 12px; margin: -5px 0; background: #38bdf8; border-radius: 2px; }
+            QToolTip {
+                background-color: #09090b; color: #ffffff; border: 1px solid #3f3f46;
+                border-radius: 4px; padding: 4px 8px; font-size: 8.5pt;
+            }
+            QScrollBar:vertical {
+                background: #18181b; width: 10px; margin: 0px; border: none;
+            }
+            QScrollBar::handle:vertical {
+                background: #3f3f46; min-height: 24px; border-radius: 5px; margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover { background: #52525b; }
+            QScrollBar::handle:vertical:pressed { background: #71717a; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
+            QScrollBar::horizontal {
+                background: #18181b; height: 10px; margin: 0px; border: none;
+            }
+            QScrollBar::handle:horizontal {
+                background: #3f3f46; min-width: 24px; border-radius: 5px; margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover { background: #52525b; }
+            QScrollBar::handle:horizontal:pressed { background: #71717a; }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; background: none; border: none; }
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: none; }
+        """
+    else:
+        return """
             QMainWindow, QDialog { background-color: #f8fafc; color: #1e293b; }
             QWidget { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1e293b; }
             QMenuBar { background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 2px 4px; }
@@ -376,7 +566,7 @@ class ModernWindow(QMainWindow):
             QScrollBar::handle:vertical:pressed { background: #64748b; }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
-            QScrollBar:horizontal {
+            QScrollBar::horizontal {
                 background: #f1f5f9; height: 10px; margin: 0px; border: none;
             }
             QScrollBar::handle:horizontal {
@@ -386,7 +576,41 @@ class ModernWindow(QMainWindow):
             QScrollBar::handle:horizontal:pressed { background: #64748b; }
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; background: none; border: none; }
             QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: none; }
-        """)
+        """
+
+class ModernWindow(QMainWindow):
+    PAGE_SIZE = 300
+
+    def __init__(self, presenter=None):
+        super().__init__()
+        app = QApplication.instance()
+        self._dark_mode = QSettings("StatCraft", "StatCraft").value("dark_mode", False, type=bool)
+        apply_theme_palette(app, self._dark_mode)
+        self.presenter = presenter or Presenter()
+        self.page = 0
+        self.selected_entry = None
+        self._refreshing = False
+        self._last_dialog_action = None
+        self._find_state = {"query": "", "match_case": False, "whole_word": False, "direction": "down"}
+        self._navigator_group_by_sheet = True
+        self._navigator_sort_mode = "oldest"  # 'newest', 'oldest', 'name'
+        self._zoom_percent = 100
+        self._worksheet_zoom = 100
+        self._output_zoom_levels = {}
+        self._view_mode = "both"  # 'both', 'data', 'output'
+        self._selected_columns = set()
+        self._selected_rows = set()
+        self._hidden_columns = set()
+        self._use_hidden_in_dialogs = False
+        self._report_pad_entries = []
+        self._prepare_blank()
+        self._ui_mode = QSettings("StatCraft", "StatCraft").value("ui_mode", "minitab")
+        self.setWindowTitle("StatCraft - Untitled")
+        self.resize(1280, 760); self.setMinimumSize(920, 520)
+        self.setFont(QFont("Segoe UI", 9))
+        icon = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])) / "StatCraft.ico"
+        if icon.is_file(): self.setWindowIcon(QIcon(str(icon)))
+        self.setStyleSheet(get_theme_stylesheet(self._dark_mode))
         self._create_layout()
         from .graph_options_pane import GraphOptionsPane
         self.graph_options_pane=GraphOptionsPane(self,apply_callback=self._apply_graph_settings)
@@ -440,6 +664,13 @@ class ModernWindow(QMainWindow):
         self.sidebar_stack.setMinimumWidth(175); self.sidebar_stack.setMaximumWidth(380)
         self.sidebar_stack.addWidget(self.navigator_container)
         self.sidebar_stack.addWidget(self.jmp_panel)
+        from .r_file_explorer import RExplorerPanel
+        self.r_explorer_panel = RExplorerPanel(
+            main_window=self,
+            presenter=self.presenter,
+            workbench=getattr(self, "r_workbench", None),
+        )
+        self.sidebar_stack.addWidget(self.r_explorer_panel)
         self.splitter.addWidget(self.sidebar_stack)
 
         # Center/Right vertical splitter: Output pane on top, Worksheet grid on bottom
@@ -635,6 +866,8 @@ class ModernWindow(QMainWindow):
 
         from .r_workbench_widget import RWorkbenchWidget
         self.r_workbench = RWorkbenchWidget(self)
+        if hasattr(self, "r_explorer_panel"):
+            self.r_explorer_panel.workbench = self.r_workbench
         self.work_stack.addWidget(self.r_workbench)
 
         self.splitter.addWidget(self.work_stack)
@@ -1069,6 +1302,11 @@ class ModernWindow(QMainWindow):
 
         # 7. View menu (`RT_MENU 8445`: Navigator, Command Line/History, Data and Output, Data Only, Output Only, Zoom)
         view = bar.addMenu("&View")
+        self.dark_mode_action = QAction("Dark Mode", self, checkable=True, checked=getattr(self, "_dark_mode", False))
+        self.dark_mode_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
+        self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
+        view.addAction(self.dark_mode_action)
+        view.addSeparator()
         mode_menu = view.addMenu("Workspace Mode")
         self._action(mode_menu, "Minitab Mode (Quality & SPC)", lambda: self.set_ui_mode("minitab"))
         self._action(mode_menu, "JMP Mode (Visual Platforms)", lambda: self.set_ui_mode("jmp"))
@@ -1304,7 +1542,26 @@ class ModernWindow(QMainWindow):
         mode_layout.addWidget(self.btn_mode_minitab)
         mode_layout.addWidget(self.btn_mode_jmp)
         mode_layout.addWidget(self.btn_mode_r)
+        mode_layout.addSpacing(6)
+        self.btn_theme_toggle = QToolButton()
+        self.btn_theme_toggle.setText("☀️ Light" if getattr(self, "_dark_mode", False) else "🌙 Dark")
+        self.btn_theme_toggle.setToolTip("Toggle Dark / Light Theme for Minitab, JMP, and R Modes (Ctrl+Shift+D)")
+        self.btn_theme_toggle.setCheckable(True)
+        self.btn_theme_toggle.setChecked(getattr(self, "_dark_mode", False))
+        self.btn_theme_toggle.clicked.connect(self.toggle_dark_mode)
+        self.btn_theme_toggle.setStyleSheet(
+            "QToolButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
+            if getattr(self, "_dark_mode", False) else
+            "QToolButton { border: 1px solid #adadad; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #f7f7f7; color: #222222; } QToolButton:hover { background-color: #e5f1fb; }"
+        )
+        mode_layout.addWidget(self.btn_theme_toggle)
         toolbar.addWidget(mode_box)
+
+        # Global shortcut Ctrl+Shift+D to toggle theme
+        self.toggle_theme_action = QAction(self)
+        self.toggle_theme_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
+        self.toggle_theme_action.triggered.connect(self.toggle_dark_mode)
+        self.addAction(self.toggle_theme_action)
 
         # Global shortcut Ctrl+Alt+J to toggle modes (Minitab -> JMP -> R -> Minitab)
         self.toggle_mode_action = QAction(self)
@@ -1336,9 +1593,17 @@ class ModernWindow(QMainWindow):
             self._populate_minitab_menubar(bar)
 
         if hasattr(self, "sidebar_stack"):
-            self.sidebar_stack.setCurrentIndex(1 if mode == "jmp" else 0)
-            if mode == "jmp" and hasattr(self, "jmp_panel"):
-                self.jmp_panel.refresh()
+            if mode == "jmp":
+                self.sidebar_stack.setCurrentIndex(1)
+                if hasattr(self, "jmp_panel"):
+                    self.jmp_panel.refresh()
+            elif mode == "r":
+                self.sidebar_stack.setCurrentIndex(2)
+                if hasattr(self, "r_explorer_panel"):
+                    self.r_explorer_panel.set_dark_mode(getattr(self, "_dark_mode", False))
+                    self.r_explorer_panel.refresh_all()
+            else:
+                self.sidebar_stack.setCurrentIndex(0)
 
         if hasattr(self, "work_stack"):
             self.work_stack.setCurrentIndex(1 if mode == "r" else 0)
@@ -1357,6 +1622,47 @@ class ModernWindow(QMainWindow):
             ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
             self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")
 
+    def toggle_dark_mode(self):
+        self.set_dark_mode(not getattr(self, "_dark_mode", False))
+
+    def set_dark_mode(self, is_dark: bool):
+        self._dark_mode = is_dark
+        QSettings("StatCraft", "StatCraft").setValue("dark_mode", is_dark)
+        apply_theme_palette(QApplication.instance(), is_dark)
+        self.setStyleSheet(get_theme_stylesheet(is_dark))
+        if hasattr(self, "btn_theme_toggle"):
+            self.btn_theme_toggle.setChecked(is_dark)
+            self.btn_theme_toggle.setText("☀️ Light" if is_dark else "🌙 Dark")
+            self.btn_theme_toggle.setStyleSheet(
+                "QToolButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #27272a; color: #f4f4f5; } QToolButton:hover { background-color: #3f3f46; }"
+                if is_dark else
+                "QToolButton { border: 1px solid #adadad; border-radius: 3px; padding: 2px 8px; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; background-color: #f7f7f7; color: #222222; } QToolButton:hover { background-color: #e5f1fb; }"
+            )
+        if hasattr(self, "dark_mode_action"):
+            self.dark_mode_action.setChecked(is_dark)
+        if hasattr(self, "dark_mode_action_jmp") and self.dark_mode_action_jmp:
+            self.dark_mode_action_jmp.setChecked(is_dark)
+        if hasattr(self, "jmp_panel") and self.jmp_panel:
+            self.jmp_panel.set_dark_mode(is_dark)
+        if hasattr(self, "r_workbench") and self.r_workbench:
+            self.r_workbench.set_dark_mode(is_dark)
+        if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
+            self.r_explorer_panel.set_dark_mode(is_dark)
+        if hasattr(self, "entry_dir_label"):
+            self.entry_dir_label.setStyleSheet(
+                "background: transparent; color: #a1a1aa; font-size: 9pt; font-weight: 600;" if is_dark else
+                "background: transparent; color: #555555; font-size: 9pt; font-weight: 600;"
+            )
+        if hasattr(self, "col_header_view"):
+            self.col_header_view.viewport().update()
+        if hasattr(self, "row_header_view"):
+            self.row_header_view.viewport().update()
+        if hasattr(self, "column_names"):
+            self.column_names.viewport().update()
+        if hasattr(self, "table"):
+            self.table.viewport().update()
+        self.refresh()
+
     def run_r_script_dialog(self):
         """Prompt to choose an R script file, switch to R Mode and execute."""
         path, _ = QFileDialog.getOpenFileName(
@@ -1369,6 +1675,8 @@ class ModernWindow(QMainWindow):
             return
         content = Path(path).read_text(encoding="utf-8", errors="replace")
         self.set_ui_mode("r")
+        if hasattr(self, "jmp_panel") and self.jmp_panel:
+            self.jmp_panel.set_dark_mode(is_dark)
         if hasattr(self, "r_workbench") and self.r_workbench:
             self.r_workbench.editor.setPlainText(content)
             self.r_workbench.run_all()

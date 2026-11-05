@@ -110,6 +110,47 @@ class UIModeToggleTests(unittest.TestCase):
         self.win.jmp_panel.txt_col_filter.setText("")
         self.assertEqual(self.win.jmp_panel.list_cols.count(), 3)
 
+    def test_dark_mode_toggle_across_modes(self):
+        # Initial light mode
+        self.win.set_dark_mode(False)
+        self.assertFalse(self.win._dark_mode)
+        self.assertEqual(self.win.btn_theme_toggle.text(), "🌙 Dark")
+        self.assertFalse(self.win.dark_mode_action.isChecked())
+        if hasattr(self.win, "dark_mode_action_jmp"):
+            self.assertFalse(self.win.dark_mode_action_jmp.isChecked())
+
+        # Switch to dark mode
+        self.win.toggle_dark_mode()
+        self.assertTrue(self.win._dark_mode)
+        self.assertEqual(self.win.btn_theme_toggle.text(), "☀️ Light")
+        self.assertTrue(self.win.dark_mode_action.isChecked())
+        if hasattr(self.win, "dark_mode_action_jmp"):
+            self.assertTrue(self.win.dark_mode_action_jmp.isChecked())
+
+        # Verify R Workbench theme sync
+        if hasattr(self.win, "r_workbench") and self.win.r_workbench:
+            self.assertTrue(self.win.r_workbench.is_dark)
+        if hasattr(self.win, "r_explorer_panel") and self.win.r_explorer_panel:
+            self.assertTrue(self.win.r_explorer_panel.is_dark)
+
+        # Toggle back to light mode
+        self.win.toggle_dark_mode()
+        self.assertFalse(self.win._dark_mode)
+        self.assertEqual(self.win.btn_theme_toggle.text(), "🌙 Dark")
+        if hasattr(self.win, "r_workbench") and self.win.r_workbench:
+            self.assertFalse(self.win.r_workbench.is_dark)
+        if hasattr(self.win, "r_explorer_panel") and self.win.r_explorer_panel:
+            self.assertFalse(self.win.r_explorer_panel.is_dark)
+
+    def test_r_mode_explorer_and_worksheets(self):
+        self.win.set_ui_mode("r")
+        self.assertEqual(self.win._ui_mode, "r")
+        self.assertEqual(self.win.sidebar_stack.currentIndex(), 2)
+        self.assertIsNotNone(self.win.r_explorer_panel)
+        # Check worksheet appears in R explorer
+        sheets = [self.win.r_explorer_panel.list_sheets.item(i).text() for i in range(self.win.r_explorer_panel.list_sheets.count())]
+        self.assertTrue(any("Big Class" in s for s in sheets))
+
 
 if __name__ == "__main__":
     unittest.main()

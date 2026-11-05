@@ -71,15 +71,30 @@ from .r_bridge import (
 
 
 class VSCodeRSyntaxHighlighter(QSyntaxHighlighter):
-    """VS Code Dark+ syntax highlighter for R."""
+    """VS Code Light+ and Dark+ dual syntax highlighter for R."""
 
-    def __init__(self, document):
+    def __init__(self, document, is_dark: bool = False):
         super().__init__(document)
-        self.rules = []
+        self._is_dark = is_dark
+        self._rebuild_rules()
 
-        # 1. Keywords (VS Code Blue #569cd6)
+    @property
+    def is_dark(self) -> bool:
+        return getattr(self, "_is_dark", False)
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        if self._is_dark != is_dark:
+            self._is_dark = is_dark
+            self._rebuild_rules()
+            self.rehighlight()
+
+    def _rebuild_rules(self) -> None:
+        self.rules = []
+        is_dark = self._is_dark
+
+        # 1. Keywords (#0000ff in Light, #569cd6 in Dark)
         kw_format = QTextCharFormat()
-        kw_format.setForeground(QColor("#569cd6"))
+        kw_format.setForeground(QColor("#569cd6" if is_dark else "#0000ff"))
         kw_format.setFontWeight(QFont.Weight.Bold)
         keywords = [
             r"\bif\b", r"\belse\b", r"\brepeat\b", r"\bwhile\b", r"\bfunction\b",
@@ -90,9 +105,9 @@ class VSCodeRSyntaxHighlighter(QSyntaxHighlighter):
         for kw in keywords:
             self.rules.append((re.compile(kw), kw_format))
 
-        # 2. Built-in Functions & Calls (VS Code Yellow #dcdcaa)
+        # 2. Built-in Functions (#795e26 in Light, #dcdcaa in Dark)
         fn_format = QTextCharFormat()
-        fn_format.setForeground(QColor("#dcdcaa"))
+        fn_format.setForeground(QColor("#dcdcaa" if is_dark else "#795e26"))
         functions = [
             r"\blm\b", r"\baov\b", r"\bglm\b", r"\bsummary\b", r"\bplot\b",
             r"\bhist\b", r"\bboxplot\b", r"\babline\b", r"\bprint\b",
@@ -105,26 +120,26 @@ class VSCodeRSyntaxHighlighter(QSyntaxHighlighter):
         for fn in functions:
             self.rules.append((re.compile(fn), fn_format))
 
-        # 3. Strings (VS Code Warm Orange #ce9178)
+        # 3. Strings (#a31515 in Light, #ce9178 in Dark)
         str_format = QTextCharFormat()
-        str_format.setForeground(QColor("#ce9178"))
+        str_format.setForeground(QColor("#ce9178" if is_dark else "#a31515"))
         self.rules.append((re.compile(r'"[^"\\]*(\\.[^"\\]*)*"'), str_format))
         self.rules.append((re.compile(r"'[^'\\]*(\\.[^'\\]*)*'"), str_format))
 
-        # 4. Comments (VS Code Forest Green #6a9955, Italic)
+        # 4. Comments (#008000 in Light, #6a9955 in Dark, Italic)
         comm_format = QTextCharFormat()
-        comm_format.setForeground(QColor("#6a9955"))
+        comm_format.setForeground(QColor("#6a9955" if is_dark else "#008000"))
         comm_format.setFontItalic(True)
         self.rules.append((re.compile(r"#.*"), comm_format))
 
-        # 5. Numbers (VS Code Light Green #b5cea8)
+        # 5. Numbers (#098658 in Light, #b5cea8 in Dark)
         num_format = QTextCharFormat()
-        num_format.setForeground(QColor("#b5cea8"))
+        num_format.setForeground(QColor("#b5cea8" if is_dark else "#098658"))
         self.rules.append((re.compile(r"\b[0-9]+(\.[0-9]+)?\b"), num_format))
 
-        # 6. Variables / Attributes (VS Code Light Cyan #9cdcfe)
+        # 6. Variables (#001080 in Light, #9cdcfe in Dark)
         var_format = QTextCharFormat()
-        var_format.setForeground(QColor("#9cdcfe"))
+        var_format.setForeground(QColor("#9cdcfe" if is_dark else "#001080"))
         self.rules.append((re.compile(r"\b(df|worksheet)\b"), var_format))
 
     def highlightBlock(self, text: str) -> None:
@@ -151,9 +166,10 @@ class VSCodeLineNumberGutter(QWidget):
 class RCodeEditor(QPlainTextEdit):
     """VS Code / Positron-style Code Editor."""
 
-    def __init__(self, workbench=None, parent=None):
+    def __init__(self, workbench=None, parent=None, is_dark: bool = False):
         super().__init__(parent)
         self.workbench = workbench
+        self._is_dark = is_dark
         self.line_number_area = VSCodeLineNumberGutter(self)
         self.blockCountChanged.connect(self.update_line_number_area_width)
         self.updateRequest.connect(self.update_line_number_area)
@@ -166,18 +182,40 @@ class RCodeEditor(QPlainTextEdit):
         if not font.exactMatch():
             font = QFont("Consolas", 10)
         self.setFont(font)
-        self.setStyleSheet(
-            "QPlainTextEdit { "
-            "  background-color: #1e1e1e; "
-            "  color: #d4d4d4; "
-            "  border: none; "
-            "  selection-background-color: #264f78; "
-            "  selection-color: #ffffff; "
-            "  padding: 4px 0px; "
-            "}"
-        )
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.set_dark_mode(is_dark)
+
+    @property
+    def is_dark(self) -> bool:
+        return getattr(self, "_is_dark", False)
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        self._is_dark = is_dark
+        if is_dark:
+            self.setStyleSheet(
+                "QPlainTextEdit { "
+                "  background-color: #1e1e1e; "
+                "  color: #d4d4d4; "
+                "  border: none; "
+                "  selection-background-color: #264f78; "
+                "  selection-color: #ffffff; "
+                "  padding: 4px 0px; "
+                "}"
+            )
+        else:
+            self.setStyleSheet(
+                "QPlainTextEdit { "
+                "  background-color: #ffffff; "
+                "  color: #1e293b; "
+                "  border: none; "
+                "  selection-background-color: #bae6fd; "
+                "  selection-color: #0369a1; "
+                "  padding: 4px 0px; "
+                "}"
+            )
         self.highlight_current_line()
+        if hasattr(self, "line_number_area"):
+            self.line_number_area.update()
 
     def keyPressEvent(self, event) -> None:
         # Positron: Ctrl+Enter executes selection or current line, then advances cursor
@@ -216,7 +254,7 @@ class RCodeEditor(QPlainTextEdit):
         extra_selections = []
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
-            selection.format.setBackground(QColor("#282828"))
+            selection.format.setBackground(QColor("#282828" if self._is_dark else "#f1f5f9"))
             selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
             selection.cursor = self.textCursor()
             selection.cursor.clearSelection()
@@ -225,7 +263,12 @@ class RCodeEditor(QPlainTextEdit):
 
     def line_number_area_paint_event(self, event) -> None:
         painter = QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QColor("#1e1e1e"))
+        is_dark = self._is_dark
+        painter.fillRect(event.rect(), QColor("#1e1e1e" if is_dark else "#f8fafc"))
+        if not is_dark:
+            painter.setPen(QColor("#e2e8f0"))
+            painter.drawLine(self.line_number_area.width() - 1, event.rect().top(), self.line_number_area.width() - 1, event.rect().bottom())
+
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
         top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
@@ -241,7 +284,10 @@ class RCodeEditor(QPlainTextEdit):
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
                 is_active = (block_number == current_block)
-                painter.setPen(QColor("#c6c6c6" if is_active else "#6e7681"))
+                if is_dark:
+                    painter.setPen(QColor("#c6c6c6" if is_active else "#6e7681"))
+                else:
+                    painter.setPen(QColor("#0f172a" if is_active else "#94a3b8"))
                 painter.drawText(
                     0,
                     top,
@@ -259,19 +305,39 @@ class RCodeEditor(QPlainTextEdit):
 class RConsoleInput(QLineEdit):
     """Integrated VS Code terminal prompt input with Up/Down command history."""
 
-    def __init__(self, workbench, parent=None):
+    def __init__(self, workbench, parent=None, is_dark: bool = False):
         super().__init__(parent)
         self.workbench = workbench
         self.setFont(QFont("Consolas", 10))
-        self.setStyleSheet(
-            "QLineEdit { "
-            "  background-color: #18181b; "
-            "  color: #f4f4f5; "
-            "  border: none; "
-            "  padding: 3px 6px; "
-            "  selection-background-color: #264f78; "
-            "}"
-        )
+        self.set_dark_mode(is_dark)
+
+    @property
+    def is_dark(self) -> bool:
+        return getattr(self, "_is_dark", False)
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        if is_dark:
+            self.setStyleSheet(
+                "QLineEdit { "
+                "  background-color: #18181b; "
+                "  color: #f4f4f5; "
+                "  border: none; "
+                "  padding: 3px 6px; "
+                "  selection-background-color: #264f78; "
+                "}"
+            )
+        else:
+            self.setStyleSheet(
+                "QLineEdit { "
+                "  background-color: #ffffff; "
+                "  color: #0f172a; "
+                "  border: 1px solid #cbd5e1; "
+                "  border-radius: 3px; "
+                "  padding: 3px 6px; "
+                "  selection-background-color: #bae6fd; "
+                "  selection-color: #0369a1; "
+                "}"
+            )
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Up:
@@ -348,33 +414,35 @@ class RWorkbenchWidget(QWidget):
             "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
         )
 
+        self._is_dark: bool = False
+        self.panel_headers: List[QFrame] = []
+        self.panel_tabs: List[QFrame] = []
+        self.panel_tab_lbls: List[QLabel] = []
+        self.panel_action_btns: List[QPushButton] = []
+
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
         # 1. VS Code Command Header Bar
-        hdr = QFrame()
-        hdr.setFixedHeight(40)
-        hdr.setStyleSheet("background-color: #1f1f23; border-bottom: 1px solid #27272a; padding: 0 12px;")
-        hdr_layout = QHBoxLayout(hdr)
+        self.hdr_frame = QFrame()
+        self.hdr_frame.setFixedHeight(40)
+        hdr_layout = QHBoxLayout(self.hdr_frame)
         hdr_layout.setContentsMargins(0, 0, 0, 0)
         hdr_layout.setSpacing(10)
 
         # Breadcrumb / Brand
-        brand_lbl = QLabel("<b>POSITRON</b> · R Workbench")
-        brand_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #38bdf8; letter-spacing: 0.5px;")
-        hdr_layout.addWidget(brand_lbl)
+        self.brand_lbl = QLabel("<b>POSITRON</b> · R Workbench")
+        hdr_layout.addWidget(self.brand_lbl)
 
         # Status Pill
         self.status_pill = QFrame()
-        self.status_pill.setStyleSheet("background: #064e3b; border: 1px solid #059669; border-radius: 10px; padding: 1px 8px;")
         sp_layout = QHBoxLayout(self.status_pill)
         sp_layout.setContentsMargins(4, 1, 4, 1)
         sp_layout.setSpacing(4)
         self.status_dot = QLabel("🟢")
         self.status_dot.setStyleSheet("font-size: 9px;")
         self.status_text = QLabel("R Initializing...")
-        self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #a7f3d0;")
         sp_layout.addWidget(self.status_dot)
         sp_layout.addWidget(self.status_text)
         hdr_layout.addWidget(self.status_pill)
@@ -382,45 +450,32 @@ class RWorkbenchWidget(QWidget):
         hdr_layout.addStretch()
 
         # Primary Action Buttons (VS Code Style)
-        btn_open = QPushButton("Open…")
-        btn_open.setStyleSheet("QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 8px; font-size: 11px; } QPushButton:hover { background-color: #3f3f46; }")
-        btn_open.clicked.connect(self._open_script_file)
-        hdr_layout.addWidget(btn_open)
+        self.btn_open = QPushButton("Open…")
+        self.btn_open.clicked.connect(self._open_script_file)
+        hdr_layout.addWidget(self.btn_open)
 
-        btn_save = QPushButton("Save…")
-        btn_save.setStyleSheet("QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 8px; font-size: 11px; } QPushButton:hover { background-color: #3f3f46; }")
-        btn_save.clicked.connect(self._save_script_file)
-        hdr_layout.addWidget(btn_save)
+        self.btn_save = QPushButton("Save…")
+        self.btn_save.clicked.connect(self._save_script_file)
+        hdr_layout.addWidget(self.btn_save)
 
         self.btn_template = QPushButton("Templates ▾")
-        self.btn_template.setStyleSheet("QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 10px; font-size: 11px; } QPushButton:hover { background-color: #3f3f46; }")
         self.btn_template.clicked.connect(self._show_templates_menu)
         hdr_layout.addWidget(self.btn_template)
 
         self.btn_run_sel = QPushButton("▶ Run Line (Ctrl+Enter)")
         self.btn_run_sel.setToolTip("Execute current line or selection and advance to next line (Positron model)")
-        self.btn_run_sel.setStyleSheet(
-            "QPushButton { background-color: #0078d4; color: #ffffff; border: none; border-radius: 4px; padding: 4px 14px; font-weight: bold; font-size: 11px; } "
-            "QPushButton:hover { background-color: #106ebe; } "
-            "QPushButton:pressed { background-color: #005a9e; }"
-        )
         self.btn_run_sel.clicked.connect(self.run_selection_or_line)
         hdr_layout.addWidget(self.btn_run_sel)
 
         self.btn_run_all = QPushButton("⏩ Run All")
         self.btn_run_all.setToolTip("Execute entire R script in persistent memory")
-        self.btn_run_all.setStyleSheet(
-            "QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 12px; font-weight: bold; font-size: 11px; } "
-            "QPushButton:hover { background-color: #3f3f46; }"
-        )
         self.btn_run_all.clicked.connect(self.run_all)
         hdr_layout.addWidget(self.btn_run_all)
 
-        root_layout.addWidget(hdr)
+        root_layout.addWidget(self.hdr_frame)
 
         # 2. Missing R Warning Banner
         self.r_banner = QFrame()
-        self.r_banner.setStyleSheet("background-color: #450a0a; border-bottom: 1px solid #7f1d1d; padding: 6px 12px;")
         b_layout = QHBoxLayout(self.r_banner)
         b_layout.setContentsMargins(0, 0, 0, 0)
         b_layout.setSpacing(10)
@@ -429,9 +484,8 @@ class RWorkbenchWidget(QWidget):
         b_icon.setStyleSheet("font-size: 13px;")
         b_layout.addWidget(b_icon)
 
-        b_text = QLabel("<b>R is not detected on your system.</b> Install R to run calculations, REPL commands, and generate plots.")
-        b_text.setStyleSheet("color: #fca5a5; font-size: 11px;")
-        b_layout.addWidget(b_text)
+        self.b_text = QLabel("<b>R is not detected on your system.</b> Install R to run calculations, REPL commands, and generate plots.")
+        b_layout.addWidget(self.b_text)
         b_layout.addStretch()
 
         btn_auto_install = QPushButton("📥 Auto-Install R")
@@ -439,15 +493,13 @@ class RWorkbenchWidget(QWidget):
         btn_auto_install.clicked.connect(self._install_r_automatically)
         b_layout.addWidget(btn_auto_install)
 
-        btn_browse = QPushButton("🔍 Browse for R…")
-        btn_browse.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #52525b; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
-        btn_browse.clicked.connect(self._browse_r_executable)
-        b_layout.addWidget(btn_browse)
+        self.btn_browse = QPushButton("🔍 Browse for R…")
+        self.btn_browse.clicked.connect(self._browse_r_executable)
+        b_layout.addWidget(self.btn_browse)
 
-        btn_cran = QPushButton("🌐 CRAN Website")
-        btn_cran.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #52525b; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
-        btn_cran.clicked.connect(lambda: webbrowser.open("https://cloud.r-project.org/"))
-        b_layout.addWidget(btn_cran)
+        self.btn_cran = QPushButton("🌐 CRAN Website")
+        self.btn_cran.clicked.connect(lambda: webbrowser.open("https://cloud.r-project.org/"))
+        b_layout.addWidget(self.btn_cran)
 
         root_layout.addWidget(self.r_banner)
 
@@ -460,37 +512,33 @@ class RWorkbenchWidget(QWidget):
         def create_panel_header(tab_title: str, actions: List[Tuple[str, Any]] = None) -> Tuple[QFrame, QHBoxLayout]:
             header = QFrame()
             header.setFixedHeight(34)
-            header.setStyleSheet("background-color: #1f1f23; border-bottom: 1px solid #27272a;")
             lay = QHBoxLayout(header)
             lay.setContentsMargins(12, 0, 8, 0)
             lay.setSpacing(6)
 
-            # Active Tab styling (with blue top highlight bar)
             tab_frame = QFrame()
-            tab_frame.setStyleSheet("background-color: #18181b; border-top: 2px solid #0078d4; padding: 0 10px;")
             tf_lay = QHBoxLayout(tab_frame)
             tf_lay.setContentsMargins(0, 0, 0, 0)
             t_lbl = QLabel(tab_title)
-            t_lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #ffffff;")
             tf_lay.addWidget(t_lbl)
             lay.addWidget(tab_frame)
             lay.addStretch()
 
+            self.panel_headers.append(header)
+            self.panel_tabs.append(tab_frame)
+            self.panel_tab_lbls.append(t_lbl)
+
             if actions:
                 for text, slot in actions:
                     b = QPushButton(text)
-                    b.setStyleSheet(
-                        "QPushButton { background: transparent; color: #a1a1aa; border: none; font-size: 10.5px; padding: 3px 6px; border-radius: 3px; } "
-                        "QPushButton:hover { background-color: #27272a; color: #ffffff; }"
-                    )
                     b.clicked.connect(slot)
                     lay.addWidget(b)
+                    self.panel_action_btns.append(b)
             return header, lay
 
         # Pane 1: VS Code R Script Editor
-        editor_panel = QFrame()
-        editor_panel.setStyleSheet("background-color: #1e1e1e; border: none;")
-        ed_layout = QVBoxLayout(editor_panel)
+        self.editor_panel = QFrame()
+        ed_layout = QVBoxLayout(self.editor_panel)
         ed_layout.setContentsMargins(0, 0, 0, 0)
         ed_layout.setSpacing(0)
 
@@ -520,12 +568,11 @@ class RWorkbenchWidget(QWidget):
         )
         self.editor.setPlainText(default_code)
         ed_layout.addWidget(self.editor)
-        left_splitter.addWidget(editor_panel)
+        left_splitter.addWidget(self.editor_panel)
 
         # Pane 2: VS Code Terminal / Interactive R Console
-        console_panel = QFrame()
-        console_panel.setStyleSheet("background-color: #18181b; border: none;")
-        con_layout = QVBoxLayout(console_panel)
+        self.console_panel = QFrame()
+        con_layout = QVBoxLayout(self.console_panel)
         con_layout.setContentsMargins(0, 0, 0, 0)
         con_layout.setSpacing(0)
 
@@ -541,40 +588,28 @@ class RWorkbenchWidget(QWidget):
         self.console_output = QPlainTextEdit()
         self.console_output.setReadOnly(True)
         self.console_output.setFont(QFont("Cascadia Code" if QFont("Cascadia Code").exactMatch() else "Consolas", 9.5))
-        self.console_output.setStyleSheet(
-            "QPlainTextEdit { "
-            "  background-color: #18181b; "
-            "  color: #f4f4f5; "
-            "  border: none; "
-            "  padding: 8px 12px; "
-            "  selection-background-color: #264f78; "
-            "}"
-        )
         con_layout.addWidget(self.console_output)
 
         # Bottom Interactive Prompt Row
-        repl_frame = QFrame()
-        repl_frame.setStyleSheet("background-color: #1f1f23; border-top: 1px solid #27272a; padding: 2px 8px;")
-        repl_row = QHBoxLayout(repl_frame)
+        self.repl_frame = QFrame()
+        repl_row = QHBoxLayout(self.repl_frame)
         repl_row.setContentsMargins(4, 2, 4, 2)
         repl_row.setSpacing(6)
 
-        prompt_lbl = QLabel("❯")
-        prompt_lbl.setStyleSheet("color: #38bdf8; font-weight: bold; font-family: Consolas; font-size: 12px;")
-        repl_row.addWidget(prompt_lbl)
+        self.prompt_lbl = QLabel("❯")
+        repl_row.addWidget(self.prompt_lbl)
 
         self.repl_input = RConsoleInput(workbench=self)
         self.repl_input.setPlaceholderText("Type R expression (e.g. summary(df), hist(df[[1]]), cor(df))...")
         self.repl_input.returnPressed.connect(self._run_repl)
         repl_row.addWidget(self.repl_input)
-        con_layout.addWidget(repl_frame)
+        con_layout.addWidget(self.repl_frame)
 
-        left_splitter.addWidget(console_panel)
+        left_splitter.addWidget(self.console_panel)
 
         # Pane 3: VS Code Environment / Data Objects Inspector
-        env_panel = QFrame()
-        env_panel.setStyleSheet("background-color: #1e1e1e; border: none;")
-        env_layout = QVBoxLayout(env_panel)
+        self.env_panel = QFrame()
+        env_layout = QVBoxLayout(self.env_panel)
         env_layout.setContentsMargins(0, 0, 0, 0)
         env_layout.setSpacing(0)
 
@@ -591,31 +626,12 @@ class RWorkbenchWidget(QWidget):
         self.env_table.horizontalHeader().setStretchLastSection(True)
         self.env_table.verticalHeader().setVisible(False)
         self.env_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.env_table.setStyleSheet(
-            "QTableWidget { "
-            "  background-color: #1e1e1e; "
-            "  color: #cccccc; "
-            "  gridline-color: #27272a; "
-            "  border: none; "
-            "  font-size: 11px; "
-            "  selection-background-color: #264f78; "
-            "} "
-            "QHeaderView::section { "
-            "  background-color: #252526; "
-            "  color: #a1a1aa; "
-            "  font-weight: 600; "
-            "  border: none; "
-            "  border-bottom: 1px solid #27272a; "
-            "  padding: 4px 6px; "
-            "}"
-        )
         env_layout.addWidget(self.env_table)
-        right_splitter.addWidget(env_panel)
+        right_splitter.addWidget(self.env_panel)
 
         # Pane 4: VS Code Graphics & Plot Viewer
-        plot_panel = QFrame()
-        plot_panel.setStyleSheet("background-color: #18181b; border: none;")
-        plot_layout = QVBoxLayout(plot_panel)
+        self.plot_panel = QFrame()
+        plot_layout = QVBoxLayout(self.plot_panel)
         plot_layout.setContentsMargins(0, 0, 0, 0)
         plot_layout.setSpacing(0)
 
@@ -627,14 +643,12 @@ class RWorkbenchWidget(QWidget):
 
         self.plot_scroll = QScrollArea()
         self.plot_scroll.setWidgetResizable(True)
-        self.plot_scroll.setStyleSheet("background-color: #18181b; border: none;")
         self.plot_label = QLabel("No graphics generated yet.\nRun a plotting command (e.g. plot(), hist(), ggplot()).")
         self.plot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.plot_label.setStyleSheet("color: #71717a; font-size: 11px; padding: 20px;")
         self.plot_scroll.setWidget(self.plot_label)
         plot_layout.addWidget(self.plot_scroll)
 
-        right_splitter.addWidget(plot_panel)
+        right_splitter.addWidget(self.plot_panel)
 
         # Proportions
         left_splitter.setSizes([360, 260])
@@ -645,9 +659,122 @@ class RWorkbenchWidget(QWidget):
 
         root_layout.addWidget(h_splitter)
 
+        # Apply Light Theme by default (or Dark if toggled)
+        self.set_dark_mode(False)
+
         # Check R presence and populate
         self._check_and_update_r_status()
         self.refresh_environment()
+
+    @property
+    def is_dark(self) -> bool:
+        return getattr(self, "_is_dark", False)
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        """Apply either VS Code Light+ or VS Code Dark Modern theme across all workbench panes."""
+        self._is_dark = is_dark
+        self.editor.set_dark_mode(is_dark)
+        self.highlighter.set_dark_mode(is_dark)
+        self.repl_input.set_dark_mode(is_dark)
+
+        if is_dark:
+            self.setStyleSheet(
+                "QWidget { background-color: #18181b; color: #cccccc; font-family: 'Segoe UI', -apple-system, sans-serif; }"
+                "QSplitter::handle { background-color: #27272a; }"
+                "QScrollBar:vertical { background: #18181b; width: 10px; margin: 0; }"
+                "QScrollBar::handle:vertical { background: #3f3f46; min-height: 20px; border-radius: 4px; }"
+                "QScrollBar::handle:vertical:hover { background: #52525b; }"
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+                "QScrollBar:horizontal { background: #18181b; height: 10px; margin: 0; }"
+                "QScrollBar::handle:horizontal { background: #3f3f46; min-width: 20px; border-radius: 4px; }"
+                "QScrollBar::handle:horizontal:hover { background: #52525b; }"
+                "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
+            )
+            self.hdr_frame.setStyleSheet("background-color: #1f1f23; border-bottom: 1px solid #27272a; padding: 0 12px;")
+            self.brand_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #38bdf8; letter-spacing: 0.5px;")
+            btn_style = "QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 8px; font-size: 11px; } QPushButton:hover { background-color: #3f3f46; }"
+            self.btn_open.setStyleSheet(btn_style)
+            self.btn_save.setStyleSheet(btn_style)
+            self.btn_template.setStyleSheet(btn_style)
+            self.btn_run_all.setStyleSheet("QPushButton { background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 12px; font-weight: bold; font-size: 11px; } QPushButton:hover { background-color: #3f3f46; }")
+            self.btn_run_sel.setStyleSheet("QPushButton { background-color: #0078d4; color: #ffffff; border: none; border-radius: 4px; padding: 4px 14px; font-weight: bold; font-size: 11px; } QPushButton:hover { background-color: #106ebe; }")
+
+            self.r_banner.setStyleSheet("background-color: #450a0a; border-bottom: 1px solid #7f1d1d; padding: 6px 12px;")
+            self.b_text.setStyleSheet("color: #fca5a5; font-size: 11px;")
+            self.btn_browse.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #52525b; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
+            self.btn_cran.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #52525b; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
+
+            for h in self.panel_headers:
+                h.setStyleSheet("background-color: #1f1f23; border-bottom: 1px solid #27272a;")
+            for t in self.panel_tabs:
+                t.setStyleSheet("background-color: #18181b; border-top: 2px solid #0078d4; padding: 0 10px;")
+            for lbl in self.panel_tab_lbls:
+                lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #ffffff;")
+            for b in self.panel_action_btns:
+                b.setStyleSheet("QPushButton { background: transparent; color: #a1a1aa; border: none; font-size: 10.5px; padding: 3px 6px; border-radius: 3px; } QPushButton:hover { background-color: #27272a; color: #ffffff; }")
+
+            self.console_panel.setStyleSheet("background-color: #18181b; border: none;")
+            self.console_output.setStyleSheet("QPlainTextEdit { background-color: #18181b; color: #f4f4f5; border: none; padding: 8px 12px; selection-background-color: #264f78; }")
+            self.repl_frame.setStyleSheet("background-color: #1f1f23; border-top: 1px solid #27272a; padding: 2px 8px;")
+            self.prompt_lbl.setStyleSheet("color: #38bdf8; font-weight: bold; font-family: Consolas; font-size: 12px;")
+
+            self.editor_panel.setStyleSheet("background-color: #1e1e1e; border: none;")
+            self.env_panel.setStyleSheet("background-color: #1e1e1e; border: none;")
+            self.env_table.setStyleSheet("QTableWidget { background-color: #1e1e1e; color: #cccccc; gridline-color: #27272a; border: none; font-size: 11px; selection-background-color: #264f78; } QHeaderView::section { background-color: #252526; color: #a1a1aa; font-weight: 600; border: none; border-bottom: 1px solid #27272a; padding: 4px 6px; }")
+
+            self.plot_panel.setStyleSheet("background-color: #18181b; border: none;")
+            self.plot_scroll.setStyleSheet("background-color: #18181b; border: none;")
+            self.plot_label.setStyleSheet("color: #71717a; font-size: 11px; padding: 20px;")
+        else:
+            self.setStyleSheet(
+                "QWidget { background-color: #ffffff; color: #1e293b; font-family: 'Segoe UI', -apple-system, sans-serif; }"
+                "QSplitter::handle { background-color: #e2e8f0; }"
+                "QScrollBar:vertical { background: #f8fafc; width: 10px; margin: 0; }"
+                "QScrollBar::handle:vertical { background: #cbd5e1; min-height: 20px; border-radius: 4px; }"
+                "QScrollBar::handle:vertical:hover { background: #94a3b8; }"
+                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+                "QScrollBar:horizontal { background: #f8fafc; height: 10px; margin: 0; }"
+                "QScrollBar::handle:horizontal { background: #cbd5e1; min-width: 20px; border-radius: 4px; }"
+                "QScrollBar::handle:horizontal:hover { background: #94a3b8; }"
+                "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
+            )
+            self.hdr_frame.setStyleSheet("background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 0 12px;")
+            self.brand_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #0284c7; letter-spacing: 0.5px;")
+            btn_style = "QPushButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-size: 11px; } QPushButton:hover { background-color: #f1f5f9; }"
+            self.btn_open.setStyleSheet(btn_style)
+            self.btn_save.setStyleSheet(btn_style)
+            self.btn_template.setStyleSheet(btn_style)
+            self.btn_run_all.setStyleSheet("QPushButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 12px; font-weight: bold; font-size: 11px; } QPushButton:hover { background-color: #f1f5f9; }")
+            self.btn_run_sel.setStyleSheet("QPushButton { background-color: #0284c7; color: #ffffff; border: none; border-radius: 4px; padding: 4px 14px; font-weight: bold; font-size: 11px; } QPushButton:hover { background-color: #0369a1; }")
+
+            self.r_banner.setStyleSheet("background-color: #fef2f2; border-bottom: 1px solid #fecaca; padding: 6px 12px;")
+            self.b_text.setStyleSheet("color: #b91c1c; font-size: 11px;")
+            self.btn_browse.setStyleSheet("background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
+            self.btn_cran.setStyleSheet("background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-size: 11px;")
+
+            for h in self.panel_headers:
+                h.setStyleSheet("background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;")
+            for t in self.panel_tabs:
+                t.setStyleSheet("background-color: #ffffff; border-top: 2px solid #0284c7; padding: 0 10px;")
+            for lbl in self.panel_tab_lbls:
+                lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #0f172a;")
+            for b in self.panel_action_btns:
+                b.setStyleSheet("QPushButton { background: transparent; color: #64748b; border: none; font-size: 10.5px; padding: 3px 6px; border-radius: 3px; } QPushButton:hover { background-color: #e2e8f0; color: #0f172a; }")
+
+            self.console_panel.setStyleSheet("background-color: #ffffff; border: none;")
+            self.console_output.setStyleSheet("QPlainTextEdit { background-color: #ffffff; color: #0f172a; border: none; padding: 8px 12px; selection-background-color: #bae6fd; selection-color: #0369a1; }")
+            self.repl_frame.setStyleSheet("background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 2px 8px;")
+            self.prompt_lbl.setStyleSheet("color: #0284c7; font-weight: bold; font-family: Consolas; font-size: 12px;")
+
+            self.editor_panel.setStyleSheet("background-color: #ffffff; border: none;")
+            self.env_panel.setStyleSheet("background-color: #ffffff; border: none;")
+            self.env_table.setStyleSheet("QTableWidget { background-color: #ffffff; color: #1e293b; gridline-color: #e2e8f0; border: none; font-size: 11px; selection-background-color: #e0f2fe; selection-color: #0369a1; } QHeaderView::section { background-color: #f1f5f9; color: #475569; font-weight: 600; border: none; border-bottom: 1px solid #e2e8f0; padding: 4px 6px; }")
+
+            self.plot_panel.setStyleSheet("background-color: #f8fafc; border: none;")
+            self.plot_scroll.setStyleSheet("background-color: #f8fafc; border: none;")
+            self.plot_label.setStyleSheet("color: #64748b; font-size: 11px; padding: 20px;")
+
+        self._check_and_update_r_status()
 
     def _check_and_update_r_status(self) -> None:
         """Scan system for R and update status pill & warning banner."""
@@ -657,8 +784,12 @@ class RWorkbenchWidget(QWidget):
             clean_ver = ver.splitlines()[0] if ver else "R Active"
             self.status_dot.setText("🟢")
             self.status_text.setText(clean_ver)
-            self.status_pill.setStyleSheet("background: #064e3b; border: 1px solid #059669; border-radius: 10px; padding: 1px 8px;")
-            self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #a7f3d0;")
+            if self._is_dark:
+                self.status_pill.setStyleSheet("background: #064e3b; border: 1px solid #059669; border-radius: 10px; padding: 1px 8px;")
+                self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #a7f3d0;")
+            else:
+                self.status_pill.setStyleSheet("background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 1px 8px;")
+                self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #047857;")
             self.r_banner.hide()
             self.con_status_lbl.setText("Session: Active (< 0.5 ms)")
             self.console_output.setPlainText(
@@ -669,8 +800,12 @@ class RWorkbenchWidget(QWidget):
         else:
             self.status_dot.setText("🔴")
             self.status_text.setText("R Not Detected")
-            self.status_pill.setStyleSheet("background: #450a0a; border: 1px solid #7f1d1d; border-radius: 10px; padding: 1px 8px;")
-            self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #fca5a5;")
+            if self._is_dark:
+                self.status_pill.setStyleSheet("background: #450a0a; border: 1px solid #7f1d1d; border-radius: 10px; padding: 1px 8px;")
+                self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #fca5a5;")
+            else:
+                self.status_pill.setStyleSheet("background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 1px 8px;")
+                self.status_text.setStyleSheet("font-size: 11px; font-weight: 600; color: #b91c1c;")
             self.r_banner.show()
             self.con_status_lbl.setText("Session: Disconnected")
             self.console_output.setPlainText(
@@ -886,11 +1021,11 @@ class RWorkbenchWidget(QWidget):
                     font = item.font()
                     font.setBold(True)
                     item.setFont(font)
-                    item.setForeground(QColor("#38bdf8"))
+                    item.setForeground(QColor("#38bdf8" if self._is_dark else "#0284c7"))
                 elif c_idx == 1:
-                    item.setForeground(QColor("#4ec9b0"))
+                    item.setForeground(QColor("#4ec9b0" if self._is_dark else "#059669"))
                 else:
-                    item.setForeground(QColor("#a1a1aa"))
+                    item.setForeground(QColor("#a1a1aa" if self._is_dark else "#475569"))
                 self.env_table.setItem(r_idx, c_idx, item)
 
     def _import_selected_to_worksheet(self) -> None:

@@ -1,3 +1,18 @@
+
+def _is_dark_active(widget=None) -> bool:
+    if widget is not None:
+        try:
+            win = widget.window()
+            if win and hasattr(win, "_dark_mode"):
+                return bool(win._dark_mode)
+        except Exception:
+            pass
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app:
+        return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
+    return False
+
 """Worksheet key navigation, active cell editor, and Standard statistical column/row selection painting."""
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
@@ -45,17 +60,30 @@ class WorksheetHeaderView(QHeaderView):
         is_selected = logicalIndex in self.selected_sections
         is_active = logicalIndex in self.active_sections
 
+        dark = _is_dark_active(self)
         if self.orientation() == Qt.Orientation.Horizontal:
-            bg = QColor("#004a7c") if is_selected else QColor("#dfe6ed") if is_active else QColor("#f0f0f0")
-            fg = QColor("#ffffff") if is_selected else QColor("#004a7c") if is_active else QColor("#222222")
+            if dark:
+                bg = QColor("#0284c7") if is_selected else QColor("#27272a") if is_active else QColor("#1f1f23")
+                fg = QColor("#ffffff") if is_selected else QColor("#38bdf8") if is_active else QColor("#e4e4e7")
+                border = QColor("#3f3f46")
+            else:
+                bg = QColor("#004a7c") if is_selected else QColor("#dfe6ed") if is_active else QColor("#f0f0f0")
+                fg = QColor("#ffffff") if is_selected else QColor("#004a7c") if is_active else QColor("#222222")
+                border = QColor("#c8c8c8")
             bold = is_selected or is_active
         else:
-            bg = QColor("#004a7c") if is_selected else QColor("#d8d8d8") if is_active else QColor("#f0f0f0")
-            fg = QColor("#ffffff") if is_selected else QColor("#004a7c") if is_active else QColor("#222222")
+            if dark:
+                bg = QColor("#0284c7") if is_selected else QColor("#27272a") if is_active else QColor("#18181b")
+                fg = QColor("#ffffff") if is_selected else QColor("#38bdf8") if is_active else QColor("#a1a1aa")
+                border = QColor("#3f3f46")
+            else:
+                bg = QColor("#004a7c") if is_selected else QColor("#d8d8d8") if is_active else QColor("#f0f0f0")
+                fg = QColor("#ffffff") if is_selected else QColor("#004a7c") if is_active else QColor("#222222")
+                border = QColor("#c8c8c8")
             bold = is_selected or is_active
 
         painter.fillRect(rect, bg)
-        painter.setPen(QColor("#c8c8c8"))
+        painter.setPen(border)
         painter.drawLine(rect.topRight(), rect.bottomRight())
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
 
@@ -99,17 +127,21 @@ class WorksheetDelegate(QStyledItemDelegate):
         opt.state &= ~QStyle.StateFlag.State_Selected
         opt.state &= ~QStyle.StateFlag.State_HasFocus
 
+        dark = _is_dark_active(table)
         painter.save()
         if isinstance(custom_bg, QColor):
             painter.fillRect(opt.rect, custom_bg)
         elif in_sel_col or in_sel_row:
-            painter.fillRect(opt.rect, QColor("#eaeaea"))
+            painter.fillRect(opt.rect, QColor("#27272a") if dark else QColor("#eaeaea"))
         elif is_cell_selected:
-            painter.fillRect(opt.rect, QColor("#e4effa"))
+            painter.fillRect(opt.rect, QColor("#094771") if dark else QColor("#e4effa"))
         elif self.is_column_names:
-            painter.fillRect(opt.rect, QColor("#f0f0f0"))
+            painter.fillRect(opt.rect, QColor("#1f1f23") if dark else QColor("#f0f0f0"))
         else:
-            painter.fillRect(opt.rect, QColor("#ffffff"))
+            painter.fillRect(opt.rect, QColor("#18181b") if dark else QColor("#ffffff"))
+
+        if dark:
+            opt.palette.setColor(opt.palette.ColorRole.Text, QColor("#f4f4f5"))
 
         super().paint(painter, opt, index)
 
@@ -125,7 +157,7 @@ class WorksheetDelegate(QStyledItemDelegate):
             ]))
 
         # Crisp dark-navy StatCraft outline along the edges of selected columns/rows
-        pen = QPen(QColor("#004a7c"), 2)
+        pen = QPen(QColor("#38bdf8") if dark else QColor("#004a7c"), 2)
         painter.setPen(pen)
         r = opt.rect
         if in_sel_col:
