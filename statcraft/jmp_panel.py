@@ -116,6 +116,18 @@ class ColumnPropertiesDialog(QDialog):
         self.setWindowTitle(f"Column Info - {col_name}")
         self.setFixedSize(360, 260)
         self.setFont(QFont("Segoe UI", 9))
+        self.setStyleSheet("""
+            QDialog { background-color: #f8fafc; color: #1e293b; }
+            QLabel { color: #1e293b; font-size: 9pt; }
+            QLineEdit { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; }
+            QLineEdit:focus { border-color: #0078d7; }
+            QRadioButton { color: #1e293b; font-size: 9pt; spacing: 6px; }
+            QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; border: 1px solid #94a3b8; background-color: #ffffff; }
+            QRadioButton::indicator:checked { border: 1px solid #0078d7; background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #0078d7, stop:0.55 #0078d7, stop:0.65 #ffffff, stop:1 #ffffff); }
+            QPushButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 14px; min-height: 22px; }
+            QPushButton:hover { background-color: #f1f5f9; border-color: #94a3b8; }
+            QPushButton:default { background-color: #005a9e; color: #ffffff; border-color: #004578; font-weight: 600; }
+        """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -184,72 +196,76 @@ class JMPTablePanel(QWidget):
 
         self.setStyleSheet("""
             QWidget#jmpTablePanel {
-                background-color: #f7f9fa;
-                border-right: 1px solid #dcdcdc;
+                background-color: #f8fafc;
+                border-right: 1px solid #e2e8f0;
             }
             QWidget#jmpHeader {
-                background-color: #0277bd;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0369a1);
                 color: #ffffff;
-                border-bottom: 1px solid #01579b;
+                border-bottom: 1px solid #0284c7;
             }
             QLabel#jmpHeaderTitle {
                 color: #ffffff;
                 font-size: 9.5pt;
-                font-weight: bold;
+                font-weight: 700;
             }
             QLabel#jmpHeaderSub {
-                color: #e1f5fe;
+                color: #e0f2fe;
                 font-size: 8pt;
             }
             QWidget#jmpSectionHeader {
-                background-color: #e8ecf0;
-                border-top: 1px solid #d4d9de;
-                border-bottom: 1px solid #d4d9de;
+                background-color: #f1f5f9;
+                border-top: 1px solid #e2e8f0;
+                border-bottom: 1px solid #e2e8f0;
             }
             QLabel#jmpSectionTitle {
                 font-size: 8.5pt;
-                font-weight: 700;
-                color: #37474f;
+                font-weight: 600;
+                color: #334155;
             }
             QListWidget {
                 background-color: #ffffff;
                 border: none;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
                 font-size: 8.5pt;
             }
             QListWidget::item {
-                padding: 4px 6px;
-                border-bottom: 1px solid #f0f0f0;
-                color: #212121;
+                padding: 5px 8px;
+                border-bottom: 1px solid #f8fafc;
+                color: #1e293b;
             }
             QListWidget::item:hover {
-                background-color: #e3f2fd;
+                background-color: #f1f5f9;
             }
             QListWidget::item:selected {
-                background-color: #bbdefb;
-                color: #0d47a1;
+                background-color: #e0f2fe;
+                color: #0369a1;
                 font-weight: 600;
             }
             QLineEdit#jmpFilter {
                 background-color: #ffffff;
-                border: 1px solid #cccccc;
-                border-radius: 2px;
-                padding: 2px 6px;
+                color: #1e293b;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 3px 6px;
                 font-size: 8.5pt;
+            }
+            QLineEdit#jmpFilter:focus {
+                border-color: #0284c7;
             }
             QPushButton.jmpMiniBtn {
                 background-color: #ffffff;
-                border: 1px solid #cccccc;
-                border-radius: 2px;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
                 font-size: 8pt;
                 padding: 2px 6px;
                 min-width: 40px;
-                color: #333333;
+                color: #334155;
             }
             QPushButton.jmpMiniBtn:hover {
-                background-color: #e1f5fe;
-                border-color: #0288d1;
-                color: #01579b;
+                background-color: #e0f2fe;
+                border-color: #0284c7;
+                color: #0369a1;
             }
         """)
 

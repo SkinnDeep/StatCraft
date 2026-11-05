@@ -8,6 +8,14 @@ from pathlib import Path
 
 # Ensure offscreen Qt platform
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["STATCRAFT_TESTING"] = "1"
+
+_root = Path(__file__).resolve().parent.parent
+_deps = _root.parent / "statcraft-build-deps"
+if _deps.exists() and str(_deps) not in sys.path:
+    sys.path.insert(0, str(_deps))
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
 from PySide6.QtWidgets import QApplication
 from statcraft.modern_app import ModernWindow
@@ -15,11 +23,12 @@ from statcraft.model import Worksheet, Column
 from statcraft.jmp_panel import get_jmp_icon, JMPTablePanel
 
 
-app = QApplication.instance() or QApplication(sys.argv)
-
-
 class UIModeToggleTests(unittest.TestCase):
     """Test switching between Minitab Classic and JMP Platform UI modes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
         self.win = ModernWindow()
@@ -33,6 +42,8 @@ class UIModeToggleTests(unittest.TestCase):
 
     def tearDown(self):
         self.win.close()
+        self.win.deleteLater()
+        self.app.processEvents()
 
     def test_default_mode_and_switch_to_jmp(self):
         self.win.set_ui_mode("minitab")
