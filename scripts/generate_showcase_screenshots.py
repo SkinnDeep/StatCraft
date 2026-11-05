@@ -390,6 +390,43 @@ def render_r_workbench():
     print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
 
 
+def render_variability():
+    from statcraft.variability_engine import calculate_variability_analysis
+    from statcraft.variability_chart import VariabilityPlatformWidget
+
+    # 5 parts x 3 operators x 3 reps = 45 runs
+    parts = [f"Part {p}" for p in range(1, 6) for _ in range(9)]
+    operators = [f"Op {o}" for _ in range(5) for o in (1, 2, 3) for _ in range(3)]
+    import random
+    rng = random.Random(101)
+    measurements = []
+    for i in range(len(parts)):
+        p_val = int(parts[i].split(" ")[1]) * 3.2
+        o_val = int(operators[i].split(" ")[1]) * 0.6
+        noise = rng.gauss(0, 0.22)
+        measurements.append(45.0 + p_val + o_val + noise)
+
+    res = calculate_variability_analysis(
+        y_values=measurements,
+        x_groupings=[("Part", parts), ("Operator", operators)],
+        lsl=46.0,
+        usl=65.0,
+    )
+
+    w = VariabilityPlatformWidget(res, title="Thickness by Part * Operator")
+    w.resize(1200, 680)
+    w.show()
+    app.processEvents()
+
+    target = img_dir / "jmp-variability.png"
+    pix = w.grab()
+    pix.save(str(target))
+    w.close()
+    w.deleteLater()
+    app.processEvents()
+    print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
+
+
 if __name__ == "__main__":
     print("Starting screenshot generation pipeline with native TrueType typography...")
     render_jmp_platform_ui()
@@ -403,4 +440,5 @@ if __name__ == "__main__":
     render_control_chart_builder()
     render_process_screening()
     render_r_workbench()
+    render_variability()
     print("All screenshots generated successfully.")

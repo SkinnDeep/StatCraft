@@ -30,6 +30,7 @@ class TestShowcaseScreenshots(unittest.TestCase):
             "control-chart.png",
             "control-chart-builder.png",
             "process-screening.png",
+            "jmp-variability.png",
             "r-workbench.png",
             "doe-factorial.png",
         ]

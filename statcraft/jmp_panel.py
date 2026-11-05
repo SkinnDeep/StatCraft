@@ -411,6 +411,7 @@ class JMPTablePanel(QWidget):
         scripts = [
             ("Fit Y by X (Bivariate & Oneway)", lambda: self.main_window.fit_y_by_x_dialog()),
             ("Distribution (Descriptive & Histograms)", lambda: self.main_window.jmp_distribution_dialog()),
+            ("Variability / Attribute Gauge Chart", lambda: self.main_window.variability_chart_dialog()),
             ("Control Chart Builder (Interactive SPC)", lambda: self.main_window.control_chart_builder_dialog()),
             ("Process Screening Dashboard", lambda: self.main_window.process_screening_dialog()),
             ("Prediction Profiler", lambda: self.main_window.prediction_profiler("regression")),
@@ -706,6 +707,7 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
     ana_m.addSeparator()
     qp_m = ana_m.addMenu("Quality and Process")
     _act(qp_m, "Control Chart Builder…", getattr(win, "control_chart_builder_dialog", win.xbar_r_dialog), icon="chart")
+    _act(qp_m, "Variability / Attribute Gauge Chart…", getattr(win, "variability_chart_dialog", win.gage_rr), icon="chart")
     _act(qp_m, "Process Screening…", getattr(win, "process_screening_dialog", win.capability), icon="table")
     _act(qp_m, "Wheeler EMP Gauge Study…", win.emp_dialog if hasattr(win, "emp_dialog") else None)
     _act(qp_m, "Gage R&R (Crossed / Nested)…", win.gage_rr)

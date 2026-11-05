@@ -94,6 +94,27 @@ class TestRIntegration(unittest.TestCase):
         self.assertEqual(win.work_stack.currentIndex(), 1)
         self.assertIsNotNone(win.r_workbench)
         self.assertEqual(win.r_workbench.env_table.rowCount(), 4)
+
+        # Test Positron-style Ctrl+Enter line runner and advance
+        bench = win.r_workbench
+        bench.editor.setPlainText("x <- 10\ny <- 20\nx + y\n")
+        cursor = bench.editor.textCursor()
+        cursor.setPosition(0)
+        bench.editor.setTextCursor(cursor)
+        self.assertEqual(bench.editor.textCursor().blockNumber(), 0)
+
+        # Execute line 0 (x <- 10)
+        bench.run_selection_or_line()
+        # Cursor should automatically step down to line 1
+        self.assertEqual(bench.editor.textCursor().blockNumber(), 1)
+
+        # Test REPL History navigation
+        bench.repl_input.setText("1 + 1")
+        bench._run_repl()
+        self.assertIn("1 + 1", bench._history)
+        bench.history_prev()
+        self.assertEqual(bench.repl_input.text(), "1 + 1")
+
         win.close()
 
 

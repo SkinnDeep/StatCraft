@@ -950,6 +950,7 @@ class ModernWindow(QMainWindow):
         self._action(rare_event_menu, "&T…", self.t_chart_dialog, None, None, True)
         quality = stat.addMenu("Quality Tools")
         self._action(quality, "Process &Screening…", self.process_screening_dialog, None, "table", True)
+        self._action(quality, "&Variability / Gauge Chart…", self.variability_chart_dialog, None, "chart", True)
         self.run_chart_action = self._action(quality, "&Run Chart…", self.run_chart_dialog, None, "run_chart", True)
         self.multivari_action = self._action(quality, "&Multi-Vari Chart…", self.multivari_dialog, None, "multivari", True)
         self._action(quality, "&Pareto Chart…", self.pareto_chart_dialog, None, None, True)
@@ -2708,6 +2709,12 @@ class ModernWindow(QMainWindow):
             entry = self._call(lambda: self.presenter.process_screening(**vals), result=True)
             if entry:
                 self.show_result(entry)
+
+    def variability_chart_dialog(self):
+        self._commit_editor()
+        from .variability_dialog import VariabilityChartDialog
+        dlg = VariabilityChartDialog(self)
+        dlg.exec()
 
     def cart_tree_dialog(self):
         self._commit_editor()

@@ -405,6 +405,7 @@
         <button onclick="switchTab('control')" id="tab-control" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Xbar-R Control Chart</button>
         <button onclick="switchTab('ccb')" id="tab-ccb" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Control Chart Builder (JMP)</button>
         <button onclick="switchTab('screening')" id="tab-screening" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Process Screening (JMP)</button>
+        <button onclick="switchTab('variability')" id="tab-variability" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Variability / Gauge Chart (JMP)</button>
         <button onclick="switchTab('factorial')" id="tab-factorial" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Factorial Main Effects</button>
       </div>
 
@@ -846,6 +847,10 @@
       screening: {
         img: 'images/process-screening.png',
         caption: 'JMP Process Screening Platform: Enterprise Six Sigma dashboard screening dozens to hundreds of process parameters simultaneously, computing Stability Index (s_overall / s_within), Cp/Cpk/Pp/Ppk, out-of-spec alarms, and 1-click drilldown into Control Chart Builder.'
+      },
+      variability: {
+        img: 'images/jmp-variability.png',
+        caption: 'JMP Variability / Attribute Gauge Chart: Multi-factor hierarchical nested variance canvas, subgroup standard deviation (S) chart, ANOVA variance components, AIAG evaluation, and Number of Distinct Categories (ndc).'
       },
       factorial: {
         img: 'images/doe-factorial.png',
