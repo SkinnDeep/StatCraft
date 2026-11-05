@@ -27,10 +27,12 @@ def _fmt(value):
 
 
 def supported(entry):
-    r_check = entry.get('result', entry) if isinstance(entry, dict) else {}
-    if isinstance(r_check, dict) and r_check.get('analysis') in ('graphical_summary', 'run_chart', 'multivari', 'outlier_test'):
+    r = entry.get("result", entry) if isinstance(entry, dict) else {}
+    if isinstance(r, dict) and r.get("analysis") in (
+        "graphical_summary", "run_chart", "multivari", "outlier_test", "cross_correlation",
+        "jmp_distribution", "control_chart_builder", "process_screening",
+    ):
         return True
-    r=entry.get('result',entry) if isinstance(entry,dict) else {}
     if isinstance(r,dict) and r.get('analysis')=='native_saved_output':
         return any(g.get('panels') for g in r.get('graphs',[]))
     if isinstance(r,dict) and r.get('analysis') in ('mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_joint_optimization'):

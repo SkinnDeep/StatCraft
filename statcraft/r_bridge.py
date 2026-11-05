@@ -1,17 +1,11 @@
-"""R Language Bridge for StatCraft.
-
-Provides clean, air-gapped, high-performance integration with R:
-- Deep discovery of local R across all system directories, user profiles, package managers, and registries.
-- Instant, sub-millisecond execution via persistent live background R sessions (Positron interaction model).
-- Real-time output streaming into the console.
-- Automatic interactive plot device hooking without external popup windows.
-- High-speed bi-directional data exchange between StatCraft Worksheets and R data.frames.
-- Automated 1-click CRAN download & WinGet installer helper when R is not installed.
-- Zero external Python dependencies required (pure standard library: subprocess, tempfile, shutil, winreg).
-"""
+"""Local R process, worksheet exchange, and installation helpers."""
 from __future__ import annotations
 
+import atexit
 import csv
+import json
+import math
+import uuid
 import glob
 import os
 import platform
@@ -29,34 +23,62 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 _SESSION_DIR: Optional[Path] = None
 _PERSISTENT_SESSION: Optional["RPersistentSession"] = None
+_SESSION_LOCK = threading.Lock()
+_DISCOVERY_LOCK = threading.Lock()
+_DISCOVERY = (0.0, None)
+_TEMP_ROOT = None
+_PROCESS_LOCK = threading.Lock()
+_ACTIVE_PROCESSES = set()
 
 
 def get_r_session_dir() -> Path:
     """Return the persistent directory for the active StatCraft session."""
-    global _SESSION_DIR
-    if _SESSION_DIR is None or not _SESSION_DIR.exists():
-        base = Path(tempfile.gettempdir()) / f"statcraft_r_session_{os.getpid()}"
-        base.mkdir(parents=True, exist_ok=True)
-        _SESSION_DIR = base
-    return _SESSION_DIR
+    global _SESSION_DIR, _TEMP_ROOT
+    with _DISCOVERY_LOCK:
+        if _SESSION_DIR is None:
+            _TEMP_ROOT = tempfile.TemporaryDirectory(prefix="statcraft-r-")
+            _SESSION_DIR = Path(_TEMP_ROOT.name)
+            # Exit handlers run in reverse registration order. Stop R before tempfile removes its working directory.
+            atexit.register(_shutdown_r_processes)
+        return _SESSION_DIR
+
+
+def _stop_process(process, *, wait=False):
+    try:
+        if process.poll() is None:
+            process.kill()
+        if wait:
+            process.wait(timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _shutdown_r_processes():
+    with _PROCESS_LOCK:
+        processes = list(_ACTIVE_PROCESSES)
+    for process in processes:
+        _stop_process(process, wait=True)
 
 
 def reset_r_session() -> None:
-    """Clear persistent workspace memory and cached files."""
-    global _PERSISTENT_SESSION
+    """Stop R. A new session starts when the next command runs."""
     if _PERSISTENT_SESSION is not None:
-        _PERSISTENT_SESSION.restart()
-    s_dir = get_r_session_dir()
-    for f in s_dir.glob("*"):
-        try:
-            if f.is_file():
-                f.unlink()
-        except OSError:
-            pass
+        _PERSISTENT_SESSION.interrupt(wait=True)
 
 
-def find_r_executable() -> Optional[str]:
-    """Find the path to the Rscript or R executable on the system with deep search."""
+def find_r_executable(*, refresh=False) -> Optional[str]:
+    """Cache local discovery, including a short cache for a missing installation."""
+    global _DISCOVERY
+    with _DISCOVERY_LOCK:
+        expires, path = _DISCOVERY
+        now = time.monotonic()
+        if refresh or now >= expires or path and not Path(path).is_file():
+            path = _discover_r_executable()
+            _DISCOVERY = (now + (60 if path else 5), path)
+        return path
+
+
+def _discover_r_executable() -> Optional[str]:
     # 0. User configured path in QSettings
     try:
         from PySide6.QtCore import QSettings
@@ -264,285 +286,279 @@ def get_r_version() -> Optional[str]:
 # --- High-Speed Persistent R Session (Positron Interaction Model) ---
 
 
+def _r_string(value):
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+_R_DRIVER = r"""
+local({
+    .job_dir <- NULL
+    .sheet_count <- 0L
+    .missing <- "__STATCRAFT_MISSING_7c59cb5e__"
+    .hex <- function(value) {
+        paste(format(charToRaw(enc2utf8(as.character(value)))), collapse="")
+    }
+    assign("statcraft_export", function(data, name="Exported_R_Data") {
+        data <- as.data.frame(data)
+        if (length(name) != 1L || is.na(name) || !nzchar(trimws(name))) name <- "Exported_R_Data"
+        .sheet_count <<- .sheet_count + 1L
+        path <- file.path(.job_dir, sprintf("sheet-%06d.csv", .sheet_count))
+        if (any(vapply(data, function(col) any(as.character(col) == .missing, na.rm=TRUE), logical(1)))) {
+            stop("A text value conflicts with the worksheet exchange missing-value marker.")
+        }
+        types <- vapply(data, function(col) {
+            if (inherits(col, "Date")) "date"
+            else if (inherits(col, "POSIXt")) "datetime"
+            else if (is.numeric(col) && !is.complex(col)) "number"
+            else "text"
+        }, character(1))
+        for (i in which(types == "datetime")) {
+            data[[i]] <- format(data[[i]], "%Y-%m-%d %H:%M:%OS6", tz="UTC")
+        }
+        write.csv(data, path, row.names=FALSE, na=.missing, fileEncoding="UTF-8")
+        writeLines(types, paste0(path, ".types"))
+        writeLines(.hex(substr(name, 1L, 96L)), paste0(path, ".name"))
+        invisible(data)
+    }, envir=.GlobalEnv)
+    assign(".statcraft_run", function(script, folder, worksheet, kinds, dates, missing, token, graphics, inspect) {
+        .job_dir <<- folder
+        .sheet_count <<- 0L
+        old_device <- getOption("device")
+        if (graphics) options(device=function(...) {
+            png(file.path(folder, "plot-%03d.png"), width=1000, height=640, res=110)
+        })
+        failure <- tryCatch({
+            if (nzchar(worksheet)) {
+                data <- read.csv(worksheet, stringsAsFactors=FALSE, check.names=FALSE,
+                    fileEncoding="UTF-8", na.strings=missing, colClasses=kinds)
+                for (index in dates) {
+                    if (all(is.na(data[[index]]) | data[[index]] == trunc(data[[index]]))) {
+                        data[[index]] <- as.Date(data[[index]], origin="1899-12-30")
+                    } else {
+                        data[[index]] <- as.POSIXct(data[[index]] * 86400, origin="1899-12-30", tz="UTC")
+                    }
+                }
+                assign("df", data, envir=.GlobalEnv)
+                assign("worksheet", data, envir=.GlobalEnv)
+            }
+            for (expr in parse(file=script, encoding="UTF-8")) {
+                value <- withVisible(eval(expr, envir=.GlobalEnv))
+                if (value$visible) print(value$value)
+            }
+            ""
+        }, error=function(e) conditionMessage(e))
+        if (graphics) {
+            try(grDevices::graphics.off(), silent=TRUE)
+            options(device=old_device)
+        }
+        cat("\n")
+        if (inspect) {
+            objects <- head(setdiff(ls(envir=.GlobalEnv), "statcraft_export"), 300L)
+            for (name in objects) try({
+                if (bindingIsActive(name, .GlobalEnv)) next
+                value <- get(name, envir=.GlobalEnv, inherits=FALSE)
+                kind <- paste(class(value), collapse="/")
+                shape <- if (is.null(dim(value))) as.character(length(value)) else paste(dim(value), collapse=" × ")
+                preview <- if (is.atomic(value) && length(value) <= 5) paste(substr(value, 1L, 100L), collapse=", ") else ""
+                cat(token, "ENV|", .hex(name), "|", .hex(kind), "|", .hex(shape), "|", .hex(preview), "\n", sep="")
+            }, silent=TRUE)
+        }
+        cat(token, "DONE|", .hex(failure), "\n", sep="")
+        flush(stdout())
+        invisible(NULL)
+    }, envir=.GlobalEnv)
+})
+"""
+
+
+def _empty_result(error, *, elapsed=0.0):
+    return {"success": False, "stdout": "", "stderr": error, "duration_ms": elapsed,
+            "plot_path": None, "plot_paths": [], "exported_worksheets": {}, "environment": []}
+
+
 class RPersistentSession:
-    """Maintains a persistent live background R process for instant, zero-latency execution."""
+    """Serialize jobs through one R process with an isolated output queue per process."""
 
     def __init__(self):
-        self.session_dir = get_r_session_dir()
-        self.plot_path = self.session_dir / "statcraft_active_plot.png"
-        self.process: Optional[subprocess.Popen] = None
-        self._reader_thread: Optional[threading.Thread] = None
-        self._output_queue: queue.Queue = queue.Queue()
-        self._is_busy = False
+        self.process = None
+        self._queue = None
+        self._bound_key = None
+        self._executable = None
         self._lock = threading.Lock()
-        self._start_process()
 
-    def _start_process(self) -> bool:
-        exe = find_interactive_r_executable()
-        if not exe:
-            return False
-
-        system = platform.system()
-        cmd = [exe, "--vanilla", "--quiet"]
-        if system == "Windows" and "rterm" in exe.lower():
-            cmd.extend(["--ess"])
+    def _start_process(self, executable):
+        name = Path(executable).stem.lower()
+        if name == "rscript":
+            command = [executable, "--vanilla", "-"]
         else:
-            cmd.extend(["--interactive"])
+            command = [executable, "--vanilla", "--slave"]
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        environment = os.environ.copy()
+        if os.name == "nt":
+            for variable in ("LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY", "LC_TIME"):
+                if environment.get(variable) == "C.UTF-8":
+                    environment.pop(variable)
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                                   errors="replace", bufsize=1, creationflags=flags,
+                                   env=environment, cwd=get_r_session_dir())
+        with _PROCESS_LOCK:
+            _ACTIVE_PROCESSES.add(process)
+        messages = queue.Queue()
+        self.process, self._queue = process, messages
+        self._executable = executable
+        self._bound_key = None
 
-        try:
-            # On Windows, hide any console window
-            kwargs: Dict[str, Any] = {}
-            if system == "Windows":
-                kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-
-            self.process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                cwd=str(self.session_dir),
-                **kwargs,
-            )
-
-            # Start background reader thread
-            self._reader_thread = threading.Thread(target=self._stdout_reader_loop, daemon=True)
-            self._reader_thread.start()
-
-            # Initialize StatCraft environment hooks in R
-            init_code = f"""
-options(echo = FALSE)
-.sc_session_dir <- "{self.session_dir.as_posix()}"
-.sc_plot_file <- "{self.plot_path.as_posix()}"
-
-# Auto-redirect graphic plots to PNG without popping external window
-options(device = function(...) {{
-    png(.sc_plot_file, width=960, height=560, res=108)
-}})
-
-# StatCraft Export function for bi-directional worksheet creation
-statcraft_export <- function(data, name="Exported_R_Data") {{
-    if (!is.data.frame(data)) {{
-        data <- as.data.frame(data)
-    }}
-    clean_name <- gsub("[^A-Za-z0-9_]", "_", name)
-    out_file <- file.path(.sc_session_dir, paste0(".sc_export_", clean_name, ".csv"))
-    write.csv(data, file=out_file, row.names=FALSE, na="")
-    cat(paste0("[STATCRAFT_EXPORT:", clean_name, "]\\n"))
-    invisible(data)
-}}
-
-cat("<<<STATCRAFT_READY>>>\\n")
-"""
-            self._send_raw(init_code)
-            self._wait_for_token("<<<STATCRAFT_READY>>>", timeout=5.0)
-            return True
-        except Exception:
-            self.process = None
-            return False
-
-    def _stdout_reader_loop(self):
-        """Continuously read lines from the R process stdout and push to queue."""
-        while self.process and self.process.poll() is None:
+        def read_output():
             try:
-                line = self.process.stdout.readline()
-                if line:
-                    self._output_queue.put(line)
-                else:
-                    time.sleep(0.005)
-            except Exception:
-                break
+                for line in process.stdout:
+                    messages.put(line)
+            finally:
+                process.stdout.close()
+                process.wait()
+                with _PROCESS_LOCK:
+                    _ACTIVE_PROCESSES.discard(process)
+                process.stdin.close()
+                messages.put(None)
 
-    def _send_raw(self, text: str):
-        if self.process and self.process.stdin:
-            self.process.stdin.write(text + "\n")
-            self.process.stdin.flush()
+        threading.Thread(target=read_output, daemon=True).start()
+        self._send(process, _R_DRIVER)
+        return process, messages
 
-    def _wait_for_token(self, token: str, timeout: float = 10.0) -> Tuple[List[str], bool]:
-        collected = []
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                line = self._output_queue.get(timeout=0.05)
-                clean = line.strip()
-                if clean == token or clean.lstrip("> ") == token:
-                    return collected, True
-                collected.append(line)
-            except queue.Empty:
-                if self.process and self.process.poll() is not None:
-                    return collected, False
-        return collected, False
+    @staticmethod
+    def _send(process, code):
+        process.stdin.write(code + "\n")
+        process.stdin.flush()
 
-    def is_alive(self) -> bool:
+    def is_alive(self):
         return self.process is not None and self.process.poll() is None
 
+    def interrupt(self, *, wait=False):
+        """Stop the active process immediately without waiting on the job lock."""
+        process = self.process
+        if process is not None:
+            _stop_process(process, wait=wait)
+
     def restart(self):
-        """Cleanly terminate and restart the persistent R session."""
-        with self._lock:
-            if self.process:
-                try:
-                    self.process.kill()
-                except Exception:
-                    pass
-                self.process = None
-            # Clear queue
-            while not self._output_queue.empty():
-                try:
-                    self._output_queue.get_nowait()
-                except queue.Empty:
-                    break
-            self._start_process()
+        self.interrupt()
 
-    def interrupt(self):
-        """Interrupt active execution."""
-        if self.process and self.process.poll() is None:
+    def execute_instant(self, code, worksheet=None, on_line_output=None, timeout=30.0,
+                        *, capture_graphics=True, inspect=True, worksheet_key=None,
+                        cancelled=None):
+        start = time.perf_counter()
+        with self._lock:
+            if cancelled is not None and cancelled.is_set():
+                return _empty_result("Execution stopped.")
+            executable = find_interactive_r_executable()
+            if not executable:
+                return _empty_result("R executable not found. Choose an installed R executable in R Workbench.")
             try:
-                if platform.system() == "Windows":
-                    self.restart()
+                if not self.is_alive() or self._executable != executable:
+                    self.interrupt()
+                    process, messages = self._start_process(executable)
                 else:
-                    import signal
-                    self.process.send_signal(signal.SIGINT)
-            except Exception:
-                self.restart()
-
-    def execute_instant(
-        self,
-        code: str,
-        worksheet=None,
-        on_line_output: Optional[Callable[[str], None]] = None,
-        timeout: float = 30.0,
-    ) -> Dict[str, Any]:
-        """Execute R code instantly (< 1 ms latency) in the warm persistent session."""
-        with self._lock:
-            if not self.is_alive():
-                if not self._start_process():
-                    return {
-                        "success": False,
-                        "stdout": "",
-                        "stderr": "R executable not found or failed to start. Please check installation.",
-                        "duration_ms": 0.0,
-                        "exported_worksheets": {},
-                        "plot_path": None,
-                        "environment": [],
-                    }
-
-            t0 = time.perf_counter()
-
-            # 1. If worksheet provided, bind to 'df' and 'worksheet'
-            if worksheet is not None:
-                csv_path = self.session_dir / "statcraft_active_sheet.csv"
-                export_worksheet_to_r_dataframe_csv(worksheet, str(csv_path))
-                sheet_preamble = (
-                    f"df <- read.csv('{csv_path.as_posix()}', stringsAsFactors=FALSE, check.names=FALSE)\n"
-                    "worksheet <- df\n"
-                )
-                self._send_raw(sheet_preamble)
-
-            # Check initial plot mtime
-            plot_mtime_before = self.plot_path.stat().st_mtime if self.plot_path.exists() else 0.0
-
-            # Execute code with delimiter and auto-flush graphic device if active
-            exec_token = f"<<<STATCRAFT_DONE_{int(time.time() * 1000)}>>>"
-            delimited_code = f"\n{code}\nif (dev.cur() > 1) try(invisible(dev.off()), silent=TRUE)\ncat('{exec_token}\\n')\n"
-            self._send_raw(delimited_code)
-
-            output_lines = []
-            deadline = time.time() + timeout
-            success = False
-
-            while time.time() < deadline:
+                    process, messages = self.process, self._queue
+                folder = Path(tempfile.mkdtemp(prefix="run-", dir=get_r_session_dir()))
+                script = folder / "code.R"
+                script.write_text(code, encoding="utf-8")
+                worksheet_path = ""
+                kinds = "NULL"
+                dates = "NULL"
+                missing = "__SC_NA_" + uuid.uuid4().hex
+                if worksheet is not None and (worksheet_key is None or worksheet_key != self._bound_key):
+                    worksheet_path = (folder / "worksheet.csv").as_posix()
+                    export_worksheet_to_r_dataframe_csv(worksheet, worksheet_path, missing)
+                    kinds = "c(" + ",".join(
+                        '"character"' if col.kind == "text" else '"numeric"' for col in worksheet.columns
+                    ) + ")"
+                    dates = "c(" + ",".join(
+                        str(i) for i, col in enumerate(worksheet.columns, 1) if col.kind == "date"
+                    ) + ")"
+                token = "<<<SC_" + uuid.uuid4().hex + ">>>"
+                args = [_r_string(script.as_posix()), _r_string(folder.as_posix()), _r_string(worksheet_path),
+                        kinds, dates, _r_string(missing), _r_string(token),
+                        "TRUE" if capture_graphics else "FALSE", "TRUE" if inspect else "FALSE"]
+                self._send(process, ".statcraft_run(" + ",".join(args) + ")")
+            except (OSError, ValueError) as exc:
+                self.interrupt()
+                return _empty_result(f"Could not start the R job. {exc}")
+            output = []
+            environment = []
+            deadline = time.monotonic() + timeout if timeout is not None else math.inf
+            failure = "R exited before completing the command."
+            finished = False
+            output_size = 0
+            while True:
+                if cancelled is not None and cancelled.is_set():
+                    self.interrupt()
+                    failure = "Execution stopped. Run again to start a fresh R session."
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self.interrupt()
+                    failure = f"R execution timed out after {timeout:g} seconds."
+                    break
                 try:
-                    line = self._output_queue.get(timeout=0.02)
-                    clean = line.strip()
-                    if clean == exec_token or clean.lstrip("> ") == exec_token:
-                        success = True
+                    line = messages.get(timeout=min(remaining, .1))
+                except queue.Empty:
+                    continue
+                if line is None:
+                    break
+                if line.startswith(token):
+                    record = line[len(token):].rstrip("\r\n")
+                    fields = record.split("|")
+                    try:
+                        values = [bytes.fromhex(field).decode("utf-8", "replace") for field in fields[1:]]
+                    except ValueError:
+                        continue
+                    if fields[0] == "DONE" and len(values) == 1:
+                        failure, finished = values[0], True
                         break
-                    output_lines.append(line)
+                    if fields[0] == "ENV" and len(values) == 4:
+                        environment.append(dict(zip(("name", "type", "length", "value"), values)))
+                    continue
+                if output_size < 1_000_000:
+                    output.append(line)
+                    output_size += len(line)
                     if on_line_output:
                         on_line_output(line)
-                except queue.Empty:
-                    if not self.is_alive():
-                        break
-
-            dt_ms = (time.perf_counter() - t0) * 1000.0
-
-            # Inspect exported files
-            exported: Dict[str, Any] = {}
-            for exp_file in self.session_dir.glob(".sc_export_*.csv"):
+            if not finished:
+                self.interrupt(wait=True)
+            if finished and worksheet_path:
+                self._bound_key = worksheet_key if not failure else None
+            for temporary in (script, folder / "worksheet.csv"):
+                temporary.unlink(missing_ok=True)
+            exported = {}
+            for path in sorted(folder.glob("sheet-*.csv")):
+                name_path = Path(str(path) + ".name")
                 try:
-                    sname = exp_file.stem.replace(".sc_export_", "")
-                    exported[sname] = parse_csv_to_worksheet_dict(exp_file)
-                    exp_file.unlink()
-                except Exception:
-                    pass
-
-            # Check if plot was generated/updated
-            new_plot = None
-            if self.plot_path.exists():
-                try:
-                    if self.plot_path.stat().st_mtime > plot_mtime_before and self.plot_path.stat().st_size > 500:
-                        new_plot = str(self.plot_path)
-                except OSError:
-                    pass
-
-            # Environment introspection
-            env_objects = self._inspect_environment_quick()
-
-            full_stdout = "".join(output_lines)
-            return {
-                "success": success,
-                "stdout": full_stdout,
-                "stderr": "" if success else "Execution timed out or process exited.",
-                "duration_ms": dt_ms,
-                "plot_path": new_plot,
-                "exported_worksheets": exported,
-                "environment": env_objects,
-            }
-
-    def _inspect_environment_quick(self) -> List[Dict[str, str]]:
-        """Quickly list user objects in .GlobalEnv."""
-        inspect_token = f"<<<ENV_DONE_{int(time.time() * 1000)}>>>"
-        inspect_script = f"""
-local({{
-    objs <- ls(envir=.GlobalEnv)
-    for (nm in objs) {{
-        if (substr(nm, 1, 1) != ".") {{
-            val <- get(nm, envir=.GlobalEnv)
-            tp <- class(val)[1]
-            dm <- if (is.data.frame(val) || is.matrix(val)) paste0(nrow(val), "x", ncol(val)) else paste0(length(val), " items")
-            pr <- if (is.vector(val) && length(val) <= 5) paste(val, collapse=", ") else paste0(tp, " object")
-            cat(paste0("ENV_ITEM|", nm, "|", tp, "|", dm, "|", pr, "\\n"))
-        }}
-    }}
-    cat("{inspect_token}\\n")
-}})
-"""
-        self._send_raw(inspect_script)
-        lines, ok = self._wait_for_token(inspect_token, timeout=2.0)
-        items = []
-        for l in lines:
-            if l.startswith("ENV_ITEM|"):
-                parts = l.strip().split("|")
-                if len(parts) >= 5:
-                    items.append({
-                        "name": parts[1],
-                        "type": parts[2],
-                        "dim": parts[3],
-                        "preview": parts[4],
-                    })
-        return items
+                    if finished and not failure:
+                        name = bytes.fromhex(name_path.read_text(encoding="ascii")).decode("utf-8")
+                        exported[name] = parse_csv_to_worksheet_dict(path)
+                except (OSError, ValueError) as exc:
+                    failure = f"Could not import a worksheet from R. {exc}"
+                finally:
+                    name_path.unlink(missing_ok=True)
+                    path.unlink(missing_ok=True)
+                    Path(str(path) + ".types").unlink(missing_ok=True)
+            plots = [str(path) for path in sorted(folder.glob("plot-*.png")) if path.stat().st_size]
+            if not plots:
+                folder.rmdir()
+            return {"success": finished and not failure, "stdout": "".join(output).rstrip("\n"),
+                    "stderr": failure, "duration_ms": (time.perf_counter() - start) * 1000,
+                    "plot_path": plots[-1] if plots else None, "plot_paths": plots,
+                    "exported_worksheets": exported, "environment": environment}
 
 
-def get_persistent_r_session() -> RPersistentSession:
-    """Return the global persistent R session."""
+def get_persistent_r_session():
     global _PERSISTENT_SESSION
-    if _PERSISTENT_SESSION is None:
-        _PERSISTENT_SESSION = RPersistentSession()
-    return _PERSISTENT_SESSION
+    with _SESSION_LOCK:
+        if _PERSISTENT_SESSION is None:
+            _PERSISTENT_SESSION = RPersistentSession()
+        return _PERSISTENT_SESSION
 
 
-def export_worksheet_to_r_dataframe_csv(worksheet, dest_path: str) -> None:
+def export_worksheet_to_r_dataframe_csv(worksheet, dest_path: str, missing="NA") -> None:
     """Export a StatCraft Worksheet to a clean CSV format suitable for R's read.csv()."""
     with open(dest_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -555,162 +571,54 @@ def export_worksheet_to_r_dataframe_csv(worksheet, dest_path: str) -> None:
             for col in worksheet.columns:
                 val = col.values[r] if r < len(col.values) else None
                 if val is None:
-                    row_data.append("NA")
+                    row_data.append(missing)
                 else:
                     row_data.append(val)
             writer.writerow(row_data)
 
 
 def parse_csv_to_worksheet_dict(csv_path: Path) -> Dict[str, Any]:
-    """Parse a CSV exported from R into columns dictionary."""
-    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
-        reader = csv.reader(f)
+    """Recover exported column types without treating text such as NA as missing."""
+    from datetime import datetime
+    from .model import datetime_to_serial
+    from .io import MAX_CELLS
+
+    type_path = Path(str(csv_path) + ".types")
+    types = type_path.read_text(encoding="utf-8").splitlines() if type_path.exists() else []
+    with csv_path.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.reader(stream)
         headers = next(reader, [])
-        rows = list(reader)
-
-    cols: List[Dict[str, Any]] = []
-    for c_idx, h in enumerate(headers):
-        vals = [r[c_idx] if c_idx < len(r) else "" for r in rows]
-        numeric_count = 0
-        total_valid = 0
-        converted_vals = []
-        for v in vals:
-            if v == "" or v.upper() == "NA":
-                converted_vals.append(None)
-            else:
-                total_valid += 1
-                try:
-                    fval = float(v)
-                    converted_vals.append(int(fval) if fval.is_integer() else fval)
-                    numeric_count += 1
-                except ValueError:
-                    converted_vals.append(v)
-
-        kind = "number" if total_valid > 0 and numeric_count == total_valid else "text"
-        cols.append({"name": h, "kind": kind, "values": converted_vals})
-
-    return {"columns": cols, "row_count": len(rows)}
+        rows = []
+        for row in reader:
+            if len(row) != len(headers) or (len(rows) + 1) * len(headers) > MAX_CELLS:
+                raise ValueError("R table dimensions exceed import limits.")
+            rows.append(row)
+    columns = []
+    for index, header in enumerate(headers):
+        values = [row[index] for row in rows]
+        values = [None if value == "__STATCRAFT_MISSING_7c59cb5e__" else value for value in values]
+        kind = types[index] if index < len(types) else "text"
+        if kind == "number":
+            values = [float(value) if value is not None else None for value in values]
+            values = [value if value is None or math.isfinite(value) else None for value in values]
+        elif kind in ("date", "datetime"):
+            values = [datetime_to_serial(datetime.fromisoformat(value)) if value is not None else None for value in values]
+            kind = "date"
+        columns.append({"name": header, "kind": kind, "values": values})
+    return {"columns": columns, "row_count": len(rows)}
 
 
-def execute_r_code(
-    code: str,
-    worksheet=None,
-    timeout: int = 60,
-    capture_graphics: bool = True,
-    persist_session: bool = True,
-    on_line_output: Optional[Callable[[str], None]] = None,
-) -> Dict[str, Any]:
-    """Execute arbitrary R code with sub-millisecond persistent execution."""
-    if persist_session and is_r_available():
-        sess = get_persistent_r_session()
-        return sess.execute_instant(code, worksheet=worksheet, on_line_output=on_line_output, timeout=timeout)
-
-    # Fallback to isolated subprocess if persistence not requested or initial start
-    exe = find_r_executable()
-    if not exe:
-        return {
-            "success": False,
-            "stdout": "",
-            "stderr": "R executable not found. Install R from https://cloud.r-project.org/ or set STATCRAFT_R_PATH.",
-            "duration_ms": 0.0,
-            "plot_path": None,
-            "exported_worksheets": {},
-            "environment": [],
-        }
-
-    s_dir = get_r_session_dir()
-    script_path = s_dir / "statcraft_exec.R"
-    plot_path = s_dir / "statcraft_active_plot.png"
-    workspace_file = s_dir / ".statcraft_workspace.RData"
-
-    r_preamble: List[str] = [
-        f".sc_session_dir <- '{s_dir.as_posix()}'",
-        f".sc_plot_file <- '{plot_path.as_posix()}'",
-    ]
-
-    if persist_session and workspace_file.exists():
-        r_preamble.append(f"try(load('{workspace_file.as_posix()}'), silent=TRUE)")
-
-    if capture_graphics:
-        r_preamble.append(
-            "options(device = function(...) {\n"
-            "  png(.sc_plot_file, width=960, height=560, res=108)\n"
-            "})"
-        )
-
-    r_preamble.append(
-        "statcraft_export <- function(data, name='Exported_R_Data') {\n"
-        "  if (!is.data.frame(data)) { data <- as.data.frame(data) }\n"
-        "  clean_name <- gsub('[^A-Za-z0-9_]', '_', name)\n"
-        "  out_file <- file.path(.sc_session_dir, paste0('.sc_export_', clean_name, '.csv'))\n"
-        "  write.csv(data, file=out_file, row.names=FALSE, na='')\n"
-        "  invisible(data)\n"
-        "}"
-    )
-
-    if worksheet is not None:
-        csv_path = s_dir / "statcraft_active_sheet.csv"
-        export_worksheet_to_r_dataframe_csv(worksheet, str(csv_path))
-        r_preamble.append(
-            f"df <- read.csv('{csv_path.as_posix()}', stringsAsFactors=FALSE, check.names=FALSE)\n"
-            "worksheet <- df"
-        )
-
-    r_postamble: List[str] = []
-    if capture_graphics:
-        r_postamble.append("if (dev.cur() > 1) { try(dev.off(), silent=TRUE) }")
-
-    if persist_session:
-        r_postamble.append(f"try(save.image(file='{workspace_file.as_posix()}'), silent=TRUE)")
-
-    full_script = "\n".join(r_preamble) + "\n\n" + code + "\n\n" + "\n".join(r_postamble) + "\n"
-    script_path.write_text(full_script, encoding="utf-8")
-
-    t0 = time.perf_counter()
+def execute_r_code(code, worksheet=None, timeout=60, capture_graphics=True, persist_session=True,
+                   on_line_output=None, *, worksheet_key=None, inspect=True, cancelled=None):
+    """Run an R command, optionally retaining objects for the next command."""
+    session = get_persistent_r_session() if persist_session else RPersistentSession()
     try:
-        proc = subprocess.run(
-            [exe, "--vanilla", str(script_path)],
-            cwd=str(s_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-        )
-        duration_ms = (time.perf_counter() - t0) * 1000.0
-        success = proc.returncode == 0
-        stdout = proc.stdout
-        stderr = proc.stderr
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "stdout": "",
-            "stderr": f"R execution timed out after {timeout} seconds.",
-            "duration_ms": (time.perf_counter() - t0) * 1000.0,
-            "plot_path": None,
-            "exported_worksheets": {},
-            "environment": [],
-        }
-
-    exported_sheets = {}
-    for exp_file in s_dir.glob(".sc_export_*.csv"):
-        try:
-            sname = exp_file.stem.replace(".sc_export_", "")
-            exported_sheets[sname] = parse_csv_to_worksheet_dict(exp_file)
-            exp_file.unlink()
-        except Exception:
-            pass
-
-    has_plot = plot_path.exists() and plot_path.stat().st_size > 500
-
-    return {
-        "success": success,
-        "stdout": stdout,
-        "stderr": stderr,
-        "duration_ms": duration_ms,
-        "plot_path": str(plot_path) if has_plot else None,
-        "exported_worksheets": exported_sheets,
-        "environment": [],
-    }
+        return session.execute_instant(code, worksheet, on_line_output, timeout,
+                                       capture_graphics=capture_graphics, inspect=inspect,
+                                       worksheet_key=worksheet_key, cancelled=cancelled)
+    finally:
+        if not persist_session:
+            session.interrupt(wait=True)
 
 
 # --- Automatic CRAN / WinGet Installer Helper ---
@@ -754,21 +662,16 @@ def get_r_help_text(topic: str) -> str:
     if not clean_topic or not is_r_available():
         return f"Help unavailable: R is not active or invalid topic '{clean_topic}'."
 
-    code = f'''
-    tryCatch({{
-        rd <- utils::help("{clean_topic}")
-        if (length(rd) == 0) {{
-            cat("No documentation found for '{clean_topic}'.")
-        }} else {{
-            txt <- utils:::.getHelpFile(rd)
-            tools::Rd2txt(txt, out = stdout())
-        }}
-    }}, error = function(e) {{
-        cat("Error retrieving documentation for '{clean_topic}': ", conditionMessage(e), "\\n")
-    }})
-    '''
-    res = execute_r_code(code)
-    out = res.get("stdout", "").strip()
+    code = """
+local({
+    topic <- TOPIC
+    rd <- utils::help(topic)
+    if (!length(rd)) cat("No documentation found for ", topic, ".", sep="")
+    else tools::Rd2txt(utils:::.getHelpFile(rd), out=stdout())
+})
+""".replace("TOPIC", _r_string(clean_topic))
+    res = execute_r_code(code, persist_session=False, capture_graphics=False, inspect=False)
+    out = re.sub(r".\x08", "", res.get("stdout", "")).strip()
     return out if out else f"No documentation found for '{clean_topic}'."
 
 

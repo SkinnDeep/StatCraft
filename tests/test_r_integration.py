@@ -108,6 +108,13 @@ class TestRIntegration(unittest.TestCase):
         # Cursor should automatically step down to line 1
         self.assertEqual(bench.editor.textCursor().blockNumber(), 1)
 
+        import time
+        deadline = time.monotonic() + 12
+        while bench._cancel is not None and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(.01)
+        self.assertIsNone(bench._cancel)
+
         # Test REPL History navigation
         bench.repl_input.setText("1 + 1")
         bench._run_repl()
@@ -115,7 +122,11 @@ class TestRIntegration(unittest.TestCase):
         bench.history_prev()
         self.assertEqual(bench.repl_input.text(), "1 + 1")
 
+        win.presenter.dirty = win.presenter._results_dirty = False
         win.close()
+        from PySide6.QtCore import QThreadPool
+        QThreadPool.globalInstance().waitForDone(5000)
+        app.processEvents()
 
 
 if __name__ == "__main__":

@@ -105,6 +105,7 @@ FIELDS = {
     'double_exp_smoothing': {'settings'},
     'autocorrelation': {'settings'},
     'partial_autocorrelation': {'settings'},
+    'cross_correlation': {'first_index', 'second_index', 'lags', 'title', 'store_ccf'},
     'differences': {'settings'},
     'lag': {'settings'},
     'sign_test': {'settings'},
@@ -161,6 +162,9 @@ def columns(recipe):
     elif action in ('one_variance', 'normal_capability', 'normal_sixpack', 'acceptance_control_chart'):
         if keys not in (expected, {'settings'}):
             raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'cross_correlation':
+        if not expected - {'title', 'store_ccf'} <= keys <= expected:
+            raise ValueError('Unsupported Cross Correlation parameters.')
     elif keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
     if action in ('predict_mixture_process','mixture_process_contour','optimize_mixture_process','optimize_mixture_joint'):
@@ -321,6 +325,11 @@ def columns(recipe):
         if parameters.get('predictor_indices'):
             cols.extend([p for p in parameters['predictor_indices'] if isinstance(p, int) and p >= 0])
         return sorted(set(cols))
+    if action == 'cross_correlation':
+        refs = (parameters['first_index'], parameters['second_index'])
+        if refs[0] == refs[1] or any(type(i) is not int or i < 0 for i in refs):
+            raise ValueError('Choose two distinct numeric series.')
+        return sorted(refs)
     if action == 'fit_y_by_x':
         cols = [parameters['y_index'], parameters['x_index']]
         return sorted(set(cols))

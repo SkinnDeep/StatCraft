@@ -848,3 +848,36 @@ def compute_lag(values: Any, lag: int = 1) -> List[Optional[float]]:
             except (ValueError, TypeError):
                 res.append(None)
     return res
+
+def cross_correlation(first, second, lags=0):
+    """Correlate first[t] with second[t + lag] using full-series means and norms."""
+    from math import sqrt
+    from scipy.signal import correlate
+
+    if len(first) != len(second) or len(first) < 3:
+        raise ValueError("Choose two series with the same length and at least three observations.")
+    if any(value is None for values in (first, second) for value in values):
+        raise ValueError("Cross Correlation requires complete, regularly spaced series.")
+    size = len(first)
+    if type(lags) is not int or not 0 <= lags <= min(size - 1, 1000):
+        raise ValueError("Choose a lag count between zero (automatic) and the smaller of 1000 or the series length minus one.")
+    lags = lags or min(size - 1, 1000, int(sqrt(size)) + 10)
+    standardized = []
+    for values in (first, second):
+        data = np.asarray(values, dtype=float)
+        scale = np.max(np.abs(data))
+        if not np.isfinite(data).all() or not scale:
+            raise ValueError("Both series require finite values and variation.")
+        scaled = data / scale
+        centered = scaled - scaled.mean()
+        norm = np.linalg.norm(centered)
+        if not norm:
+            raise ValueError("Both series require variation.")
+        standardized.append(centered / norm)
+    values = correlate(standardized[1], standardized[0], mode="full")
+    correlations = [
+        {"lag": lag, "correlation": float(np.clip(values[size - 1 + lag], -1, 1)), "pairs": size - abs(lag)}
+        for lag in range(-lags, lags + 1)
+    ]
+    return {"analysis": "cross_correlation", "graph": "cross_correlation", "n": size,
+            "lags": correlations}

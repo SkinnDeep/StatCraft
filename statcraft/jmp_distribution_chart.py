@@ -10,6 +10,9 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScroll
 from .jmp_panel import get_jmp_icon
 
 
+from .snapshot_chart import SnapshotChartWidget
+
+
 class SingleVariableDistributionCanvas(QWidget):
     """Canvas rendering combined Outlier Box Plot + Histogram + Normal Curve for one variable."""
 
@@ -234,17 +237,12 @@ class SingleVariableDistributionCanvas(QWidget):
             p.drawText(QRectF(bar_x0 + bar_w + 6, ry, 60, row_h), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, txt)
 
 
-class JMPDistributionWidget(QWidget):
+class JMPDistributionWidget(SnapshotChartWidget):
     """Container widget presenting one or more variable distribution cards side-by-side."""
 
     def __init__(self, entry_or_result: Dict[str, Any], parent: Optional[QWidget] = None):
-        super().__init__(parent)
-        if isinstance(entry_or_result, dict) and "result" in entry_or_result and isinstance(entry_or_result["result"], dict):
-            self.entry = entry_or_result
-            self.result = entry_or_result["result"]
-        else:
-            self.entry = {"result": entry_or_result}
-            self.result = entry_or_result
+        super().__init__(entry_or_result, parent)
+        self.result = self.entry["result"]
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

@@ -1228,6 +1228,7 @@ class ModernWindow(QMainWindow):
         time_series.addSeparator()
         self._action(time_series, "&Autocorrelation…", self.autocorrelation_dialog, None, None, True)
         self._action(time_series, "&Partial Autocorrelation…", self.partial_autocorrelation_dialog, None, None, True)
+        self._action(time_series, "Cross &Correlation…", self.cross_correlation_dialog, None, None, True)
         time_series.addSeparator()
         self._action(time_series, "Di&fferences…", self.differences_dialog, None, None, True)
         self._action(time_series, "&Lag…", self.lag_dialog, None, None, True)
@@ -2709,6 +2710,8 @@ class ModernWindow(QMainWindow):
                     self._startup_worker.wait(500)
                 except Exception:
                     pass
+            if hasattr(self, "r_workbench"):
+                self.r_workbench.shutdown(wait=True)
             # Tab/header signals can fire while Qt dismantles child widgets.
             self._refreshing = True
             self.worksheet_tabs.blockSignals(True); self.worksheet_selector.blockSignals(True)
@@ -3620,6 +3623,27 @@ class ModernWindow(QMainWindow):
                 entry = self._call(lambda: self.presenter.autocorrelation(settings=p), result=True)
                 if entry:
                     self.show_result(entry)
+
+    def cross_correlation_dialog(self):
+        from .variable_dialogs import ProcedureDialog
+        self._commit_editor()
+        self._last_dialog_action = self.cross_correlation_dialog
+        selectors = [
+            dict(key="first_index", label="First series:", kinds=("number",)),
+            dict(key="second_index", label="Second series:", kinds=("number",)),
+        ]
+        fields = [
+            dict(key="lags", label="Number of lags:", numeric=True, integer=True,
+                 optional=True, placeholder="Default number of lags"),
+            dict(key="store_ccf", label="Storage:", boolean=True, text="Store CCF"),
+            dict(key="title", label="Title:", optional=True, placeholder="Default chart title"),
+        ]
+        dialog = ProcedureDialog(self, "Cross Correlation", self.presenter.worksheet, selectors, fields,
+                                 "Compare two regularly spaced series. Positive lags pair the first series with later values of the second.")
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            settings = dialog.parameters
+            settings["lags"] = settings["lags"] or 0
+            self._call(lambda: self.presenter.cross_correlation(**settings), result=True)
 
     def partial_autocorrelation_dialog(self):
         from .time_series_dialogs import AutocorrelationDialog
@@ -4697,7 +4721,80 @@ class ModernWindow(QMainWindow):
             refit.clicked.connect(lambda checked=False,e=entry:self.refit_native_model(e));badge_row.addWidget(refit)
         layout.addLayout(badge_row)
         layout.addWidget(label(entry.get("title", "Result"), "pageHeading"))
+
+        # --- StatCraft Connect Bar ---
+        conn_dict = entry.get("connected_analysis")
+        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
+            from .connect import create_connected_regression
+            p = entry["recipe"]["parameters"]
+            try:
+                conn_obj = create_connected_regression(self.presenter.worksheet, p["response_index"], p["predictor_indices"], result, p.get("confidence", 0.95))
+                conn_dict = conn_obj.to_dict()
+                entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
+
+        if conn_dict:
+            from .connect import ConnectedAnalysis, check_analysis_freshness
+            conn_obj = ConnectedAnalysis.from_dict(conn_dict)
+            status, status_msg = check_analysis_freshness(conn_obj, self.presenter.worksheet)
+
+            connect_bar = QFrame()
+            connect_bar.setObjectName("connectBar")
+            is_dark = getattr(self, "_dark_mode", False)
+            connect_bar.setStyleSheet(
+                "QFrame#connectBar { background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 4px; }"
+                if is_dark else
+                "QFrame#connectBar { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px; }"
+            )
+            cb_lay = QHBoxLayout(connect_bar)
+            cb_lay.setContentsMargins(10, 4, 10, 4)
+            cb_lay.setSpacing(10)
+
+            c_tag = QLabel("🔗 STATCRAFT CONNECT")
+            c_tag.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 10px;" if is_dark else "color: #0284c7; font-weight: bold; font-size: 10px;")
+            cb_lay.addWidget(c_tag)
+
+            pill_color = "#16a34a" if status == "current" else ("#d97706" if status == "stale" else "#dc2626")
+            pill_text = "🟢 Synchronized" if status == "current" else ("🟡 Stale (Data Modified)" if status == "stale" else "🔴 Column Missing")
+            status_pill = QLabel(pill_text)
+            status_pill.setStyleSheet(f"color: {pill_color}; font-weight: 600; font-size: 10.5px;")
+            status_pill.setToolTip(status_msg)
+            cb_lay.addWidget(status_pill)
+            cb_lay.addStretch(1)
+
+            btn_exp = QToolButton()
+            btn_exp.setText("📊 Interactive Explorer")
+            btn_exp.setStyleSheet("background: #0284c7; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
+            btn_exp.setToolTip("Open in JMP-style Interactive Explorer (Bivariate / Prediction Profiler)")
+            btn_exp.clicked.connect(lambda checked=False, e=entry: self.connect_open_explorer(e))
+            cb_lay.addWidget(btn_exp)
+
+            btn_r = QToolButton()
+            btn_r.setText("⚡ R Workbench")
+            btn_r.setStyleSheet("background: #059669; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
+            btn_r.setToolTip("Transfer model formula and bindings to R Workbench")
+            btn_r.clicked.connect(lambda checked=False, e=entry: self.connect_open_in_r(e))
+            cb_lay.addWidget(btn_r)
+
+            btn_pred = QToolButton()
+            btn_pred.setText("📥 Apply Predictions")
+            btn_pred.setStyleSheet("background: #475569; color: white; border-radius: 4px; padding: 3px 8px; font-weight: 600;")
+            btn_pred.setToolTip("Store fitted values and residuals back into the active worksheet aligned by observation ID")
+            btn_pred.clicked.connect(lambda checked=False, e=entry: self.connect_apply_predictions(e))
+            cb_lay.addWidget(btn_pred)
+
+            layout.addWidget(connect_bar)
         rendered = set()
+        if result.get("analysis") == "cross_correlation":
+            layout.addWidget(label("Cross Correlations", "sectionHeading"))
+            layout.addWidget(label(f"Correlates {result['first_name']}(t) with {result['second_name']}(t+k).", "secondary"))
+            layout.addWidget(self._result_table(["Lag", "CCF", "Pairs"], [
+                [row["lag"], row["correlation"], row["pairs"]] for row in result["lags"]
+            ]))
+            if result.get("stored_column"):
+                layout.addWidget(label(f"Stored in {result['stored_column']}.", "secondary"))
+            rendered.update(result)
         if result.get('analysis') == 'native_saved_output':
             native_tables = result.get('tables', [])
             self._report_table_widgets = {}
@@ -5127,7 +5224,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
                     from .tolerance_intervals_chart import ToleranceIntervalChartWidget
                     chart = ToleranceIntervalChartWidget(entry)
-                elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation'):
+                elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation', 'cross_correlation'):
                     from .time_series_chart import TimeSeriesChartWidget
                     chart = TimeSeriesChartWidget(entry)
                 elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence'):
@@ -5539,7 +5636,23 @@ class ModernWindow(QMainWindow):
             menu.addSeparator()
             menu.addAction("Rename...", lambda: self.rename_output_dialog(target_entry))
             menu.addSeparator()
-            menu.addAction(tool_icon("save"), "Save Output As...", self.export_report)
+        # StatCraft Connect submenu
+        if target_entry.get("connected_analysis") or target_entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"):
+            menu.addSeparator()
+            connect_menu = menu.addMenu("🔗 StatCraft Connect")
+            connect_menu.addAction("Statistical Dialog (Minitab Mode)...", lambda: self.connect_open_dialog(target_entry))
+            connect_menu.addAction("Interactive Explorer (JMP Mode)...", lambda: self.connect_open_explorer(target_entry))
+            connect_menu.addAction("R Workbench (R Mode)...", lambda: self.connect_open_in_r(target_entry))
+            connect_menu.addSeparator()
+            connect_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda: self.connect_apply_predictions(target_entry))
+            connect_menu.addAction("Compare Implementations (StatCraft vs R)...", lambda: self.connect_compare_implementations(target_entry))
+
+        if is_graph and getattr(self, "_brushed_rows", None):
+            menu.addSeparator()
+            menu.addAction("Save Brushed Selection...", lambda: self.save_brushed_selection())
+            menu.addAction("Open Selection in R Workbench...", lambda: self.open_brushed_selection_in_r())
+
+        menu.addAction(tool_icon("save"), "Save Output As...", self.export_report)
         menu.addAction(tool_icon("print"), "Print...\tCtrl+P", lambda checked=False: self.print_current(target_entry))
         menu.addAction("Close Output Tab",lambda:self._workspace.close_index(self._workspace.state["open_ids"].index(self._workspace.key(target_entry))) if self._workspace.key(target_entry) in self._workspace.state["open_ids"] else None)
         menu.addAction(tool_icon("delete_red_x"), "Delete", lambda: self.delete_selected_output(target_entry))
@@ -5549,6 +5662,119 @@ class ModernWindow(QMainWindow):
             menu.addSeparator()
             menu.addAction('Rerun with Current Data',lambda:self._call(lambda:self.presenter.rerun_result(target_entry),result=True))
         return menu
+
+    def connect_open_dialog(self, entry):
+        recipe = entry.get("recipe", {})
+        if recipe.get("action") == "multiple_regression":
+            self.set_ui_mode("minitab")
+            self.multiple_regression_dialog()
+
+    def connect_open_explorer(self, entry):
+        from .connect_explorer import open_interactive_explorer
+        open_interactive_explorer(self, entry)
+
+    def connect_open_in_r(self, entry):
+        conn_dict = entry.get("connected_analysis")
+        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
+            from .connect import create_connected_regression
+            p = entry["recipe"]["parameters"]
+            conn_dict = create_connected_regression(
+                self.presenter.worksheet, p["response_index"], p["predictor_indices"],
+                entry.get("result", {}), p.get("confidence", 0.95)
+            ).to_dict()
+            entry["connected_analysis"] = conn_dict
+
+        if conn_dict and self.r_workbench:
+            self.set_ui_mode("r")
+            self.r_workbench.load_connected_analysis(conn_dict)
+            self.statusBar().showMessage("StatCraft Connect: Model transferred to R Workbench", 5000)
+
+    def connect_apply_predictions(self, entry):
+        conn_dict = entry.get("connected_analysis")
+        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
+            from .connect import create_connected_regression
+            p = entry["recipe"]["parameters"]
+            conn_dict = create_connected_regression(
+                self.presenter.worksheet, p["response_index"], p["predictor_indices"],
+                entry.get("result", {}), p.get("confidence", 0.95)
+            ).to_dict()
+            entry["connected_analysis"] = conn_dict
+
+        if not conn_dict:
+            return
+        from .connect import ConnectedAnalysis
+        from .connect_r import import_r_predictions_to_worksheet
+        conn = ConnectedAnalysis.from_dict(conn_dict)
+
+        from .model import Column
+        diag_cols = [
+            Column("Row_ID", "text", list(conn.fitted_row_ids)),
+            Column("Fitted", "number", list(conn.fitted_values)),
+            Column("Residuals", "number", list(conn.residuals)),
+        ]
+        res = import_r_predictions_to_worksheet(self.presenter.worksheet, {"Regression_Diagnostics": diag_cols}, conn)
+        self.refresh()
+        self.statusBar().showMessage(
+            f"StatCraft Connect: Created/updated {res.get('fitted_col')} and {res.get('residuals_col')} ({res.get('rows_updated')} rows aligned by observation ID)",
+            6000
+        )
+
+    def connect_compare_implementations(self, entry):
+        conn_dict = entry.get("connected_analysis")
+        if not conn_dict:
+            return
+        from .connect import ConnectedAnalysis
+        from .connect_r import compare_implementations
+        from .r_bridge import is_r_available, execute_r_code
+        conn = ConnectedAnalysis.from_dict(conn_dict)
+        if not is_r_available():
+            QMessageBox.information(self, "Compare Implementations", "R is not detected on this system. Click 'Install R' in R Workbench to enable cross-engine verification.")
+            return
+
+        res = execute_r_code(conn.r_script, worksheet=self.presenter.worksheet, persist_session=True)
+        if not res.get("success"):
+            QMessageBox.warning(self, "Compare Implementations", f"R execution failed:\n{res.get('stderr')}")
+            return
+
+        msg = f"StatCraft Connect — Execution Comparison\n\nStatCraft Engine: Multiple Regression\nModel: {conn.title}\nStatus: Aligned\nR Output:\n\n" + res.get("stdout", "")[:1200]
+        QMessageBox.information(self, "Compare Implementations", msg)
+
+    def save_brushed_selection(self, rows=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            QMessageBox.information(self, "Save Selection", "Please select or brush observations on a graph first.")
+            return
+        from .connect import ensure_worksheet_identities
+        ensure_worksheet_identities(self.presenter.worksheet)
+        row_ids = self.presenter.worksheet.metadata.get("row_ids", [])
+        selected_ids = [row_ids[r - 1] for r in target_rows if 0 <= r - 1 < len(row_ids)]
+
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Save Selection", "Enter a name for this observation selection:", text="Selection_1")
+        if ok and name.strip():
+            sel_dict = self.presenter.worksheet.metadata.setdefault("named_selections", {})
+            sel_dict[name.strip()] = selected_ids
+            self.presenter.dirty = True
+            self.statusBar().showMessage(f"Saved selection '{name.strip()}' with {len(selected_ids)} observations.", 5000)
+
+    def open_brushed_selection_in_r(self, rows=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            QMessageBox.information(self, "Open Selection in R", "Please select or brush observations on a graph first.")
+            return
+        idx_list = ", ".join(str(r) for r in sorted(target_rows))
+        code = (
+            f"# StatCraft Connect: Selected Observations\n"
+            f"selected_rows <- c({idx_list})\n"
+            f"df_subset <- df[selected_rows, ]\n"
+            f"cat('Subsetting', nrow(df_subset), 'observations into df_subset.\n')\n"
+            f"summary(df_subset)\n"
+        )
+        self.set_ui_mode("r")
+        if self.r_workbench:
+            self.r_workbench.editor.setPlainText(code)
+            self.r_workbench._execute_r(code)
+            self.statusBar().showMessage(f"Loaded selection of {len(target_rows)} observations into R Workbench (df_subset)", 5000)
 
     def _show_output_context_menu(self, global_pos, entry=None):
         if (entry or self.selected_entry) is None:

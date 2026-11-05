@@ -73,6 +73,8 @@ class Presenter:
         self.auto_calculate_formulas=True
         self._results_dirty = False
         self.worksheet = Worksheet("Untitled", [Column("C1")])
+        from .connect import ensure_worksheet_identities
+        ensure_worksheet_identities(self.worksheet)
         self.project_path = None
         self.dirty = False
         self.history = []
@@ -911,9 +913,13 @@ class Presenter:
         size = max(len(c.values) for c in columns)
         aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in columns]
         result = multiple_regression(aligned[:-1], aligned[-1], confidence, [c.name for c in predictors])
-        return self._record("Multiple Regression — " + response.name,
+        from .connect import create_connected_regression
+        connected = create_connected_regression(self.worksheet, response_index, predictor_indices, result, confidence)
+        entry = self._record("Multiple Regression — " + response.name,
                             {"response_name": response.name, "variables": [c.name for c in predictors], **result},
                             recipe={"action":"multiple_regression", "parameters":{"response_index":response_index, "predictor_indices":list(predictor_indices), "confidence":confidence}})
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
 
     def individuals_moving_range(self, index):
         from .quality import individuals_moving_range
@@ -1576,6 +1582,48 @@ class Presenter:
             }
         }
         return self._record(title, res, recipe=recipe)
+
+    def cross_correlation(self, first_index, second_index, lags=0, title=None, store_ccf=False):
+        from .time_series import cross_correlation
+        indices = (first_index, second_index)
+        if first_index == second_index or any(type(i) is not int or not 0 <= i < len(self.worksheet.columns) for i in indices):
+            raise ValueError("Choose two distinct numeric series.")
+        first, second = (self.worksheet.columns[i] for i in indices)
+        if first.kind != "number" or second.kind != "number":
+            raise ValueError("Choose two numeric series.")
+        result = cross_correlation(first.values, second.values, lags)
+        if (title is not None and (not isinstance(title, str) or len(title) > 200)
+                or type(store_ccf) is not bool):
+            raise ValueError("Choose a title up to 200 characters and a valid storage option.")
+        custom_title = (title or "").strip()
+        title = custom_title or f"Cross Correlation Function for {first.name}, {second.name}"
+        result.update(title=title, first_name=first.name, second_name=second.name,
+                      xlabel="Lag", ylabel="Cross correlation")
+        recipe = {"action": "cross_correlation",
+                  "parameters": {"first_index": first_index, "second_index": second_index,
+                                 "lags": lags, "title": custom_title or None, "store_ccf": store_ccf}}
+        if store_ccf:
+            result["stored_column"] = self._store_cross_correlations(result["lags"])
+        return self._record(title, result, recipe=recipe)
+
+    @undoable
+    def _store_cross_correlations(self, lags):
+        columns = self.worksheet.columns
+        if max(self.worksheet.row_count, len(lags)) * (len(columns) + 1) > io.MAX_CELLS:
+            raise ValueError("Storing the cross correlations would exceed the worksheet cell limit.")
+        names = {column.name.casefold() for column in columns}
+        name = "CCF"
+        suffix = 1
+        while name.casefold() in names:
+            name = f"CCF{suffix}"
+            suffix += 1
+        column = Column(name, "number", [row["correlation"] for row in lags])
+        if self.native_project is not None and not getattr(self.native_project, "statcraft_owned", False):
+            from .mpx_columns import independent_metadata
+            column.metadata = independent_metadata()
+        columns.append(column)
+        self.dirty = True
+        return name
 
     def partial_autocorrelation(self, settings=None):
         settings = self._bound_settings("partial_autocorrelation", settings)
@@ -4914,6 +4962,9 @@ class Presenter:
             col = self.worksheet.columns[idx]
             padded = list(col.values) + [None] * (rows - len(col.values))
             col.values = [padded[r] for r in order]
+        if len(set(target_indices)) == len(self.worksheet.columns) or set(target_indices) >= {i for i, c in enumerate(self.worksheet.columns) if c.values}:
+            from .connect import permute_row_identities
+            permute_row_identities(self.worksheet, order)
         self.dirty = True
         return self._record("Sort — by " + by_col.name, {
             "sorted_columns": [self.worksheet.columns[i].name for i in target_indices],
@@ -5423,6 +5474,14 @@ class Presenter:
                 raise ValueError("Syntax: RANK C1 C2")
             indices = resolve_variables(tokens[0], self.worksheet, ("number",))
             return self.rank_column(indices[0], tokens[1])
+        if verb == "CCF":
+            fields = rest.split(maxsplit=1)
+            lag_count = int(fields[0]) if len(fields) == 2 and fields[0].isdigit() else 0
+            variables = fields[1] if lag_count or len(fields) == 2 and fields[0] == "0" else rest
+            indices = resolve_variables(variables, self.worksheet, ("number",))
+            if len(indices) != 2:
+                raise ValueError("Use CCF [lags] C1 C2.")
+            return self.cross_correlation(*indices, lags=lag_count)
         if verb in ("RSCR", "RSCRIPT", "R"):
             import os
             from pathlib import Path
@@ -5775,6 +5834,12 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "autocorrelation":
         from .time_series_report import generate_autocorrelation_report
         return title + generate_autocorrelation_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "cross_correlation":
+        lines = ["Positive lag pairs the first series with later values of the second series.",
+                 "The approximate two-standard-deviation threshold is 2 / sqrt(pairs).", "",
+                 f"{'Lag':>6} {'CCF':>12} {'Pairs':>8}"]
+        lines.extend(f"{row['lag']:>6} {row['correlation']:>12.6f} {row['pairs']:>8}" for row in result['lags'])
+        return title + "\n".join(lines)
     if isinstance(result, dict) and result.get("analysis") == "partial_autocorrelation":
         from .time_series_report import generate_partial_autocorrelation_report
         return title + generate_partial_autocorrelation_report(result)

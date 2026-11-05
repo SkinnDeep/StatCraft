@@ -1,0 +1,4 @@
+jumpio 0.1.0
+https://github.com/abardagjy/jumpio
+Commit e9cf1b85016637f90cbfca0760ded736475d20c1
+MIT license in notices/jumpio-LICENSE.txt

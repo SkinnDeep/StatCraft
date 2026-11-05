@@ -1,17 +1,9 @@
-"""StatCraft Positron-Style Interactive R Data Science Workbench.
-
-Architecture modeled after Positron (posit-dev/positron) and VS Code R:
-- Multi-Tab Script Editor with syntax highlighting, line gutter, and Positron line stepping (Ctrl+Enter)
-- Interactive Data Viewer tab (View(df)) displaying active datasets in a full spreadsheet grid
-- Multi-Plot History Carousel with back/forward navigation, copy, and export
-- Integrated R Documentation & Help viewer with topic search
-- Live REPL console with command history (Up/Down) and sub-millisecond execution (< 0.5 ms)
-- Global Environment inspector with 1-click import into StatCraft worksheets
-- Instant, consolidated dual-theme engine (VS Code Light+ & VS Code Dark Modern)
-"""
+"""R script editor, console, environment, worksheet and plot tools."""
 from __future__ import annotations
 
 import os
+import json
+import threading
 import re
 import shutil
 import tempfile
@@ -19,7 +11,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRunnable, QSize, Qt, QThreadPool, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -57,18 +49,41 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .model import Column, Worksheet
+from .model import Column, Worksheet, display_date
 from .r_bridge import (
     download_and_install_r_direct,
-    execute_r_code,
+    RPersistentSession,
     find_r_executable,
     get_cran_installer_url,
     get_r_help_text,
     get_r_version,
     install_r_via_winget,
     is_r_available,
-    reset_r_session,
 )
+
+
+class _JobSignals(QObject):
+    finished = Signal(object)
+
+
+class _RJob(QRunnable):
+    def __init__(self, work):
+        super().__init__()
+        self.work = work
+        self.signals = _JobSignals()
+
+    def run(self):
+        try:
+            value = self.work()
+        except Exception as exc:
+            value = exc
+        self.signals.finished.emit(value)
+
+
+def _start_job(work, finished):
+    job = _RJob(work)
+    job.signals.finished.connect(finished, Qt.ConnectionType.QueuedConnection)
+    QThreadPool.globalInstance().start(job)
 
 
 class VSCodeRSyntaxHighlighter(QSyntaxHighlighter):
@@ -287,7 +302,8 @@ class RDataViewerWidget(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(8)
 
-        self.lbl_info = QLabel("<b>df</b>: Active StatCraft Dataset")
+        self.lbl_info = QLabel("df · Active StatCraft Dataset")
+        self.lbl_info.setTextFormat(Qt.TextFormat.PlainText)
         self.lbl_info.setStyleSheet("font-size: 11px;")
         top_bar.addWidget(self.lbl_info)
 
@@ -318,21 +334,22 @@ class RDataViewerWidget(QWidget):
         if not ws or not ws.columns:
             self.table.setRowCount(0)
             self.table.setColumnCount(0)
-            self.lbl_info.setText("<b>df</b>: No active worksheet loaded")
+            self.lbl_info.setText("df · No active worksheet loaded")
             return
 
-        nrows = len(ws.columns[0].values) if ws.columns else 0
-        ncols = len(ws.columns)
-        self.lbl_info.setText(f"<b>{ws.name}</b>: {nrows} rows × {ncols} columns")
+        total_rows, total_columns = ws.row_count, len(ws.columns)
+        nrows, ncols = min(total_rows, 1000), min(total_columns, 100)
+        self.lbl_info.setText(f"{ws.name} · {total_rows:,} rows × {total_columns:,} columns"
+                              + (f" · Preview {nrows:,} × {ncols}" if (nrows, ncols) != (total_rows, total_columns) else ""))
 
         self.table.setRowCount(nrows)
         self.table.setColumnCount(ncols)
-        headers = [f"{c.name} ({c.kind})" for c in ws.columns]
+        headers = [f"{c.name} ({c.kind})" for c in ws.columns[:ncols]]
         self.table.setHorizontalHeaderLabels(headers)
 
-        for col_idx, col in enumerate(ws.columns):
-            for row_idx, val in enumerate(col.values):
-                txt = "" if val is None else str(val)
+        for col_idx, col in enumerate(ws.columns[:ncols]):
+            for row_idx, val in enumerate(col.values[:nrows]):
+                txt = "" if val is None else (display_date(val) if col.kind == "date" else str(val))
                 item = QTableWidgetItem(txt)
                 if col.kind == "number":
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -407,7 +424,7 @@ class RPlotGalleryWidget(QWidget):
         tb.addWidget(self.btn_save)
 
         self.btn_clear = QToolButton()
-        self.btn_clear.setText("🧹 Clear")
+        self.btn_clear.setText("Clear")
         self.btn_clear.setToolTip("Clear Plot History")
         self.btn_clear.clicked.connect(self.clear_all_plots)
         tb.addWidget(self.btn_clear)
@@ -525,8 +542,14 @@ class RHelpViewerWidget(QWidget):
 
     def show_topic_help(self, topic: str) -> None:
         self.txt_topic.setText(topic)
-        help_text = get_r_help_text(topic)
-        self.text_view.setPlainText(help_text)
+        self.text_view.setPlainText("Loading help…")
+        _start_job(lambda: (topic, get_r_help_text(topic)), self._show_help)
+
+    def _show_help(self, result):
+        if isinstance(result, Exception):
+            self.text_view.setPlainText(str(result))
+        elif self.txt_topic.text() == result[0]:
+            self.text_view.setPlainText(result[1])
 
     def _do_search(self) -> None:
         topic = self.txt_topic.text().strip()
@@ -581,10 +604,22 @@ class RWorkbenchWidget(QWidget):
         self._history: List[str] = []
         self._history_idx: int = -1
         self._is_dark: bool = False
+        self._connected_analysis = None
 
         self._build_ui()
         self.set_dark_mode(getattr(main_window, "_dark_mode", False))
-        self._check_and_update_r_status()
+        self._session = RPersistentSession()
+        self._cancel = None
+        self._source = None
+        self._snapshot = None
+        self._status_checking = False
+        self._status_checked = False
+        self.destroyed.connect(lambda _obj=None, session=self._session: session.interrupt())
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._status_checked:
+            self._check_and_update_r_status()
 
     @property
     def is_dark(self) -> bool:
@@ -603,7 +638,7 @@ class RWorkbenchWidget(QWidget):
         hdr_layout.setContentsMargins(10, 0, 10, 0)
         hdr_layout.setSpacing(8)
 
-        self.brand_lbl = QLabel("<b>POSITRON</b> · R Workbench")
+        self.brand_lbl = QLabel("R Workbench")
         self.brand_lbl.setStyleSheet("font-size: 11px;")
         hdr_layout.addWidget(self.brand_lbl)
 
@@ -613,9 +648,9 @@ class RWorkbenchWidget(QWidget):
         sp_layout = QHBoxLayout(self.status_pill)
         sp_layout.setContentsMargins(6, 2, 6, 2)
         sp_layout.setSpacing(4)
-        self.status_dot = QLabel("🟢")
-        self.status_dot.setStyleSheet("font-size: 9px;")
-        self.status_text = QLabel("R Initializing...")
+        self.status_dot = QLabel("")
+        self.status_dot.hide()
+        self.status_text = QLabel("R available on demand")
         self.status_text.setStyleSheet("font-size: 10.5px; font-weight: 600;")
         sp_layout.addWidget(self.status_dot)
         sp_layout.addWidget(self.status_text)
@@ -623,22 +658,23 @@ class RWorkbenchWidget(QWidget):
 
         hdr_layout.addStretch()
 
-        self.btn_run_sel = QPushButton("▶ Run Line (Ctrl+Enter)")
+        self.btn_run_sel = QPushButton("Run")
+        self.btn_run_sel.setToolTip("Run selection or current line (Ctrl+Enter)")
         self.btn_run_sel.setToolTip("Run current line or selection and advance to next line (Ctrl+Enter)")
         self.btn_run_sel.clicked.connect(self.run_selection_or_line)
         hdr_layout.addWidget(self.btn_run_sel)
 
-        self.btn_run_all = QPushButton("⏩ Run All")
+        self.btn_run_all = QPushButton("Run Script")
         self.btn_run_all.setToolTip("Run entire active R script (Ctrl+Shift+Enter)")
         self.btn_run_all.clicked.connect(self.run_all)
         hdr_layout.addWidget(self.btn_run_all)
 
-        self.btn_view_df = QPushButton("📊 View(df)")
+        self.btn_view_df = QPushButton("Worksheet")
         self.btn_view_df.setToolTip("Open active StatCraft dataset in spreadsheet grid")
         self.btn_view_df.clicked.connect(self.open_data_viewer_tab)
         hdr_layout.addWidget(self.btn_view_df)
 
-        self.btn_templates = QPushButton("Templates ▾")
+        self.btn_templates = QPushButton("Examples ▾")
         self.btn_templates.clicked.connect(self._show_templates_menu)
         hdr_layout.addWidget(self.btn_templates)
 
@@ -651,25 +687,58 @@ class RWorkbenchWidget(QWidget):
         b_layout.setContentsMargins(12, 6, 12, 6)
         b_layout.setSpacing(8)
 
-        b_icon = QLabel("⚠️")
+        b_icon = QLabel("")
         b_layout.addWidget(b_icon)
         self.b_text = QLabel("<b>R is not detected on your system.</b> Install R to execute scripts, run REPL commands, and render graphics.")
         b_layout.addWidget(self.b_text)
         b_layout.addStretch()
 
-        self.btn_auto_install = QPushButton("📥 1-Click Auto-Install R")
+        self.btn_auto_install = QPushButton("Install R")
         self.btn_auto_install.setStyleSheet("background-color: #dc2626; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px;")
         self.btn_auto_install.clicked.connect(self._install_r_automatically)
         b_layout.addWidget(self.btn_auto_install)
 
-        self.btn_browse = QPushButton("🔍 Browse for R…")
+        self.btn_browse = QPushButton("Locate R…")
         self.btn_browse.clicked.connect(self._browse_r_executable)
         b_layout.addWidget(self.btn_browse)
 
-        self.btn_cran = QPushButton("🌐 CRAN Website")
+        self.btn_cran = QPushButton("CRAN")
         self.btn_cran.clicked.connect(lambda: webbrowser.open("https://cloud.r-project.org/"))
         b_layout.addWidget(self.btn_cran)
         root_layout.addWidget(self.r_banner)
+
+        # StatCraft Connect Banner (shown when linked to a model)
+        self.connect_banner = QFrame()
+        self.connect_banner.setObjectName("connectBanner")
+        self.connect_banner.setStyleSheet("""
+            QFrame#connectBanner {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0f172a, stop:1 #1e293b);
+                border-bottom: 2px solid #0284c7;
+                padding: 4px 10px;
+            }
+        """)
+        cb_lay = QHBoxLayout(self.connect_banner)
+        cb_lay.setContentsMargins(12, 4, 12, 4)
+        cb_lay.setSpacing(10)
+        self.cb_title = QLabel("🔗 STATCRAFT CONNECT : Active Model")
+        self.cb_title.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 11px;")
+        cb_lay.addWidget(self.cb_title)
+        cb_lay.addStretch(1)
+
+        self.btn_apply_connect = QPushButton("📥 Apply Predictions to Worksheet")
+        self.btn_apply_connect.setStyleSheet("background: #0284c7; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px;")
+        self.btn_apply_connect.setToolTip("Store R fitted values and residuals back into the active worksheet aligned by observation ID")
+        self.btn_apply_connect.clicked.connect(self.apply_connected_predictions)
+        cb_lay.addWidget(self.btn_apply_connect)
+
+        btn_dismiss_connect = QPushButton("✕")
+        btn_dismiss_connect.setStyleSheet("background: transparent; color: #94a3b8; font-weight: bold; font-size: 12px; border: none;")
+        btn_dismiss_connect.setToolTip("Dismiss Connect banner")
+        btn_dismiss_connect.clicked.connect(self.connect_banner.hide)
+        cb_lay.addWidget(btn_dismiss_connect)
+
+        self.connect_banner.hide()
+        root_layout.addWidget(self.connect_banner)
 
         # 3. Main Splitters (4 Quadrants)
         main_h_split = QSplitter(Qt.Orientation.Horizontal)
@@ -681,12 +750,13 @@ class RWorkbenchWidget(QWidget):
         self.editor_tabs.setObjectName("editorTabs")
         self.editor_tabs.setTabsClosable(True)
         self.editor_tabs.tabCloseRequested.connect(self._close_tab)
+        self.editor_tabs.currentChanged.connect(self._select_editor)
 
         # Tab 1: script.R
         self.editor = RCodeEditor(workbench=self)
         self.highlighter = VSCodeRSyntaxHighlighter(self.editor.document(), is_dark=self._is_dark)
         default_code = (
-            "# --- StatCraft Positron R Workbench ---\n"
+            "# StatCraft R Workbench\n"
             "# Active worksheet is automatically bound as 'df' and 'worksheet'\n\n"
             "# 1. Summary of active data\n"
             "print(summary(df))\n\n"
@@ -705,8 +775,12 @@ class RWorkbenchWidget(QWidget):
 
         # Tab 2: View(df) Data Viewer
         self.data_viewer = RDataViewerWidget()
-        self.data_viewer.btn_refresh.clicked.connect(self.refresh_environment)
-        self.editor_tabs.addTab(self.data_viewer, "📊 View(df)")
+        self.data_viewer.btn_refresh.clicked.connect(self.open_data_viewer_tab)
+        self.editor_tabs.addTab(self.data_viewer, "Worksheet")
+        from PySide6.QtWidgets import QTabBar
+        for index in (0, 1):
+            for position in (QTabBar.ButtonPosition.LeftSide, QTabBar.ButtonPosition.RightSide):
+                self.editor_tabs.tabBar().setTabButton(index, position, None)
 
         left_v_split.addWidget(self.editor_tabs)
 
@@ -724,19 +798,26 @@ class RWorkbenchWidget(QWidget):
         ch_lay = QHBoxLayout(con_hdr)
         ch_lay.setContentsMargins(8, 0, 8, 0)
         ch_lay.setSpacing(6)
-        ch_lay.addWidget(QLabel("<b>R TERMINAL / CONSOLE</b>"))
+        ch_lay.addWidget(QLabel("Console"))
         self.con_status_lbl = QLabel("Ready")
         self.con_status_lbl.setStyleSheet("color: #71717a; font-size: 10px;")
         ch_lay.addWidget(self.con_status_lbl)
         ch_lay.addStretch()
 
+        self.btn_stop = QToolButton()
+        self.btn_stop.setText("Stop")
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.setToolTip("Stop the running command and end this R session")
+        self.btn_stop.clicked.connect(self.stop_execution)
+        ch_lay.addWidget(self.btn_stop)
+
         btn_restart = QToolButton()
-        btn_restart.setText("🔄 Restart")
+        btn_restart.setText("Restart")
         btn_restart.clicked.connect(self._restart_session)
         ch_lay.addWidget(btn_restart)
 
         btn_clear = QToolButton()
-        btn_clear.setText("🧹 Clear")
+        btn_clear.setText("Clear")
         btn_clear.clicked.connect(self._clear_console)
         ch_lay.addWidget(btn_clear)
         c_lay.addWidget(con_hdr)
@@ -744,6 +825,7 @@ class RWorkbenchWidget(QWidget):
         self.console_output = QPlainTextEdit()
         self.console_output.setObjectName("consoleOutput")
         self.console_output.setReadOnly(True)
+        self.console_output.setMaximumBlockCount(5000)
         self.console_output.setFont(QFont("Cascadia Code" if QFont("Cascadia Code").exactMatch() else "Consolas", 9.5))
         c_lay.addWidget(self.console_output)
 
@@ -753,7 +835,7 @@ class RWorkbenchWidget(QWidget):
         r_row = QHBoxLayout(repl_bar)
         r_row.setContentsMargins(6, 2, 6, 2)
         r_row.setSpacing(6)
-        r_prompt = QLabel("❯")
+        r_prompt = QLabel(">")
         r_prompt.setStyleSheet("color: #0284c7; font-weight: bold; font-size: 12px;")
         r_row.addWidget(r_prompt)
 
@@ -781,17 +863,17 @@ class RWorkbenchWidget(QWidget):
         eh_lay = QHBoxLayout(env_hdr)
         eh_lay.setContentsMargins(8, 0, 8, 0)
         eh_lay.setSpacing(6)
-        eh_lay.addWidget(QLabel("<b>ENVIRONMENT</b>"))
+        eh_lay.addWidget(QLabel("Environment"))
         eh_lay.addStretch()
 
         btn_import_sheet = QToolButton()
-        btn_import_sheet.setText("📥 Import to Sheet")
+        btn_import_sheet.setText("Import")
         btn_import_sheet.setToolTip("Export selected variable into a new StatCraft worksheet")
         btn_import_sheet.clicked.connect(self._import_selected_to_worksheet)
         eh_lay.addWidget(btn_import_sheet)
 
         btn_reset_env = QToolButton()
-        btn_reset_env.setText("🔄 Reset")
+        btn_reset_env.setText("Reset")
         btn_reset_env.clicked.connect(self._reset_environment)
         eh_lay.addWidget(btn_reset_env)
         e_lay.addWidget(env_hdr)
@@ -799,8 +881,12 @@ class RWorkbenchWidget(QWidget):
         self.env_table = QTableWidget()
         self.env_table.setObjectName("envTable")
         self.env_table.setColumnCount(4)
-        self.env_table.setHorizontalHeaderLabels(["Name", "Type", "Length / Dim", "Value Preview"])
-        self.env_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.env_table.setHorizontalHeaderLabels(["Object", "Type", "Size", "Preview"])
+        self.env_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.env_table.setColumnWidth(0, 116)
+        self.env_table.setColumnWidth(1, 82)
+        self.env_table.setColumnWidth(2, 70)
+        self.env_table.setAlternatingRowColors(True)
         self.env_table.horizontalHeader().setStretchLastSection(True)
         self.env_table.verticalHeader().setVisible(False)
         self.env_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -813,10 +899,10 @@ class RWorkbenchWidget(QWidget):
         self.viz_tabs.setObjectName("vizTabs")
 
         self.plot_gallery = RPlotGalleryWidget()
-        self.viz_tabs.addTab(self.plot_gallery, "📊 Plots")
+        self.viz_tabs.addTab(self.plot_gallery, "Plots")
 
         self.help_viewer = RHelpViewerWidget()
-        self.viz_tabs.addTab(self.help_viewer, "❓ R Help & Docs")
+        self.viz_tabs.addTab(self.help_viewer, "Help")
 
         right_v_split.addWidget(self.viz_tabs)
         main_h_split.addWidget(right_v_split)
@@ -830,15 +916,18 @@ class RWorkbenchWidget(QWidget):
     def set_dark_mode(self, is_dark: bool) -> None:
         """Fast, single-block theme update without multi-widget thrashing."""
         self._is_dark = is_dark
-        self.editor.set_dark_mode(is_dark)
+        for index in range(self.editor_tabs.count()):
+            widget = self.editor_tabs.widget(index)
+            if isinstance(widget, RCodeEditor):
+                widget.set_dark_mode(is_dark)
         self.highlighter.set_dark_mode(is_dark)
 
         # Single consolidated stylesheet for the entire R workbench
         if is_dark:
             self.setStyleSheet("""
-                QWidget { background-color: #18181b; color: #f4f4f5; font-family: 'Segoe UI', -apple-system, sans-serif; font-size: 9pt; }
+                QWidget { background-color: #18181b; color: #f4f4f5; font-family: 'Segoe UI'; font-size: 9pt; }
                 QFrame#rHeader { background-color: #1f1f23; border-bottom: 1px solid #27272a; }
-                QFrame#statusPill { background-color: #064e3b; border: 1px solid #059669; border-radius: 10px; }
+                QFrame#statusPill { background-color: #064e3b; border: 1px solid #059669; border-radius: 4px; }
                 QFrame#panelHeader { background-color: #1f1f23; border-bottom: 1px solid #27272a; }
                 QFrame#consoleFrame, QFrame#envFrame { background-color: #18181b; }
                 QFrame#replBar { background-color: #1f1f23; border-top: 1px solid #27272a; }
@@ -852,14 +941,15 @@ class RWorkbenchWidget(QWidget):
                 QTabBar::tab { background-color: #1f1f23; color: #a1a1aa; padding: 6px 12px; border: 1px solid #27272a; border-bottom: none; }
                 QTabBar::tab:selected { background-color: #18181b; color: #ffffff; border-top: 2px solid #0284c7; }
                 QPushButton, QToolButton { background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 8px; font-weight: 500; }
+                QPushButton:disabled, QToolButton:disabled { color: #80858d; }
                 QPushButton:hover, QToolButton:hover { background-color: #3f3f46; color: #ffffff; border-color: #0284c7; }
                 QSplitter::handle { background-color: #27272a; }
             """)
         else:
             self.setStyleSheet("""
-                QWidget { background-color: #ffffff; color: #1e293b; font-family: 'Segoe UI', -apple-system, sans-serif; font-size: 9pt; }
+                QWidget { background-color: #ffffff; color: #1e293b; font-family: 'Segoe UI'; font-size: 9pt; }
                 QFrame#rHeader { background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-                QFrame#statusPill { background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; }
+                QFrame#statusPill { background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; }
                 QFrame#panelHeader { background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
                 QFrame#consoleFrame, QFrame#envFrame { background-color: #ffffff; }
                 QFrame#replBar { background-color: #f8fafc; border-top: 1px solid #e2e8f0; }
@@ -873,33 +963,31 @@ class RWorkbenchWidget(QWidget):
                 QTabBar::tab { background-color: #f1f5f9; color: #64748b; padding: 6px 12px; border: 1px solid #e2e8f0; border-bottom: none; }
                 QTabBar::tab:selected { background-color: #ffffff; color: #0284c7; border-top: 2px solid #0284c7; font-weight: 600; }
                 QPushButton, QToolButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 8px; font-weight: 500; }
+                QPushButton:disabled, QToolButton:disabled { color: #80858d; }
                 QPushButton:hover, QToolButton:hover { background-color: #f1f5f9; color: #0284c7; border-color: #0284c7; }
                 QSplitter::handle { background-color: #e2e8f0; }
             """)
         self.update()
 
-    def _check_and_update_r_status(self) -> None:
-        """Scan system for R and update status pill & warning banner."""
-        avail = is_r_available()
-        if avail:
-            ver = get_r_version() or "R Active"
-            clean_ver = ver.splitlines()[0] if ver else "R Active"
-            self.status_dot.setText("🟢")
-            self.status_text.setText(clean_ver)
-            self.r_banner.hide()
-            self.con_status_lbl.setText("Session: Active (< 0.5 ms)")
-            if not self.console_output.toPlainText():
-                self.console_output.setPlainText(
-                    f"StatCraft Positron R Console [{clean_ver}]\n"
-                    "Interactive session active (< 0.5 ms latency). Press Ctrl+Enter to step through code.\n"
-                    "Type ?topic for documentation or click View(df) to open data grid.\n"
-                    "-----------------------------------------------------------------------------------\n"
-                )
-        else:
-            self.status_dot.setText("🔴")
-            self.status_text.setText("R Not Detected")
-            self.r_banner.show()
-            self.con_status_lbl.setText("R Unavailable")
+    def _check_and_update_r_status(self):
+        if self._status_checking:
+            return
+        self._status_checking = True
+        self.status_text.setText("Checking R…")
+        _start_job(get_r_version, self._show_r_status)
+
+    def _show_r_status(self, version):
+        self._status_checking = False
+        self._status_checked = True
+        available = isinstance(version, str) and bool(version)
+        match = re.search(r"\bversion\s+([0-9.]+)", version, re.IGNORECASE) if available else None
+        self.status_text.setText(f"R {match[1]}" if match else ("R ready" if available else "R unavailable"))
+        self.status_text.setToolTip(version if available else "Choose an installed R executable.")
+        self.r_banner.setVisible(not available)
+        if self._cancel is None:
+            self.con_status_lbl.setText("Ready" if available else "Locate R to run scripts")
+        if available and not self.console_output.toPlainText():
+            self.console_output.setPlainText("Run a selection or line with Ctrl+Enter. The active worksheet is available as df.")
 
     def run_selection_or_line(self) -> None:
         """Positron line runner: executes selection or current line and advances cursor to next line."""
@@ -926,20 +1014,30 @@ class RWorkbenchWidget(QWidget):
         """Switch to or refresh the View(df) spreadsheet data viewer."""
         ws = self.presenter.worksheet if self.presenter else None
         self.data_viewer.load_worksheet(ws)
+        self.editor_tabs.setTabText(self.editor_tabs.indexOf(self.data_viewer), "Worksheet")
         self.editor_tabs.setCurrentWidget(self.data_viewer)
 
+    def _select_editor(self, index):
+        widget = self.editor_tabs.widget(index)
+        if isinstance(widget, RCodeEditor):
+            self.editor = widget
+
     def _close_tab(self, index: int) -> None:
-        if self.editor_tabs.count() > 1:
+        widget = self.editor_tabs.widget(index)
+        if index > 1 and widget is not None:
             self.editor_tabs.removeTab(index)
+            widget.deleteLater()
+            active = self.editor_tabs.currentWidget()
+            self.editor = active if isinstance(active, RCodeEditor) else self.editor_tabs.widget(0)
 
     def _on_env_item_double_clicked(self, item: QTableWidgetItem) -> None:
         name = self.env_table.item(item.row(), 0).text() if self.env_table.item(item.row(), 0) else ""
         if name in ("df", "worksheet") or "data.frame" in (self.env_table.item(item.row(), 1).text() if self.env_table.item(item.row(), 1) else ""):
-            self.open_data_viewer_tab()
+            self._view_object(name)
 
     def _run_repl(self) -> None:
         expr = self.repl_input.text().strip()
-        if not expr:
+        if not expr or self._cancel is not None:
             return
         self._history.append(expr)
         self._history_idx = -1
@@ -955,7 +1053,11 @@ class RWorkbenchWidget(QWidget):
                 self.console_output.appendPlainText(f"> {expr}\n[Displaying help for '{topic}' in Help Pane]")
                 return
 
-        self._execute_r(expr, is_repl=True)
+        view = re.fullmatch(r"View\(\s*([\w.]+)\s*\)", expr, re.IGNORECASE)
+        if view:
+            self._view_object(view.group(1))
+        else:
+            self._execute_r(expr, is_repl=True)
 
     def history_prev(self) -> None:
         """Recall previous command in REPL history."""
@@ -966,6 +1068,37 @@ class RWorkbenchWidget(QWidget):
         elif self._history_idx > 0:
             self._history_idx -= 1
         self.repl_input.setText(self._history[self._history_idx])
+
+    def load_connected_analysis(self, connected) -> None:
+        """Load a StatCraft Connect model into the editor and display connection banner."""
+        self._connected_analysis = connected
+        title = connected.get("title") if isinstance(connected, dict) else getattr(connected, "title", "Model")
+        resp = connected.get("response_name") if isinstance(connected, dict) else getattr(connected, "response_name", "Y")
+        r_script = connected.get("r_script") if isinstance(connected, dict) else getattr(connected, "r_script", "")
+
+        self.cb_title.setText(f"🔗 STATCRAFT CONNECT : {title}   |   Response: {resp}")
+        self.connect_banner.show()
+
+        if r_script:
+            self.editor.setPlainText(r_script)
+            self.editor_tabs.setCurrentWidget(self.editor)
+            self.editor_tabs.setTabText(0, f"Connect_{resp}.R")
+
+        ws_name = self.presenter.worksheet.name if self.presenter and hasattr(self.presenter, "worksheet") else ""
+        self.console_output.appendPlainText(
+            f"\n[StatCraft Connect: Linked to {title}]\n"
+            f"Active worksheet '{ws_name}' is bound as 'df'.\n"
+            "Press Ctrl+Enter to step through line-by-line, or click 'Run All'.\n"
+            "-----------------------------------------------------------------------------------\n"
+        )
+        self.console_output.ensureCursorVisible()
+
+    def apply_connected_predictions(self) -> None:
+        """Extract predictions from active session or model and apply to worksheet."""
+        if not self._connected_analysis or not self.main_window:
+            return
+        if hasattr(self.main_window, "connect_apply_predictions"):
+            self.main_window.connect_apply_predictions({"connected_analysis": self._connected_analysis})
 
     def history_next(self) -> None:
         """Recall next command in REPL history."""
@@ -988,94 +1121,157 @@ class RWorkbenchWidget(QWidget):
                 return True
         return super().eventFilter(obj, event)
 
-    def _execute_r(self, code: str, is_repl: bool = False) -> None:
-        if not is_r_available():
-            self._check_and_update_r_status()
-            self.console_output.appendPlainText("\n[Error: R executable not found. Please click 'Auto-Install R' or 'Browse for R...' above.]\n")
+    def _execute_r(self, code, is_repl=False, *, view_name=None):
+        if self._cancel is not None or not code.strip():
             return
+        source = self.presenter.worksheet if self.presenter else None
+        key = (source, getattr(self.presenter, "_revision", 0))
+        if self._source is None or self._source[0] is not source or self._source[1] != key[1]:
+            self._source = key
+            self._snapshot_key = object()
+            self._snapshot = Worksheet(source.name, [
+                Column(col.name, col.kind, list(col.values)) for col in source.columns
+            ]) if source else None
+        session = self._session
+        snapshot = self._snapshot
+        snapshot_key = self._snapshot_key
+        cancelled = self._cancel = threading.Event()
+        self._job_view = view_name
+        self._job_source = source
+        self._set_running(True)
+        self.con_status_lbl.setText("Running…")
+        if view_name is None:
+            self.console_output.appendPlainText("> " + code.strip())
+        _start_job(lambda: session.execute_instant(code, worksheet=snapshot,
+                    worksheet_key=snapshot_key, cancelled=cancelled, timeout=None), self._finish_r)
 
-        ws = self.presenter.worksheet if self.presenter else None
-        self.con_status_lbl.setText("Executing...")
-        self.console_output.appendPlainText(f"> {code.strip()}")
+    def _set_running(self, running):
+        self.btn_stop.setEnabled(running)
+        self.btn_run_sel.setEnabled(not running)
+        self.btn_run_all.setEnabled(not running)
+        self.repl_input.setReadOnly(running)
 
-        res = execute_r_code(code, worksheet=ws, persist_session=True)
-        self.con_status_lbl.setText(f"Ready ({res.get('duration_ms', 0):.1f} ms)")
-
-        if res.get("stdout"):
-            self.console_output.appendPlainText(res["stdout"].rstrip())
-        if res.get("stderr") and not res.get("success"):
-            self.console_output.appendPlainText(f"Error: {res['stderr'].strip()}")
-
+    def _finish_r(self, result):
+        cancelled = self._cancel is not None and self._cancel.is_set()
+        self._cancel = None
+        self._set_running(False)
+        if cancelled:
+            self.con_status_lbl.setText("Stopped")
+            self.console_output.appendPlainText("Stopped. Run a command to start a fresh session.")
+            self.refresh_environment([])
+            return
+        if isinstance(result, Exception):
+            self.con_status_lbl.setText("Error")
+            self.console_output.appendPlainText(str(result))
+            return
+        elapsed = result.get("duration_ms", 0)
+        self.con_status_lbl.setText(f"{'Ready' if result['success'] else 'Error'} · {elapsed:.0f} ms")
+        if result.get("stdout"):
+            self.console_output.appendPlainText(result["stdout"])
+        if result.get("stderr"):
+            self.console_output.appendPlainText("Error: " + result["stderr"])
+        for path in result.get("plot_paths", []):
+            self.plot_gallery.add_plot(path)
+        if result.get("plot_paths"):
+            self.viz_tabs.setCurrentWidget(self.plot_gallery)
+        if result["success"]:
+            for name, data in result["exported_worksheets"].items():
+                try:
+                    sheet = Worksheet(self._job_view or name, [
+                        Column(col["name"], col["kind"], col["values"]) for col in data["columns"]
+                    ])
+                    if self._job_view:
+                        self.data_viewer.load_worksheet(sheet)
+                        self.editor_tabs.setTabText(self.editor_tabs.indexOf(self.data_viewer), self._job_view)
+                        self.editor_tabs.setCurrentWidget(self.data_viewer)
+                    elif self.presenter:
+                        self._install_export(sheet)
+                except (ValueError, OSError, TypeError) as exc:
+                    self.console_output.appendPlainText(f"Could not import {name}. {exc}")
+        self.refresh_environment(result.get("environment", []))
         self.console_output.ensureCursorVisible()
 
-        # Add generated plot to multi-plot gallery
-        if res.get("plot_path"):
-            self.plot_gallery.add_plot(res["plot_path"])
-            self.viz_tabs.setCurrentWidget(self.plot_gallery)
+    def _install_export(self, sheet):
+        from .data_prep_dialogs import install, destinations
+        target = ("New worksheet" if self.presenter.worksheet is self._job_source
+                  and "New worksheet" in destinations(self.presenter) else "New project")
+        if target == "New worksheet":
+            project = self.presenter.native_project
+            sheets = project.worksheets if project else [self.presenter.worksheet]
+            used = {item.name.casefold() for item in sheets}
+            original = sheet.name
+            sequence = 2
+            while sheet.name.casefold() in used:
+                sheet.name = f"{original} {sequence}"
+                sequence += 1
+        install(self.main_window, sheet, target)
+        if target == "New worksheet":
+            self._job_source = self.presenter.worksheet
+        self.console_output.appendPlainText(f"Imported {sheet.name} ({sheet.row_count} rows).")
 
-        # Check for worksheets exported from R
-        exported = res.get("exported_worksheets", {})
-        if exported and self.main_window and self.presenter:
-            for sheet_name, sheet_dict in exported.items():
-                cols = [
-                    Column(c["name"], kind=c.get("kind", "number"), values=c.get("values", []))
-                    for c in sheet_dict.get("columns", [])
-                ]
-                new_ws = Worksheet(sheet_name, cols)
-                self.main_window.add_worksheet_tab(new_ws)
-
-        # Refresh environment variables
-        self.refresh_environment(env_vars=res.get("env_vars"))
-
-    def refresh_environment(self, env_vars: Optional[List[Dict[str, str]]] = None) -> None:
-        """Update Environment table with active variables."""
+    def refresh_environment(self, env_vars=None):
         if env_vars is None:
+            if self.env_table.rowCount():
+                return
             ws = self.presenter.worksheet if self.presenter else None
-            if ws:
-                env_vars = [
-                    {"name": "df", "type": "data.frame", "length": f"{len(ws.columns[0].values) if ws.columns else 0}x{len(ws.columns)}", "value": f"Columns: {', '.join(c.name for c in ws.columns[:4])}..."},
-                    {"name": "worksheet", "type": "data.frame", "length": f"{len(ws.columns[0].values) if ws.columns else 0}x{len(ws.columns)}", "value": "Alias of df"},
-                ]
-                for col in ws.columns:
-                    vals_preview = str(col.values[:3])
-                    env_vars.append({
-                        "name": f"df${col.name}",
-                        "type": col.kind,
-                        "length": f"{len(col.values)} items",
-                        "value": vals_preview,
-                    })
+            if ws is None:
+                return
+            shape = f"{ws.row_count} × {len(ws.columns)}"
+            env_vars = [
+                {"name": "df", "type": "data.frame", "length": shape, "value": "Active worksheet"},
+                {"name": "worksheet", "type": "data.frame", "length": shape, "value": "Alias of df"},
+            ]
+            env_vars.extend({"name": f'df$"{col.name}"', "type": col.kind,
+                             "length": str(len(col.values)), "value": ""}
+                            for col in ws.columns[:100])
+        self.env_table.setUpdatesEnabled(False)
+        try:
+            self.env_table.setRowCount(len(env_vars))
+            for row_index, row in enumerate(env_vars):
+                for column, key in enumerate(("name", "type", "length", "value")):
+                    self.env_table.setItem(row_index, column, QTableWidgetItem(str(row.get(key, ""))))
+        finally:
+            self.env_table.setUpdatesEnabled(True)
 
-        if not env_vars:
-            return
+    def _object_expression(self, name):
+        if name.startswith('df$"') and name.endswith('"'):
+            return "df[[" + json.dumps(name[4:-1], ensure_ascii=False) + "]]"
+        return "get(" + json.dumps(name, ensure_ascii=False) + ", envir=.GlobalEnv, inherits=FALSE)"
 
-        self.env_table.setRowCount(len(env_vars))
-        for r_idx, row in enumerate(env_vars):
-            for c_idx, key in enumerate(["name", "type", "length", "value"]):
-                txt = row.get(key, "")
-                item = QTableWidgetItem(txt)
-                self.env_table.setItem(r_idx, c_idx, item)
+    def _view_object(self, name):
+        self._execute_r(f'statcraft_export({self._object_expression(name)}, "viewer")', view_name=name)
 
-    def _import_selected_to_worksheet(self) -> None:
+    def _import_selected_to_worksheet(self):
         row = self.env_table.currentRow()
         if row < 0:
-            QMessageBox.information(self, "Import Variable", "Please select a variable in the Environment table.")
+            self.con_status_lbl.setText("Select an environment object")
             return
         name = self.env_table.item(row, 0).text()
-        code = f"statcraft_export({name}, '{name.replace('$', '_')}')"
-        self._execute_r(code)
+        self._execute_r(f"statcraft_export({self._object_expression(name)}, {json.dumps(name, ensure_ascii=False)})")
 
-    def _reset_environment(self) -> None:
-        reset_r_session()
-        self.console_output.appendPlainText("\n[R Global Environment cleared and session reset]\n")
-        self.refresh_environment()
+    def stop_execution(self):
+        if self._cancel is not None:
+            self._cancel.set()
+            self._session.interrupt()
+            self.con_status_lbl.setText("Stopping…")
 
-    def _clear_console(self) -> None:
+    def shutdown(self, *, wait=False):
+        if self._cancel is not None:
+            self._cancel.set()
+        self._session.interrupt(wait=wait)
+
+    def _reset_environment(self):
+        self._restart_session()
+
+    def _clear_console(self):
         self.console_output.clear()
 
-    def _restart_session(self) -> None:
-        reset_r_session()
-        self._check_and_update_r_status()
-        self.console_output.appendPlainText("\n[R interactive session restarted cleanly]\n")
+    def _restart_session(self):
+        self.shutdown()
+        self.refresh_environment([])
+        if self._cancel is None:
+            self.con_status_lbl.setText("Ready")
+            self.console_output.appendPlainText("R session cleared. The next command starts a new session.")
 
     def _show_templates_menu(self) -> None:
         menu = QMenu(self)
@@ -1111,14 +1307,18 @@ class RWorkbenchWidget(QWidget):
         if path:
             from PySide6.QtCore import QSettings
             QSettings("StatCraft", "StatCraft").setValue("custom_r_path", path)
+            find_r_executable(refresh=True)
+            self._restart_session()
             self._check_and_update_r_status()
 
-    def _install_r_automatically(self) -> None:
-        self.b_text.setText("<b>Downloading official R for Windows from CRAN...</b> Please wait.")
-        QApplication.processEvents()
-        ok = download_and_install_r_direct(progress_callback=lambda msg: (self.b_text.setText(f"<b>{msg}</b>"), QApplication.processEvents()))
-        if not ok:
-            ok = install_r_via_winget(progress_callback=lambda msg: (self.b_text.setText(f"<b>{msg}</b>"), QApplication.processEvents()))
+    def _install_r_automatically(self):
+        self.btn_auto_install.setEnabled(False)
+        self.b_text.setText("Installing R…")
+        _start_job(lambda: download_and_install_r_direct() or install_r_via_winget(),
+                   self._finish_install)
+
+    def _finish_install(self, installed):
+        self.btn_auto_install.setEnabled(True)
+        self.b_text.setText("R installed." if installed is True else "R setup did not finish. Locate an existing installation or open CRAN.")
+        find_r_executable(refresh=True)
         self._check_and_update_r_status()
-        if ok:
-            QMessageBox.information(self, "R Installation Complete", "R has been installed successfully and is ready to use!")

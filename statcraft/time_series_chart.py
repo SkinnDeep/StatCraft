@@ -15,7 +15,8 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
-from .graph_interaction import GraphInteractionMixin
+from .snapshot_chart import SnapshotChartWidget
+from .graph_hover import summary_info
 
 BLUE = "#0061a8"
 BLUE_FILL = "#1f77b4"
@@ -39,7 +40,7 @@ def _fmt(val: Optional[float], dec: int = 4) -> str:
     return f"{val:.{dec}f}"
 
 
-class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
+class TimeSeriesChartWidget(SnapshotChartWidget):
     """Time Series Plot displaying Actual, Fits, Forecasts with Prediction Limits, and Accuracy box."""
 
     objectSelected = Signal(str)
@@ -47,8 +48,7 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
     brushRowsSelected = Signal(list)
 
     def __init__(self, entry: Dict[str, Any], parent: Optional[QWidget] = None):
-        super().__init__(parent)
-        self.entry = entry
+        super().__init__(entry, parent)
         self.result = entry.get("result", {})
         self.recipe = entry.get("recipe", {})
 
@@ -65,6 +65,7 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         return QSize(780, 480)
 
     def paintEvent(self, event) -> None:
+        self.reset_hover_regions()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
@@ -72,7 +73,7 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         rect = self.rect()
         painter.fillRect(rect, QColor("#ffffff"))
 
-        if self.analysis in ("autocorrelation", "partial_autocorrelation"):
+        if self.analysis in ("autocorrelation", "partial_autocorrelation", "cross_correlation"):
             self._paint_correlation_plot(painter, rect)
         else:
             self._paint_time_series_plot(painter, rect)
@@ -360,11 +361,12 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         painter.drawText(QRectF(cx + 55, cy, card_rect.width() - 75, 16), Qt.AlignmentFlag.AlignRight, _fmt(accuracy.get("msd"), 4))
 
     def _paint_correlation_plot(self, painter: QPainter, rect: QRectF) -> None:
-        """Render Autocorrelation (ACF) or Partial Autocorrelation (PACF) spike plot."""
+        """Render a lag correlation plot."""
         lags_data = self.result.get("lags", [])
+        is_cross = self.analysis == "cross_correlation"
         sig_limit = float(self.result.get("sig_limit", 0.2))
 
-        top_margin = 60
+        top_margin = 20 if is_cross else 60
         bottom_margin = 55
         left_margin = 65
         right_margin = 35
@@ -373,22 +375,16 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         plot_height = max(10.0, rect.height() - top_margin - bottom_margin)
         plot_rect = QRectF(left_margin, top_margin, plot_width, plot_height)
 
-        # Title
-        painter.setPen(QColor(INK))
-        painter.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        painter.drawText(
-            QRectF(left_margin, 10, rect.width() - left_margin - 20, 24),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            self.title_text,
-        )
-
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
-        painter.setPen(QColor(MUTED))
-        painter.drawText(
-            QRectF(left_margin, 34, rect.width() - left_margin - 20, 18),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            f"5% Significance limits for autocorrelations = ±{sig_limit:.4f}",
-        )
+        if not is_cross:
+            painter.setPen(QColor(INK))
+            painter.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            painter.drawText(QRectF(left_margin, 10, rect.width() - left_margin - 20, 24),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title_text)
+            painter.setFont(QFont("Segoe UI", 9))
+            painter.setPen(QColor(MUTED))
+            painter.drawText(QRectF(left_margin, 34, rect.width() - left_margin - 20, 18),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             f"Approximate reference limits ±{sig_limit:.4f}")
 
         # Y scale fixed between -1.0 and +1.0
         def y_coord(val: float) -> float:
@@ -398,8 +394,10 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         if num_lags == 0:
             return
 
+        first_lag = lags_data[0]["lag"]
+
         def x_coord(lag_num: int) -> float:
-            return plot_rect.left() + (lag_num - 0.5) / num_lags * plot_rect.width()
+            return plot_rect.left() + (lag_num - first_lag + 0.5) / num_lags * plot_rect.width()
 
         # Grid lines at -1.0, -0.5, 0.0, +0.5, +1.0
         painter.setPen(QPen(QColor(GRID), 1, Qt.PenStyle.DashLine))
@@ -420,12 +418,22 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
         py_zero = y_coord(0.0)
         painter.drawLine(QPointF(plot_rect.left(), py_zero), QPointF(plot_rect.right(), py_zero))
 
-        # Significance limit bands (Red Dashed)
-        painter.setPen(QPen(QColor(RED), 1.25, Qt.PenStyle.DashLine))
-        py_up = y_coord(sig_limit)
-        py_low = y_coord(-sig_limit)
-        painter.drawLine(QPointF(plot_rect.left(), py_up), QPointF(plot_rect.right(), py_up))
-        painter.drawLine(QPointF(plot_rect.left(), py_low), QPointF(plot_rect.right(), py_low))
+        if not is_cross:
+            painter.setPen(QPen(QColor(RED), 1.25, Qt.PenStyle.DashLine))
+            for limit in (-sig_limit, sig_limit):
+                y = y_coord(limit)
+                painter.drawLine(QPointF(plot_rect.left(), y), QPointF(plot_rect.right(), y))
+        else:
+            painter.setPen(QColor(INK))
+            painter.setFont(QFont("Segoe UI", 9))
+            painter.drawText(QRectF(plot_rect.left(), plot_rect.bottom() + 26, plot_width, 20),
+                             Qt.AlignmentFlag.AlignCenter, "Lag")
+            painter.save()
+            painter.translate(15, plot_rect.center().y())
+            painter.rotate(-90)
+            painter.drawText(QRectF(-plot_height / 2, -10, plot_height, 20),
+                             Qt.AlignmentFlag.AlignCenter, "Cross Correlation")
+            painter.restore()
 
         # Draw Frame
         painter.setPen(QPen(QColor(BORDER), 1))
@@ -443,12 +451,17 @@ class TimeSeriesChartWidget(GraphInteractionMixin, QWidget):
             painter.setPen(QPen(QColor(BLUE), 2.0))
             painter.drawLine(QPointF(px, py_zero), QPointF(px, py_val))
 
-            # Dot at end
-            painter.setBrush(QColor(BLUE_FILL))
-            painter.drawEllipse(QPointF(px, py_val), 3.0, 3.0)
+            if not is_cross:
+                painter.setBrush(QColor(BLUE_FILL))
+                painter.drawEllipse(QPointF(px, py_val), 3.0, 3.0)
 
-            # X-axis lag label
-            if num_lags <= 20 or lag % 2 == 1:
+            fields = [("Lag", lag), ("Correlation", val)]
+            if "pairs" in item:
+                fields.append(("Pairs", item["pairs"]))
+            self.remember_point_hover(QPointF(px, py_val), summary_info("correlation", fields), clip=plot_rect)
+
+            # Keep tick labels readable for long lag ranges.
+            if lag == 0 or (lag - first_lag) % max(1, math.ceil(num_lags / 16)) == 0:
                 painter.setPen(QColor(MUTED))
                 painter.setFont(QFont("Segoe UI", 8))
                 painter.drawText(

@@ -56,21 +56,14 @@ class TestJmpReader(unittest.TestCase):
         self.assertEqual(c3.kind, "text")
         self.assertEqual(c3.values, ["Pass", "Pass", "Fail", "Pass"])
 
-    def test_parse_jmp_binary_heuristic(self):
-        # Create a mock binary buffer with column names in header and 64-bit IEEE double floats
-        header = b'LLLL' + b'\x00' * 32
-        # Inject column names
-        col_names = b'\x08Voltage\x00\x08Current\x00'
-        padding = b'\x00' * (128 - len(header) - len(col_names))
-        floats = struct.pack('<4d', 12.5, 12.8, 1.25, 1.45)
-        raw_data = header + col_names + padding + floats
+    def test_rejects_bytes_that_only_resemble_table_values(self):
+        raw = b"LLLL" + bytes(124) + struct.pack("<4d", 12.5, 12.8, 1.25, 1.45)
+        with self.assertRaises(JmpParseError):
+            _parse_jmp_binary(raw, "Invalid")
 
-        ws = _parse_jmp_binary(raw_data, "TestBinary")
-        self.assertEqual(ws.name, "TestBinary")
-        self.assertTrue(len(ws.columns) >= 2)
-        col_titles = [c.name for c in ws.columns]
-        self.assertIn("Voltage", col_titles)
-        self.assertIn("Current", col_titles)
+    def test_literal_lists_keep_commas_and_pad_missing_rows(self):
+        sheet = _parse_jsl_table('New Table("Sample", Add Rows(3), New Column("Label", Character, Set Values({"a,b", "."})))', "Default")
+        self.assertEqual(sheet.columns[0].values, ["a,b", ".", None])
 
     def test_load_jmp_via_presenter(self):
         jsl_script = """
