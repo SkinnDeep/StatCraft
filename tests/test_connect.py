@@ -352,6 +352,57 @@ class TestStatCraftConnect(unittest.TestCase):
         self.assertTrue(comp_res["comparison"]["aligned"])
         self.assertLessEqual(comp_res["comparison"]["max_diff"], 1e-4)
 
+    def test_connected_workflow_creation_validation_and_replay(self):
+        from statcraft.app import Presenter
+        from statcraft.connect_workflow import (
+            create_workflow_from_entry,
+            validate_workflow_compatibility,
+            replay_workflow,
+            WorkflowValidationError,
+        )
+
+        p = Presenter()
+        p.worksheet = Worksheet("Batch_1", [
+            Column("Strength", "number", [10.2, 12.5, 14.8, 16.2, 18.9]),
+            Column("Additive", "number", [1.0, 2.0, 3.0, 4.0, 5.0]),
+        ])
+        entry = p.multiple_regression(0, [1])
+
+        # 1. Create Workflow from Entry
+        wf = create_workflow_from_entry(entry, p.worksheet, title="Strength Prediction Recipe")
+        self.assertEqual(wf.title, "Strength Prediction Recipe")
+        self.assertEqual(len(wf.steps), 1)
+        self.assertIn("r_squared", wf.baseline_metrics)
+
+        # 2. Validate on compatible sheet
+        compat, col_map, missing, warns = validate_workflow_compatibility(wf, p.worksheet)
+        self.assertTrue(compat)
+        self.assertEqual(missing, [])
+
+        # 3. Validate on incompatible sheet (missing predictor column)
+        ws_incompat = Worksheet("Bad_Batch", [
+            Column("Strength", "number", [10, 20, 30]),
+            Column("Wrong_Col", "number", [1, 2, 3]),
+        ])
+        compat_bad, col_map_bad, missing_bad, warns_bad = validate_workflow_compatibility(wf, ws_incompat)
+        self.assertFalse(compat_bad)
+        self.assertTrue(len(missing_bad) > 0)
+
+        with self.assertRaises(WorkflowValidationError):
+            replay_workflow(wf, ws_incompat, p)
+
+        # 4. Replay on compatible new worksheet Batch_2
+        ws_batch2 = Worksheet("Batch_2", [
+            Column("Strength", "number", [11.0, 13.1, 15.0, 17.5, 19.8]),
+            Column("Additive", "number", [1.0, 2.0, 3.0, 4.0, 5.0]),
+        ])
+        orig_hist_count = len(p.history)
+        replay_res = replay_workflow(wf, ws_batch2, p)
+
+        self.assertTrue(replay_res["success"])
+        self.assertEqual(len(p.history), orig_hist_count + 1, "Original history must be preserved!")
+        self.assertTrue(len(replay_res["convergence"]["shifts"]) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

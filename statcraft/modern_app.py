@@ -1013,6 +1013,7 @@ class ModernWindow(QMainWindow):
         data.addSeparator()
         self._action(data, "Recall Named Selection…", self.recall_named_selection_dialog, None, "select_all", True)
         self._action(data, "Subset Worksheet from Selection…", self.subset_worksheet_from_selection, None, "subset", True)
+        self._action(data, "Replay Saved Workflow…", self.replay_saved_workflow_dialog, None, "workflow", True)
         worksheets_menu = data.addMenu("Worksheets")
         self.rename_sheet_action = self._action(worksheets_menu, "Rename Worksheet…", self.rename_worksheet, None, "rename_sheet")
         self.duplicate_sheet_action = self._action(worksheets_menu, "Duplicate Worksheet…", self.duplicate_worksheet, None, "duplicate_sheet")
@@ -5624,6 +5625,8 @@ class ModernWindow(QMainWindow):
             connect_menu.addSeparator()
             connect_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda: self.connect_apply_predictions(target_entry))
             connect_menu.addAction("Compare Implementations (StatCraft vs R)...", lambda: self.connect_compare_implementations(target_entry))
+            connect_menu.addSeparator()
+            connect_menu.addAction("Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(target_entry))
 
         if is_graph and getattr(self, "_brushed_rows", None):
             menu.addSeparator()
@@ -5909,6 +5912,67 @@ class ModernWindow(QMainWindow):
             frame.update_selection_strip(0)
         self.table.clearSelection()
         self.statusBar().showMessage("Selection cleared", 3000)
+
+    def save_connected_workflow(self, entry):
+        if not entry or not entry.get("recipe"):
+            QMessageBox.information(self, "Save Workflow", "Select an analysis result with a valid recipe first.")
+            return
+
+        from .connect_workflow import create_workflow_from_entry
+        from PySide6.QtWidgets import QInputDialog
+        def_title = f"Workflow: {entry.get('title', 'Analysis')}"
+        title, ok = QInputDialog.getText(self, "Save Reusable Workflow", "Enter workflow title:", text=def_title)
+        if not ok or not title.strip():
+            return
+
+        wf = create_workflow_from_entry(entry, self.presenter.worksheet, title=title.strip())
+        workflows = self.presenter.worksheet.metadata.setdefault("saved_workflows", {})
+        workflows[wf.title] = wf.to_dict()
+        self.presenter.dirty = True
+        self.statusBar().showMessage(f"Saved reusable workflow '{wf.title}' with {len(wf.steps)} step(s).", 5000)
+
+    def replay_saved_workflow_dialog(self):
+        workflows = self.presenter.worksheet.metadata.get("saved_workflows", {})
+        if not workflows:
+            QMessageBox.information(self, "Replay Workflow", "No saved workflows found in this worksheet. Create a model and choose 'Save as Reusable Workflow Recipe' in StatCraft Connect first.")
+            return
+
+        from PySide6.QtWidgets import QInputDialog, QMessageBox
+        from .connect_workflow import ConnectedWorkflow, validate_workflow_compatibility, replay_workflow
+        wf_names = list(workflows.keys())
+        chosen, ok = QInputDialog.getItem(self, "Replay Workflow", "Select workflow recipe to replay:", wf_names, 0, False)
+        if not ok or not chosen:
+            return
+
+        wf = ConnectedWorkflow.from_dict(workflows[chosen])
+        compat, col_map, missing, warnings = validate_workflow_compatibility(wf, self.presenter.worksheet)
+        if not compat:
+            QMessageBox.warning(self, "Workflow Incompatible", f"Cannot replay '{wf.title}' on '{self.presenter.worksheet.name}'.\n\nMissing columns:\n" + "\n".join(f"• {m}" for m in missing))
+            return
+
+        try:
+            res = replay_workflow(wf, self.presenter.worksheet, self.presenter)
+            self.refresh()
+            if res.get("entries"):
+                self.show_result(res["entries"][-1])
+
+            shifts = res.get("convergence", {}).get("shifts", [])
+            shift_lines = []
+            for s in shifts:
+                b_val = f"{s.get('baseline', 0):.4f}" if isinstance(s.get('baseline'), (int, float)) else str(s.get('baseline'))
+                c_val = f"{s.get('current', 0):.4f}" if isinstance(s.get('current'), (int, float)) else str(s.get('current'))
+                shift_lines.append(f"• {s['metric']}: Baseline {b_val} -> Current {c_val} ({s['status']})")
+            shift_text = "\n".join(shift_lines) if shift_lines else "Model converged consistently."
+
+            QMessageBox.information(
+                self,
+                "Workflow Replay Complete",
+                f"Successfully replayed '{wf.title}' on '{self.presenter.worksheet.name}'.\n\nConvergence Summary:\n{shift_text}"
+            )
+            self.statusBar().showMessage(f"Replayed workflow '{wf.title}' successfully.", 5000)
+        except Exception as exc:
+            QMessageBox.critical(self, "Replay Failed", f"Workflow execution encountered an error:\n{exc}")
+
 
     def _show_output_context_menu(self, global_pos, entry=None):
         if (entry or self.selected_entry) is None:
