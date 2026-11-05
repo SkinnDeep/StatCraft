@@ -28,6 +28,8 @@ class TestShowcaseScreenshots(unittest.TestCase):
             "contour.png",
             "optimizer.png",
             "control-chart.png",
+            "control-chart-builder.png",
+            "process-screening.png",
             "doe-factorial.png",
         ]
 

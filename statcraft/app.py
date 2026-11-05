@@ -3777,6 +3777,103 @@ class Presenter:
             recipe={"action": "jmp_distribution", "parameters": parameters}
         )
 
+    def control_chart_builder(
+        self,
+        y_indices,
+        subgroup_index=None,
+        subgroup_size=1,
+        phase_index=None,
+        chart_type="auto",
+        k_sigma=3.0,
+    ):
+        from .control_chart_builder_engine import calculate_control_chart_builder
+        from .control_chart_builder_report import (
+            format_control_chart_builder_report,
+            get_control_chart_builder_tables,
+        )
+
+        y_idx = y_indices[0] if isinstance(y_indices, (list, tuple)) else y_indices
+        y_col = self.worksheet.columns[y_idx]
+        y_vals = y_col.values
+
+        sub_vals = self.worksheet.columns[subgroup_index].values if subgroup_index is not None and 0 <= subgroup_index < len(self.worksheet.columns) else None
+        sub_name = self.worksheet.columns[subgroup_index].name if subgroup_index is not None and 0 <= subgroup_index < len(self.worksheet.columns) else None
+
+        ph_vals = self.worksheet.columns[phase_index].values if phase_index is not None and 0 <= phase_index < len(self.worksheet.columns) else None
+        ph_name = self.worksheet.columns[phase_index].name if phase_index is not None and 0 <= phase_index < len(self.worksheet.columns) else None
+
+        result = calculate_control_chart_builder(
+            y_values=y_vals,
+            subgroup_values=sub_vals,
+            subgroup_size=subgroup_size,
+            phase_values=ph_vals,
+            y_name=y_col.name,
+            subgroup_name=sub_name,
+            phase_name=ph_name,
+            chart_type=chart_type,
+            k_sigma=k_sigma,
+        )
+        result["analysis"] = "control_chart_builder"
+        result["tables"] = get_control_chart_builder_tables(result)
+        result["session_text"] = format_control_chart_builder_report(result)
+
+        parameters = {
+            "y_indices": [y_idx],
+            "subgroup_index": subgroup_index,
+            "subgroup_size": subgroup_size,
+            "phase_index": phase_index,
+            "chart_type": chart_type,
+            "k_sigma": k_sigma,
+        }
+        return self._record(
+            result["title"],
+            result,
+            recipe={"action": "control_chart_builder", "parameters": parameters},
+        )
+
+    def process_screening(
+        self,
+        variable_indices,
+        subgroup_size=1,
+        subgroup_index=None,
+        k_sigma=3.0,
+    ):
+        from .process_screening_engine import calculate_process_screening
+        from .process_screening_report import (
+            format_process_screening_report,
+            get_process_screening_tables,
+        )
+
+        cols_data = []
+        for idx in variable_indices:
+            if 0 <= idx < len(self.worksheet.columns):
+                c = self.worksheet.columns[idx]
+                cols_data.append({"name": c.name, "index": idx, "values": c.values})
+
+        sub_vals = self.worksheet.columns[subgroup_index].values if subgroup_index is not None and 0 <= subgroup_index < len(self.worksheet.columns) else None
+
+        result = calculate_process_screening(
+            columns_data=cols_data,
+            subgroup_size=subgroup_size,
+            subgroup_values=sub_vals,
+            k_sigma=k_sigma,
+        )
+        result["analysis"] = "process_screening"
+        result["tables"] = get_process_screening_tables(result)
+        result["session_text"] = format_process_screening_report(result)
+
+        parameters = {
+            "variable_indices": list(variable_indices),
+            "subgroup_size": subgroup_size,
+            "subgroup_index": subgroup_index,
+            "k_sigma": k_sigma,
+        }
+        return self._record(
+            result["title"],
+            result,
+            recipe={"action": "process_screening", "parameters": parameters},
+        )
+
     def cart_tree(self, response_index, predictor_indices, tree_type='auto', max_depth=5, min_split_size=10, min_leaf_size=5):
         from .tree_engine import fit_decision_tree
         from .tree_report import format_tree_report, get_tree_structured_tables

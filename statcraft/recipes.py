@@ -8,6 +8,8 @@ FIELDS = {
     'cart_tree': {'response_index', 'predictor_indices', 'tree_type', 'max_depth', 'min_split_size', 'min_leaf_size'},
     'fit_y_by_x': {'y_index', 'x_index', 'platform', 'confidence'},
     'jmp_distribution': {'column_indices', 'confidence'},
+    'control_chart_builder': {'y_indices', 'subgroup_index', 'subgroup_size', 'phase_index', 'chart_type', 'k_sigma'},
+    'process_screening': {'variable_indices', 'subgroup_size', 'subgroup_index', 'k_sigma'},
     'evaluating_measurement_process': {'measurement_index', 'part_index', 'operator_index', 'alpha_interaction'},
     'definitive_screening_analysis': {'response_index', 'factor_indices', 'selection', 'alpha_enter', 'alpha_leave', 'confidence', 'show_pareto'},
     'accelerated_life_testing': {'time_index', 'stress_index', 'censor_index', 'model', 'distribution', 'use_stress', 'confidence'},
@@ -324,6 +326,18 @@ def columns(recipe):
         return sorted(set(cols))
     if action == 'jmp_distribution':
         return sorted(set(parameters['column_indices']))
+    if action == 'control_chart_builder':
+        cols = list(parameters.get('y_indices', []))
+        if parameters.get('subgroup_index') is not None:
+            cols.append(parameters['subgroup_index'])
+        if parameters.get('phase_index') is not None:
+            cols.append(parameters['phase_index'])
+        return sorted(set(cols))
+    if action == 'process_screening':
+        cols = list(parameters.get('variable_indices', []))
+        if parameters.get('subgroup_index') is not None:
+            cols.append(parameters['subgroup_index'])
+        return sorted(set(cols))
     if action == 'evaluating_measurement_process':
         cols = [parameters['measurement_index'], parameters['part_index'], parameters['operator_index']]
         return sorted(set(cols))

@@ -906,6 +906,8 @@ class ModernWindow(QMainWindow):
         self.surface_plot_actions['analyze_response_surface']=self._action(response_surface_menu,'Surface Plot…',lambda:self.model_surface_plot('response_surface'),None,None,True)
         self.optimizer_actions['analyze_response_surface']=self._action(response_surface_menu,'Response Optimizer…',lambda:self.optimize_responses('response_surface'),None,None,True)
         control = stat.addMenu("Control Charts")
+        self._action(control, "Control Chart &Builder (Interactive)…", self.control_chart_builder_dialog, None, "chart", True)
+        control.addSeparator()
         subgroups_menu = control.addMenu("Variables Charts for Subgroups")
         self.xbar_r_action = self._action(subgroups_menu, "Xbar-R…", self.xbar_r_dialog, None, None, True)
         self.xbar_s_action = self._action(subgroups_menu, "Xbar-S…", self.xbar_s_dialog, None, None, True)
@@ -939,6 +941,7 @@ class ModernWindow(QMainWindow):
         self._action(rare_event_menu, "&G…", self.g_chart_dialog, None, None, True)
         self._action(rare_event_menu, "&T…", self.t_chart_dialog, None, None, True)
         quality = stat.addMenu("Quality Tools")
+        self._action(quality, "Process &Screening…", self.process_screening_dialog, None, "table", True)
         self.run_chart_action = self._action(quality, "&Run Chart…", self.run_chart_dialog, None, "run_chart", True)
         self.multivari_action = self._action(quality, "&Multi-Vari Chart…", self.multivari_dialog, None, "multivari", True)
         self._action(quality, "&Pareto Chart…", self.pareto_chart_dialog, None, None, True)
@@ -2613,6 +2616,26 @@ class ModernWindow(QMainWindow):
             if entry:
                 self.show_result(entry)
 
+    def control_chart_builder_dialog(self):
+        self._commit_editor()
+        from .control_chart_builder_dialog import ControlChartBuilderDialog
+        dlg = ControlChartBuilderDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.control_chart_builder(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
+    def process_screening_dialog(self):
+        self._commit_editor()
+        from .process_screening_dialog import ProcessScreeningDialog
+        dlg = ProcessScreeningDialog(self.presenter.worksheet, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            vals = dlg.values()
+            entry = self._call(lambda: self.presenter.process_screening(**vals), result=True)
+            if entry:
+                self.show_result(entry)
+
     def cart_tree_dialog(self):
         self._commit_editor()
         from .tree_dialogs import DecisionTreeDialog
@@ -4189,20 +4212,61 @@ class ModernWindow(QMainWindow):
         self.rerun_button.setEnabled(self.selected_entry.get("origin") == "statcraft" and "recipe" in self.selected_entry)
 
     def _result_table(self, headers, rows):
-        table = QTableWidget(len(rows), len(headers)); table.setHorizontalHeaderLabels(headers)
-        table.verticalHeader().setVisible(False); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        import io, csv
+        table = QTableWidget(len(rows), len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        table.setAlternatingRowColors(False)
+        table.setAlternatingRowColors(True)
         table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        table.customContextMenuRequested.connect(lambda pos, t=table: self._show_output_context_menu(t.viewport().mapToGlobal(pos)))
+
+        def _table_context_menu(pos):
+            menu = QMenu(table)
+            act_tsv = menu.addAction("Copy Table as TSV (Excel / JMP / Minitab)")
+            act_csv = menu.addAction("Copy Table as CSV")
+            menu.addSeparator()
+            act_def = menu.addAction("More Output Actions…")
+            action = menu.exec(table.viewport().mapToGlobal(pos))
+            if action in (act_tsv, act_csv):
+                delim = "\t" if action == act_tsv else ","
+                buf = io.StringIO()
+                writer = csv.writer(buf, delimiter=delim)
+                writer.writerow(headers)
+                for r in rows:
+                    writer.writerow([display(v) for v in r])
+                QGuiApplication.clipboard().setText(buf.getvalue())
+                self.statusBar().showMessage(f"Table copied to clipboard ({'TSV' if delim == '\t' else 'CSV'})", 3500)
+            elif action == act_def:
+                self._show_output_context_menu(table.viewport().mapToGlobal(pos))
+
+        table.customContextMenuRequested.connect(_table_context_menu)
         table.setStyleSheet("""
-            QTableWidget { border: 1px solid #d4d4d4; gridline-color: #e6e6e6; background: #ffffff; }
-            QHeaderView::section { background: #ffffff; color: #262626; font-weight: 700; border: none; border-bottom: 1px solid #383838; padding: 4px 8px; }
+            QTableWidget {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                gridline-color: #f1f5f9;
+                background: #ffffff;
+                alternate-background-color: #f8fafc;
+                font-size: 11px;
+            }
+            QTableWidget::item { padding: 4px 8px; }
+            QTableWidget::item:selected { background: #e0f2fe; color: #0f172a; }
+            QHeaderView::section {
+                background: #f8fafc;
+                color: #334155;
+                font-weight: 700;
+                border: none;
+                border-bottom: 1px solid #cbd5e1;
+                padding: 5px 8px;
+            }
         """)
         for row, values in enumerate(rows):
             for col, value in enumerate(values):
-                item = QTableWidgetItem(display(value)); item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                if isinstance(value, (int, float)) and not isinstance(value, bool): item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                item = QTableWidgetItem(display(value))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 table.setItem(row, col, item)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setMinimumSectionSize(75)
@@ -4312,7 +4376,7 @@ class ModernWindow(QMainWindow):
                 session.setPlainText(format_entry(entry)); session.setMinimumHeight(420)
                 layout.addWidget(session)
                 rendered.update(result)
-        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
+        elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing', 'mixture_process_model','mixture_process_prediction','mixture_multi_optimization','mixture_multi_evaluation','mixture_contour','mixture_optimization','mixture_prediction','mixture_model','taguchi_analysis','dynamic_taguchi_analysis','doe_plan', 'multiple_capability', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'nested_gage_rr', 'gage_linearity_and_bias', 'attribute_agreement_analysis'):
             session = QPlainTextEdit(); session.setReadOnly(True); session.setFont(QFont('Consolas', 9.5))
             session.setPlainText(result.get('session_text', format_entry(entry))); session.setMinimumHeight(320)
             layout.addWidget(session)
@@ -4364,7 +4428,7 @@ class ModernWindow(QMainWindow):
             layout.addWidget(label('Analysis of Variance', 'sectionHeading'))
             layout.addWidget(self._result_table(anova_headers, anova_rows))
 
-        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution') and result.get('tables'):
+        if result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'accelerated_life_testing', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening') and result.get('tables'):
             for tbl in result['tables']:
                 layout.addWidget(label(tbl['title'], 'sectionHeading'))
                 layout.addWidget(self._result_table(tbl['headers'], tbl['rows']))
@@ -4674,6 +4738,12 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'jmp_distribution':
                     from .jmp_distribution_chart import JMPDistributionWidget
                     chart = JMPDistributionWidget(entry)
+                elif result.get('analysis') == 'control_chart_builder':
+                    from .control_chart_builder_chart import ControlChartBuilderWidget
+                    chart = ControlChartBuilderWidget(entry)
+                elif result.get('analysis') == 'process_screening':
+                    from .process_screening_chart import ProcessScreeningWidget
+                    chart = ProcessScreeningWidget(entry)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation'):
                     from .design_eval_chart import DesignEvaluationChartWidget
                     chart = DesignEvaluationChartWidget(entry)
@@ -4723,7 +4793,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
-                elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
+                elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
                     chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
                 chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

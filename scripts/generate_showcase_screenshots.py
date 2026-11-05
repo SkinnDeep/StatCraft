@@ -259,6 +259,73 @@ def render_control_chart():
     print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
 
 
+def render_control_chart_builder():
+    from statcraft.control_chart_builder_engine import calculate_control_chart_builder
+    from statcraft.control_chart_builder_chart import ControlChartBuilderWidget
+    import numpy as np
+
+    np.random.seed(101)
+    p1 = list(np.random.normal(12.0, 0.8, 25))
+    p2 = list(np.random.normal(14.2, 0.8, 25))
+    p2[12] = 17.5  # Special-cause alarm
+
+    y_vals = p1 + p2
+    phases = ["Phase 1: Baseline"] * 25 + ["Phase 2: Post-Kaizen"] * 25
+
+    res = calculate_control_chart_builder(
+        y_values=y_vals,
+        phase_values=phases,
+        y_name="Dimension_Y (mm)",
+        chart_type="imr",
+    )
+    entry = {"title": "Control Chart Builder - Dimension_Y", "result": res}
+    w = ControlChartBuilderWidget(entry)
+    w.resize(1000, 640)
+    w.show()
+    app.processEvents()
+
+    target = img_dir / "control-chart-builder.png"
+    pix = w.grab()
+    pix.save(str(target))
+    w.close()
+    print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
+
+
+def render_process_screening():
+    from statcraft.process_screening_engine import calculate_process_screening
+    from statcraft.process_screening_chart import ProcessScreeningWidget
+    import numpy as np
+
+    np.random.seed(777)
+    cols = []
+    specs = {}
+    names = [
+        "Wafer_Thickness", "Etch_Rate", "Oxide_Depth", "Sheet_Resistance",
+        "Threshold_Voltage", "Die_Shear_Force", "Contact_Resistance", "Leakage_Current"
+    ]
+    for i, name in enumerate(names):
+        drift = 0.5 * (i % 3)
+        sd = 0.8 + 0.3 * (i % 4)
+        vals = list(np.random.normal(50.0 + drift * 2.0, sd, 60))
+        if i in (1, 4):  # Add drift/alarms
+            vals[45:] = [v + 3.0 for v in vals[45:]]
+        cols.append({"name": name, "index": i, "values": vals})
+        specs[name] = {"lsl": 46.0, "target": 50.0, "usl": 54.0}
+
+    res = calculate_process_screening(cols, specs_dict=specs)
+    entry = {"title": "Process Screening Dashboard", "result": res}
+    w = ProcessScreeningWidget(entry)
+    w.resize(1080, 680)
+    w.show()
+    app.processEvents()
+
+    target = img_dir / "process-screening.png"
+    pix = w.grab()
+    pix.save(str(target))
+    w.close()
+    print(f"Generated: {target.name} ({target.stat().st_size} bytes)")
+
+
 if __name__ == "__main__":
     print("Starting screenshot generation pipeline with native TrueType typography...")
     render_jmp_platform_ui()
@@ -269,4 +336,6 @@ if __name__ == "__main__":
     render_dsd_pareto()
     render_prediction_profiler()
     render_control_chart()
+    render_control_chart_builder()
+    render_process_screening()
     print("All screenshots generated successfully.")

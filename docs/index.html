@@ -402,6 +402,8 @@
         <button onclick="switchTab('contour')" id="tab-contour" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Contour Slices</button>
         <button onclick="switchTab('optimizer')" id="tab-optimizer" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Response Optimizer</button>
         <button onclick="switchTab('control')" id="tab-control" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Xbar-R Control Chart</button>
+        <button onclick="switchTab('ccb')" id="tab-ccb" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Control Chart Builder (JMP)</button>
+        <button onclick="switchTab('screening')" id="tab-screening" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Process Screening (JMP)</button>
         <button onclick="switchTab('factorial')" id="tab-factorial" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Factorial Main Effects</button>
       </div>
 
@@ -835,6 +837,14 @@
       control: {
         img: 'images/control-chart.png',
         caption: 'Statistical Process Control: Xbar-R chart with automated zone detection, Nelson test rules, and out-of-control point flags.'
+      },
+      ccb: {
+        img: 'images/control-chart-builder.png',
+        caption: 'JMP Control Chart Builder: Interactive dual vector canvas (Individual/Xbar & Moving Range/R/S) with dynamic multi-phase separation, phase dividers, step control limits, and Western Electric / Nelson alarm detection.'
+      },
+      screening: {
+        img: 'images/process-screening.png',
+        caption: 'JMP Process Screening Platform: Enterprise Six Sigma dashboard screening dozens to hundreds of process parameters simultaneously, computing Stability Index (s_overall / s_within), Cp/Cpk/Pp/Ppk, out-of-spec alarms, and 1-click drilldown into Control Chart Builder.'
       },
       factorial: {
         img: 'images/doe-factorial.png',

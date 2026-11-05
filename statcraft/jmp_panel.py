@@ -617,6 +617,7 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
 
     # 2. TABLES
     tables_m = bar.addMenu("&Tables")
+    _act(tables_m, "Summary / Tabulate…", win.cross_tabulation_dialog, icon="table")
     _act(tables_m, "Subset…", getattr(win, "subset_worksheet_dialog", win.sort_dialog))
     _act(tables_m, "Sort…", win.sort_dialog)
     from .data_prep_dialogs import open_dialog as prepare_dialog
@@ -701,6 +702,8 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
     _act(pred_m, "Partition (Decision Tree)…", win.cart_tree_dialog if hasattr(win, "cart_tree_dialog") else win.describe)
     ana_m.addSeparator()
     qp_m = ana_m.addMenu("Quality and Process")
+    _act(qp_m, "Control Chart Builder…", getattr(win, "control_chart_builder_dialog", win.xbar_r_dialog), icon="chart")
+    _act(qp_m, "Process Screening…", getattr(win, "process_screening_dialog", win.capability), icon="table")
     _act(qp_m, "Wheeler EMP Gauge Study…", win.emp_dialog if hasattr(win, "emp_dialog") else None)
     _act(qp_m, "Gage R&R (Crossed / Nested)…", win.gage_rr)
     _act(qp_m, "Variables Control Charts (Xbar-R, I-MR)…", win.xbar_r_dialog)
@@ -721,7 +724,7 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
     _act(graph_m, "Contour Plot…", lambda: win.model_contour_plot("regression"))
     _act(graph_m, "Surface Plot (3D Response Surface)…", lambda: win.model_surface_plot("rsm"))
     _act(graph_m, "Scatterplot Matrix…", lambda: win.graph("matrix"))
-    _act(graph_m, "Variability / Attribute Chart…", lambda: win.graph("variability") if hasattr(win, "graph") else None)
+    _act(graph_m, "Variability / Attribute Gauge Chart…", win.multivari_dialog, icon="play_script")
     _act(graph_m, "Pareto Plot…", win.pareto_chart_dialog)
     _act(graph_m, "Boxplot…", lambda: win.graph("boxplot"))
     _act(graph_m, "Histogram…", lambda: win.graph("histogram"))
