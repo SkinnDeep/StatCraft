@@ -87,26 +87,26 @@ class SingleVariableDistributionCanvas(QWidget):
             max_count = 1
 
         # Layout width division:
-        # Box plot column on the left (w_box = 45px), Histogram bars to the right
-        box_w = 40.0
-        hist_x0 = x0 + box_w + 15.0
-        hist_w = pw - box_w - 20.0
+        # Tick numbers on far left [0..x0-8], Box plot [x0..x0+45], Histogram [x0+50..x0+pw]
+        box_w = 38.0
+        box_center_x = x0 + box_w / 2.0
+        hist_x0 = x0 + box_w + 14.0
+        hist_w = max(50.0, pw - box_w - 20.0)
 
-        # Draw Y-Axis Ticks & Labels
+        # Draw Y-Axis Ticks & Labels (left of axis line at x0)
         p.setPen(QPen(QColor("#cbd5e1"), 1))
-        p.drawLine(int(x0 + box_w + 5), int(y0), int(x0 + box_w + 5), int(y0 + ph))
+        p.drawLine(int(x0), int(y0), int(x0), int(y0 + ph))
 
         num_ticks = 5
         p.setPen(QPen(QColor("#64748b"), 1))
         for i in range(num_ticks + 1):
             tv = y_min + (i / num_ticks) * y_span
             ty = val_to_y(tv)
-            p.drawLine(int(x0 + box_w + 1), int(ty), int(x0 + box_w + 5), int(ty))
+            p.drawLine(int(x0 - 4), int(ty), int(x0), int(ty))
             txt = f"{tv:.2f}" if abs(tv) < 1000 else f"{tv:.1e}"
-            p.drawText(QRectF(0, ty - 8, x0 + box_w - 2, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, txt)
+            p.drawText(QRectF(0, ty - 8, x0 - 8, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, txt)
 
         # 1. OUTLIER BOX PLOT (Vertical)
-        box_center_x = x0 + box_w / 2.0
         q25 = var.get("q25", y_min)
         median = var.get("median", y_min)
         q75 = var.get("q75", y_max)

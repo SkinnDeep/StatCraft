@@ -118,8 +118,6 @@ def prepare(chart, result: dict[str, Any]) -> None:
 def draw_panel(chart, p: QPainter, area: QRectF, d: dict[str, Any]) -> None:
     """Draw one control chart panel (Xbar or R/S)."""
     p.save()
-    p.setFont(QFont('Segoe UI', 10, QFont.Weight.DemiBold))
-    chart._text(p, QRectF(area.left() + 76, area.top() + 4, area.width() - 100, 22), d['title'], INK, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
     k_sub = d['k_subgroups']
     if k_sub <= 0:

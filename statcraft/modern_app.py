@@ -1293,7 +1293,9 @@ class ModernWindow(QMainWindow):
         settings.setValue("ui_mode", mode)
 
         mode_label = "JMP Platform" if mode == "jmp" else "Minitab Classic"
-        self.statusBar().showMessage(f"StatCraft UI Style: {mode_label}", 4000)
+        if hasattr(self, "status_sheet_label"):
+            ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
+            self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")
 
     def _module_notice(self, title, message):
         QMessageBox.information(self, title, message)
