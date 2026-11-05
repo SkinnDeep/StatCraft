@@ -105,6 +105,99 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
     return "\n".join(lines)
 
 
+def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean, standalone R code for Response Surface Methodology and Bootstrap."""
+    resp_sym = format_r_symbol(connected.response_name)
+    fact_syms = [format_r_symbol(p) for p in connected.predictor_names]
+
+    # Linear & 2-factor interactions + quadratic terms
+    formula_terms = [f"({ ' + '.join(fact_syms) })^2"] + [f"I({f}^2)" for f in fact_syms]
+    formula_rhs = " + ".join(formula_terms)
+
+    candidate_lines = []
+    for f_orig, f_sym in zip(connected.predictor_names, fact_syms):
+        candidate_lines.append(f"  {f_sym} = mean(df${f_sym}, na.rm = TRUE)")
+    candidate_def = ",\n".join(candidate_lines)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation (Response Surface & Bootstrap)",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {connected.confidence * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Model Formula & Quadratic Response Surface Fit",
+        f"formula_obj <- {resp_sym} ~ {formula_rhs}",
+        "fit <- lm(formula_obj, data = df)",
+        "",
+        "# 2. Summary & Analysis of Variance",
+        "cat('================================================================\\n')",
+        "cat('         Response Surface Regression Summary (OLS Fit)          \\n')",
+        "cat('================================================================\\n\\n')",
+        "print(summary(fit))",
+        "cat('\\n--- Analysis of Variance (ANOVA) ---\\n')",
+        "print(anova(fit))",
+        "",
+    ]
+
+    if len(fact_syms) >= 2:
+        f1, f2 = fact_syms[0], fact_syms[1]
+        lines.extend([
+            "# 3. Contour & Perspective Surface Plots",
+            "par(mfrow = c(1, 2))",
+            f"grid_x <- seq(min(df${f1}, na.rm = TRUE), max(df${f1}, na.rm = TRUE), length.out = 30)",
+            f"grid_y <- seq(min(df${f2}, na.rm = TRUE), max(df${f2}, na.rm = TRUE), length.out = 30)",
+            f"grid_df <- expand.grid({f1} = grid_x, {f2} = grid_y)",
+        ])
+        for extra in fact_syms[2:]:
+            lines.append(f"grid_df${extra} <- mean(df${extra}, na.rm = TRUE)")
+        lines.extend([
+            "grid_z <- matrix(predict(fit, newdata = grid_df), nrow = 30, ncol = 30)",
+            f"contour(grid_x, grid_y, grid_z, main = 'RSM Contour Plot', xlab = '{connected.predictor_names[0]}', ylab = '{connected.predictor_names[1]}', col = '#0284c7', lwd = 1.5)",
+            f"persp(grid_x, grid_y, grid_z, main = '3D Response Surface', xlab = '{connected.predictor_names[0]}', ylab = '{connected.predictor_names[1]}', zlab = '{connected.response_name}', col = '#38bdf8', shade = 0.4, theta = 35, phi = 25)",
+            "par(mfrow = c(1, 1))",
+            "",
+        ])
+
+    lines.extend([
+        "# 4. Bootstrap Prediction Uncertainty at Operating Point",
+        "# (Fixed-X Non-Parametric Residual Resampling with 1,000 replications)",
+        "candidate_point <- data.frame(",
+        candidate_def,
+        ")",
+        "y_hat <- predict(fit, newdata = candidate_point)",
+        "",
+        "set.seed(42)",
+        "B <- 1000",
+        "resids <- residuals(fit)",
+        "boot_preds <- numeric(B)",
+        "for (b in seq_len(B)) {",
+        "  df_boot <- df",
+        f"  df_boot[[{repr(connected.response_name)}]] <- fitted(fit) + sample(resids, replace = TRUE)",
+        "  b_fit <- lm(formula_obj, data = df_boot)",
+        "  boot_preds[b] <- predict(b_fit, newdata = candidate_point)",
+        "}",
+        "ci_lower <- quantile(boot_preds, 0.025)",
+        "ci_upper <- quantile(boot_preds, 0.975)",
+        "cat(sprintf('\\n[StatCraft Connect] Candidate Operating Point Prediction: %.4f\\n', y_hat))",
+        "cat(sprintf('[StatCraft Connect] 95%% Bootstrap Uncertainty Interval: [%.4f, %.4f]\\n\\n', ci_lower, ci_upper))",
+        "",
+        "# 5. Export Diagnostics back to StatCraft Worksheet",
+        "fit_preds <- predict(fit, newdata = df)",
+        f"fit_resids <- ifelse(is.na(df[[{repr(connected.response_name)}]]), NA, df[[{repr(connected.response_name)}]] - fit_preds)",
+        "diagnostics <- data.frame(",
+        "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
+        "  Fitted = fit_preds,",
+        "  Residuals = fit_resids",
+        ")",
+        "statcraft_export(diagnostics, 'RSM_Diagnostics')",
+        "cat('[StatCraft Connect] RSM Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
+    ])
+
+    return "\n".join(lines)
+
+
 def import_r_predictions_to_worksheet(
     worksheet: "Worksheet",
     export_dict: Dict[str, Any],
@@ -119,7 +212,7 @@ def import_r_predictions_to_worksheet(
     from .model import Column
 
     # 1. Locate exported table
-    table_data = export_dict.get(table_name)
+    table_data = export_dict.get(table_name) or export_dict.get("RSM_Diagnostics") or export_dict.get("Regression_Diagnostics")
     if not table_data and len(export_dict) == 1:
         # Fall back to single exported table if name differs
         table_data = next(iter(export_dict.values()))

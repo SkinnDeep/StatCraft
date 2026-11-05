@@ -330,3 +330,94 @@ def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet)
         )
 
     return ("current", "Model is fully synchronized with current worksheet data.")
+
+
+def create_connected_response_surface(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_indices: List[int],
+    result: Dict[str, Any],
+    confidence: float = 0.95,
+    coding: Optional[List[Dict[str, Any]]] = None,
+    terms: Optional[List[List[int]]] = None,
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a fitted analyze_response_surface result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-resp-{response_index}")
+    factor_cols = [worksheet.columns[i] for i in factor_indices]
+    factor_ids = [col.metadata.get("id", f"col-fact-{i}") for i, col in zip(factor_indices, factor_cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = result.get("row_indices")
+    if complete_indices is None:
+        def _valid_num(v: Any) -> bool:
+            if v is None or isinstance(v, bool):
+                return False
+            try:
+                import math
+                return math.isfinite(float(v))
+            except (ValueError, TypeError, OverflowError):
+                return False
+
+        complete_indices = []
+        for i in range(len(all_row_ids)):
+            r_val = resp_col.values[i] if i < len(resp_col.values) else None
+            if not _valid_num(r_val):
+                continue
+            if all(i < len(p.values) and _valid_num(p.values[i]) for p in factor_cols):
+                complete_indices.append(i)
+
+    complete_set = set(complete_indices)
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if 0 <= i < len(all_row_ids)]
+    omitted_row_ids = [all_row_ids[i] for i in range(len(all_row_ids)) if i not in complete_set]
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "adjusted_r_squared": result.get("adjusted_r_squared", 0.0),
+        "f_statistic": result.get("f"),
+        "p_value": result.get("p_value"),
+        "residual_stdev": result.get("residual_stdev", 0.0),
+        "df_regression": result.get("df_regression"),
+        "df_error": result.get("df_error"),
+        "count": result.get("count", 0),
+        "missing": result.get("missing", 0),
+    }
+
+    fingerprint = compute_data_fingerprint(worksheet, [response_index] + factor_indices)
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-{uuid.uuid4().hex[:12]}",
+        analysis_type="analyze_response_surface",
+        title=f"Response Surface — {resp_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=factor_ids,
+        predictor_names=[c.name for c in factor_cols],
+        confidence=confidence,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=result.get("coefficients", []),
+        statistics=stats,
+        fitted_values=result.get("fitted", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "coding": coding or result.get("coding_information", []),
+            "terms": terms or result.get("terms", []),
+            "options": options or result.get("options", {}),
+            "lack_of_fit": result.get("lack_of_fit"),
+            "anova_terms": result.get("anova_terms", []),
+        }
+    )
+
+    from .connect_r import generate_r_rsm_script
+    connected.r_script = generate_r_rsm_script(connected, worksheet)
+    return connected

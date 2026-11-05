@@ -24,7 +24,11 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
         return False
 
     resp_name = connected.response_name if connected else result.get("response_name")
-    pred_names = connected.predictor_names if connected else result.get("variables", [])
+    pred_names = connected.predictor_names if connected else (
+        result.get("factor_information") or result.get("variables", [])
+    )
+    if isinstance(pred_names, list) and pred_names and isinstance(pred_names[0], dict):
+        pred_names = [f.get("name") for f in pred_names]
 
     ws = window.presenter.worksheet
 
@@ -42,36 +46,47 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
         window.statusBar().showMessage("Cannot open explorer: one or more model columns not found.", 8000)
         return False
 
-    # Single continuous predictor -> Open JMP Fit Y by X Bivariate Platform
-    if len(pred_indices) == 1:
+    action = recipe.get("action") or (connected.analysis_type if connected else "")
+
+    # Single continuous predictor for simple regression -> Open JMP Fit Y by X Bivariate Platform
+    if action == "multiple_regression" and len(pred_indices) == 1:
         x_idx = pred_indices[0]
-        # Execute Fit Y by X (Bivariate) with same response and predictor
-        from .fit_y_by_x_engine import fit_y_by_x_platform
         conf = connected.confidence if connected else recipe.get("parameters", {}).get("confidence", 0.95)
         fit_entry = window._call(
             lambda: window.presenter.fit_y_by_x(y_index=resp_idx, x_index=x_idx, confidence=conf),
             result=True
         )
         if fit_entry:
-            # Switch to JMP mode so the platform is presented in its natural interactive environment
             window.set_ui_mode("jmp")
             window.show_result(fit_entry)
             window.statusBar().showMessage(f"StatCraft Connect: Opened Bivariate Fit for {resp_name} vs {pred_names[0]}", 6000)
             return True
 
-    # Multiple predictors -> Open JMP-style Interactive Prediction Profiler
+    # Multiple predictors or Response Surface -> Open JMP-style Interactive Prediction Profiler
     model_recipe = copy.deepcopy(recipe)
     if not model_recipe and connected:
-        model_recipe = {
-            "action": "multiple_regression",
-            "parameters": {
-                "response_index": resp_idx,
-                "predictor_indices": pred_indices,
-                "confidence": connected.confidence
+        if connected.analysis_type == "analyze_response_surface":
+            model_recipe = {
+                "action": "analyze_response_surface",
+                "parameters": {
+                    "response_index": resp_idx,
+                    "factor_indices": pred_indices,
+                    "coding": connected.metadata.get("coding"),
+                    "terms": connected.metadata.get("terms"),
+                    "options": connected.metadata.get("options", {"confidence": connected.confidence})
+                }
             }
-        }
+        else:
+            model_recipe = {
+                "action": "multiple_regression",
+                "parameters": {
+                    "response_index": resp_idx,
+                    "predictor_indices": pred_indices,
+                    "confidence": connected.confidence
+                }
+            }
 
     from .prediction_profiler_dialog import PredictionProfilerDialog
-    dialog = PredictionProfilerDialog(ws, [model_recipe], window)
+    dialog = PredictionProfilerDialog(window, ws, [model_recipe])
     dialog.exec()
     return True

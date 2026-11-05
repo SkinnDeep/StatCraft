@@ -3579,7 +3579,15 @@ class Presenter:
         codes=result.get('surface_coding_information',result['coding_information'])
         parameters=dict(response_index=response_index,factor_indices=list(factor_indices),coding=[dict(low=c['low'],high=c['high']) for c in codes],terms=result.get('surface_terms',result['terms']),options=result['options'])
         if block_index is not None:parameters['block_index']=block_index
-        return self._record('Response Surface Regression: '+result['response_name'],result,recipe={'action':'analyze_response_surface','parameters':parameters})
+        entry = self._record('Response Surface Regression: '+result['response_name'],result,recipe={'action':'analyze_response_surface','parameters':parameters})
+        try:
+            from .connect import create_connected_response_surface
+            conf = options.get('confidence', 0.95) if isinstance(options, dict) else 0.95
+            conn = create_connected_response_surface(self.worksheet, response_index, factor_indices, result, conf, coding=parameters['coding'], terms=parameters['terms'], options=options)
+            entry['connected_analysis'] = conn.to_dict()
+        except Exception:
+            pass
+        return entry
 
     def create_factorial(self,factors,replicates=1,centers=0,randomize=True,seed=1,generators=None,blocks=1):
         from .doe import create_factorial

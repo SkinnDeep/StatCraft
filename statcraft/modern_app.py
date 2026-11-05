@@ -4697,11 +4697,21 @@ class ModernWindow(QMainWindow):
 
         # --- Clean StatCraft Connect Header Action ---
         conn_dict = entry.get("connected_analysis")
-        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
+        recipe_act = entry.get("recipe", {}).get("action")
+        p_params = entry.get("recipe", {}).get("parameters", {})
+        if not conn_dict and recipe_act == "multiple_regression" and "response_index" in p_params:
             from .connect import create_connected_regression
-            p = entry["recipe"]["parameters"]
             try:
-                conn_obj = create_connected_regression(self.presenter.worksheet, p["response_index"], p["predictor_indices"], result, p.get("confidence", 0.95))
+                conn_obj = create_connected_regression(self.presenter.worksheet, p_params["response_index"], p_params["predictor_indices"], result, p_params.get("confidence", 0.95))
+                conn_dict = conn_obj.to_dict()
+                entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
+        elif not conn_dict and recipe_act == "analyze_response_surface" and "response_index" in p_params:
+            from .connect import create_connected_response_surface
+            try:
+                conf = p_params.get("options", {}).get("confidence", 0.95) if isinstance(p_params.get("options"), dict) else 0.95
+                conn_obj = create_connected_response_surface(self.presenter.worksheet, p_params["response_index"], p_params["factor_indices"], result, conf, coding=p_params.get("coding"), terms=p_params.get("terms"), options=p_params.get("options"))
                 conn_dict = conn_obj.to_dict()
                 entry["connected_analysis"] = conn_dict
             except Exception:
@@ -5628,9 +5638,13 @@ class ModernWindow(QMainWindow):
 
     def connect_open_dialog(self, entry):
         recipe = entry.get("recipe", {})
-        if recipe.get("action") == "multiple_regression":
+        action = recipe.get("action")
+        if action == "multiple_regression":
             self.set_ui_mode("minitab")
             self.multiple_regression_dialog()
+        elif action == "analyze_response_surface":
+            self.set_ui_mode("minitab")
+            self.analyze_surface_dialog()
 
     def connect_open_explorer(self, entry):
         from .connect_explorer import open_interactive_explorer
@@ -5638,14 +5652,25 @@ class ModernWindow(QMainWindow):
 
     def connect_open_in_r(self, entry):
         conn_dict = entry.get("connected_analysis")
-        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
-            from .connect import create_connected_regression
-            p = entry["recipe"]["parameters"]
-            conn_dict = create_connected_regression(
-                self.presenter.worksheet, p["response_index"], p["predictor_indices"],
-                entry.get("result", {}), p.get("confidence", 0.95)
-            ).to_dict()
-            entry["connected_analysis"] = conn_dict
+        recipe = entry.get("recipe", {})
+        action = recipe.get("action")
+        p = recipe.get("parameters", {})
+        if not conn_dict:
+            if action == "multiple_regression" and "response_index" in p:
+                from .connect import create_connected_regression
+                conn_dict = create_connected_regression(
+                    self.presenter.worksheet, p["response_index"], p["predictor_indices"],
+                    entry.get("result", {}), p.get("confidence", 0.95)
+                ).to_dict()
+                entry["connected_analysis"] = conn_dict
+            elif action == "analyze_response_surface" and "response_index" in p:
+                from .connect import create_connected_response_surface
+                conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
+                conn_dict = create_connected_response_surface(
+                    self.presenter.worksheet, p["response_index"], p["factor_indices"],
+                    entry.get("result", {}), conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
+                ).to_dict()
+                entry["connected_analysis"] = conn_dict
 
         if conn_dict and self.r_workbench:
             self.set_ui_mode("r")
@@ -5654,14 +5679,25 @@ class ModernWindow(QMainWindow):
 
     def connect_apply_predictions(self, entry):
         conn_dict = entry.get("connected_analysis")
-        if not conn_dict and entry.get("recipe", {}).get("action") == "multiple_regression":
-            from .connect import create_connected_regression
-            p = entry["recipe"]["parameters"]
-            conn_dict = create_connected_regression(
-                self.presenter.worksheet, p["response_index"], p["predictor_indices"],
-                entry.get("result", {}), p.get("confidence", 0.95)
-            ).to_dict()
-            entry["connected_analysis"] = conn_dict
+        recipe = entry.get("recipe", {})
+        action = recipe.get("action")
+        p = recipe.get("parameters", {})
+        if not conn_dict:
+            if action == "multiple_regression" and "response_index" in p:
+                from .connect import create_connected_regression
+                conn_dict = create_connected_regression(
+                    self.presenter.worksheet, p["response_index"], p["predictor_indices"],
+                    entry.get("result", {}), p.get("confidence", 0.95)
+                ).to_dict()
+                entry["connected_analysis"] = conn_dict
+            elif action == "analyze_response_surface" and "response_index" in p:
+                from .connect import create_connected_response_surface
+                conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
+                conn_dict = create_connected_response_surface(
+                    self.presenter.worksheet, p["response_index"], p["factor_indices"],
+                    entry.get("result", {}), conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
+                ).to_dict()
+                entry["connected_analysis"] = conn_dict
 
         if not conn_dict:
             return

@@ -253,6 +253,60 @@ class TestStatCraftConnect(unittest.TestCase):
             self.assertEqual(loaded_ws.metadata.get("named_selections"), self.ws.metadata.get("named_selections"))
             self.assertEqual(loaded_ws.columns[0].metadata.get("id"), self.ws.columns[0].metadata.get("id"))
 
+    def test_connected_response_surface_and_bootstrap(self):
+        from statcraft.connect import create_connected_response_surface
+        result = {
+            "coefficients": [
+                {"name": "Constant", "coef": 50.0},
+                {"name": "X1 Factor", "coef": 4.5},
+                {"name": "X2 Factor", "coef": -2.1},
+                {"name": "X1 Factor*X1 Factor", "coef": 1.2},
+                {"name": "X2 Factor*X2 Factor", "coef": 0.8},
+                {"name": "X1 Factor*X2 Factor", "coef": 0.5},
+            ],
+            "r_squared": 0.965,
+            "adjusted_r_squared": 0.950,
+            "f": 85.2,
+            "p_value": 0.0001,
+            "residual_stdev": 0.35,
+            "fitted": [48.5, 52.1, 49.8, 55.0, 53.2],
+            "residuals": [0.5, -0.2, 0.1, 0.4, -0.3],
+            "coding_information": [
+                {"name": "X1 Factor", "low": 1.0, "high": 3.0, "center": 2.0, "half_range": 1.0},
+                {"name": "X2 Factor", "low": 10.0, "high": 30.0, "center": 20.0, "half_range": 10.0},
+            ],
+            "terms": [[0], [1], [0, 0], [1, 1], [0, 1]],
+        }
+
+        # Response: Y Response (col 0), Factors: X1 (col 1), X2 (col 2)
+        conn = create_connected_response_surface(
+            self.ws, 0, [1, 2], result, confidence=0.95
+        )
+        self.assertEqual(conn.analysis_type, "analyze_response_surface")
+        self.assertEqual(conn.response_name, "Y Response")
+        self.assertEqual(conn.predictor_names, ["X1 Factor", "X2 Factor"])
+
+        # Check generated R RSM script
+        script = conn.r_script
+        self.assertIn("formula_obj <- `Y Response` ~ (`X1 Factor` + `X2 Factor`)^2 + I(`X1 Factor`^2) + I(`X2 Factor`^2)", script)
+        self.assertIn("contour(", script)
+        self.assertIn("persp(", script)
+        self.assertIn("Bootstrap Prediction Uncertainty", script)
+        self.assertIn("B <- 1000", script)
+        self.assertIn("statcraft_export(diagnostics, 'RSM_Diagnostics')", script)
+
+        # Import RSM Diagnostics to worksheet
+        export_dict = {
+            "RSM_Diagnostics": [
+                Column("Row_ID", "text", conn.fitted_row_ids),
+                Column("Fitted", "number", [48.6, 52.0, 49.7, 55.1, 53.0]),
+                Column("Residuals", "number", [0.4, -0.1, 0.2, 0.3, -0.1]),
+            ]
+        }
+        res = import_r_predictions_to_worksheet(self.ws, export_dict, conn, table_name="RSM_Diagnostics")
+        self.assertTrue(res["success"])
+        self.assertEqual(res["rows_updated"], len(conn.fitted_row_ids))
+
 
 if __name__ == "__main__":
     unittest.main()
