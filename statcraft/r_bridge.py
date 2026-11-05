@@ -365,7 +365,8 @@ cat("<<<STATCRAFT_READY>>>\\n")
         while time.time() < deadline:
             try:
                 line = self._output_queue.get(timeout=0.05)
-                if line.strip() == token:
+                clean = line.strip()
+                if clean == token or clean.lstrip("> ") == token:
                     return collected, True
                 collected.append(line)
             except queue.Empty:
@@ -441,9 +442,9 @@ cat("<<<STATCRAFT_READY>>>\\n")
             # Check initial plot mtime
             plot_mtime_before = self.plot_path.stat().st_mtime if self.plot_path.exists() else 0.0
 
-            # Execute code with delimiter
+            # Execute code with delimiter and auto-flush graphic device if active
             exec_token = f"<<<STATCRAFT_DONE_{int(time.time() * 1000)}>>>"
-            delimited_code = f"\n{code}\ncat('{exec_token}\\n')\n"
+            delimited_code = f"\n{code}\nif (dev.cur() > 1) try(invisible(dev.off()), silent=TRUE)\ncat('{exec_token}\\n')\n"
             self._send_raw(delimited_code)
 
             output_lines = []
@@ -453,7 +454,8 @@ cat("<<<STATCRAFT_READY>>>\\n")
             while time.time() < deadline:
                 try:
                     line = self._output_queue.get(timeout=0.02)
-                    if line.strip() == exec_token:
+                    clean = line.strip()
+                    if clean == exec_token or clean.lstrip("> ") == exec_token:
                         success = True
                         break
                     output_lines.append(line)

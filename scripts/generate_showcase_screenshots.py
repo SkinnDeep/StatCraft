@@ -384,6 +384,7 @@ def render_r_workbench():
     target = img_dir / "r-workbench.png"
     pix = win.grab()
     pix.save(str(target))
+    win.presenter.dirty = False
     win.close()
     win.deleteLater()
     app.processEvents()
