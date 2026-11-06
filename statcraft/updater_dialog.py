@@ -37,7 +37,9 @@ class CheckForUpdatesDialog(QDialog):
     def __init__(self, parent=None, manifest_url: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("StatCraft - Software Updates")
-        self.setFixedSize(540, 420)
+        self.setMinimumSize(540, 420)
+        self.resize(540, 420)
+        self.setSizeGripEnabled(True)
         self.manifest_url = manifest_url
         self.update_info = None
 

@@ -18,7 +18,9 @@ class OneSamplePoissonOptionsDialog(QDialog):
         self.setWindowTitle("One-Sample Poisson Rate: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(380, 200)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         grid = QGridLayout()
@@ -122,7 +124,9 @@ class OneSamplePoissonDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("One-Sample Poisson Rate")
         self.setModal(True)
-        self.resize(560, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         self.options: Dict[str, Any] = {
             "confidence_level": 95.0,

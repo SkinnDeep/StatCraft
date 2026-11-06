@@ -91,7 +91,11 @@ class VariableEntry(QLineEdit):
 
 class ProcedureDialog(QDialog):
     def __init__(self,parent,title,worksheet,selectors=(),fields=(),note=''):
-        super().__init__(parent); self.setWindowTitle(title); self.setMinimumWidth(700)
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumSize(680, 440)
+        self.resize(720, 480)
+        self.setSizeGripEnabled(True)
         self.worksheet=worksheet; self.selectors=list(selectors); self.fields=list(fields)
         self.controls={}; self.parameters=None; self.active_key=None
         dark = _is_dark_active(parent or self)

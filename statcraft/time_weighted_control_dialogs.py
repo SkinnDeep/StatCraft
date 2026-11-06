@@ -52,7 +52,9 @@ class TimeWeightedOptionsDialog(QDialog):
         else:
             self.setWindowTitle(f"{self.chart_type} Chart Options")
 
-        self.resize(480, 400)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
 
         layout = QVBoxLayout(self)
@@ -255,7 +257,9 @@ class TimeWeightedChartDialog(QDialog):
         else:
             self.setWindowTitle(f"{self.chart_type} Chart")
 
-        self.resize(540, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.options: Dict[str, Any] = {}
 
         self._setup_ui()

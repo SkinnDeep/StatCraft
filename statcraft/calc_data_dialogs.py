@@ -14,7 +14,9 @@ class PatternedNumbersDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Make Patterned Data - Simple Set of Numbers")
         self.setMinimumSize(420, 290)
-        self.resize(440, 310)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -101,7 +103,9 @@ class RandomNormalDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Random Data - Normal")
         self.setMinimumSize(400, 240)
+        self.setMinimumSize(420, 260)
         self.resize(420, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -170,7 +174,9 @@ class RandomUniformDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Random Data - Uniform")
         self.setMinimumSize(400, 240)
+        self.setMinimumSize(420, 260)
         self.resize(420, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -239,7 +245,9 @@ class RandomExponentialDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Random Data - Exponential")
         self.setMinimumSize(400, 240)
+        self.setMinimumSize(420, 260)
         self.resize(420, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -302,7 +310,9 @@ class RandomPoissonDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Random Data - Poisson")
         self.setMinimumSize(400, 240)
+        self.setMinimumSize(420, 260)
         self.resize(420, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -365,7 +375,9 @@ class RandomBinomialDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Random Data - Binomial")
         self.setMinimumSize(400, 240)
+        self.setMinimumSize(420, 260)
         self.resize(420, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 
@@ -435,7 +447,9 @@ class PatternedArbitraryDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Make Patterned Data - Arbitrary Set of Numbers")
         self.setMinimumSize(420, 270)
+        self.setMinimumSize(440, 290)
         self.resize(440, 290)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
         grid_group = QGroupBox("Pattern Specifications")
@@ -506,7 +520,9 @@ class PatternedTextDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Make Patterned Data - Text Values")
         self.setMinimumSize(420, 270)
+        self.setMinimumSize(440, 290)
         self.resize(440, 290)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
         grid_group = QGroupBox("Pattern Specifications")
@@ -577,7 +593,9 @@ class PatternedDateTimeDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Make Patterned Data - Date/Time Values")
         self.setMinimumSize(440, 360)
-        self.resize(460, 380)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
         grid_group = QGroupBox("Date/Time Specifications")

@@ -39,7 +39,9 @@ class Type1GageInfoDialog(QDialog):
     def __init__(self, current_info: Optional[Dict[str, str]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Type 1 Gage Study: Gage Info")
-        self.resize(400, 200)
+        self.setMinimumSize(400, 260)
+        self.resize(400, 260)
+        self.setSizeGripEnabled(True)
 
         info = current_info or {}
         layout = QVBoxLayout(self)
@@ -79,7 +81,9 @@ class Type1GageOptionsDialog(QDialog):
     def __init__(self, current_opts: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Type 1 Gage Study: Options")
-        self.resize(440, 240)
+        self.setMinimumSize(440, 260)
+        self.resize(440, 260)
+        self.setSizeGripEnabled(True)
 
         opts = current_opts or {}
         layout = QVBoxLayout(self)
@@ -168,7 +172,9 @@ class Type1GageDialog(QDialog):
         super().__init__(parent)
         self.worksheet = worksheet
         self.setWindowTitle("Type 1 Gage Study")
-        self.resize(520, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.last_active_edit: Optional[QLineEdit] = None
 
         self.gage_info: Dict[str, str] = {

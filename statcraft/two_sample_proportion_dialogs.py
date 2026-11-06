@@ -19,7 +19,9 @@ class TwoSampleProportionOptionsDialog(QDialog):
         self.setWindowTitle("Two-Sample Proportion: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(380, 200)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         grid = QGridLayout()
@@ -121,7 +123,9 @@ class TwoSampleProportionDialog(QDialog):
         self.result_payload: Optional[Dict[str, Any]] = None
 
         self.settings = two_sample_proportion_settings()
-        self.resize(540, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self._build_ui()
 
     def _build_ui(self):

@@ -41,7 +41,9 @@ class MultivariateOptionsDialog(QDialog):
         super().__init__(parent)
         self.chart_type = chart_type.upper()
         self.setWindowTitle(f"{self.chart_type} Options")
-        self.resize(460, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
 
         layout = QVBoxLayout(self)
@@ -156,7 +158,9 @@ class MultivariateChartDialog(QDialog):
             self.setWindowTitle("Multivariate Control Chart")
             self.help_id = 86300
 
+        self.setMinimumSize(560, 420)
         self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self._setup_ui(initial_vars or [])
 
     def _setup_ui(self, initial_vars: List[str]) -> None:

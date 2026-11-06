@@ -14,7 +14,9 @@ class StemLeafDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Stem-and-Leaf")
         self.setMinimumSize(380, 200)
-        self.resize(400, 220)
+        self.setMinimumSize(400, 260)
+        self.resize(400, 260)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 

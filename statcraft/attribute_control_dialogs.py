@@ -54,7 +54,9 @@ class AttributeOptionsDialog(QDialog):
             win_title = f"{self.chart_type} Chart Options"
 
         self.setWindowTitle(win_title)
-        self.resize(480, 420)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
 
         layout = QVBoxLayout(self)
@@ -384,7 +386,9 @@ class AttributeChartDialog(QDialog):
             self.setWindowTitle("P Chart")
             btn_text = "P Chart O&ptions..."
 
-        self.resize(520, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.selected_params: Optional[Dict[str, Any]] = None
         self.options: Dict[str, Any] = {}
         self._active_input: Optional[QLineEdit] = None

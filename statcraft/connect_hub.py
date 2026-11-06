@@ -95,8 +95,9 @@ class ConnectOverviewDialog(QDialog):
         super().__init__(parent or window)
         self.window = window
         self.setWindowTitle("StatCraft Connect — What is Connect?")
-        self.setMinimumWidth(820)
-        self.setMinimumHeight(600)
+        self.setMinimumSize(760, 500)
+        self.resize(840, 580)
+        self.setSizeGripEnabled(True)
         self._init_ui()
 
     def _init_ui(self):

@@ -14,7 +14,9 @@ class RunChartDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Run Chart")
         self.setMinimumSize(480, 320)
-        self.resize(500, 340)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
         content_layout = QHBoxLayout()

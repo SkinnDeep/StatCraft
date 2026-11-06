@@ -18,7 +18,9 @@ class TwoSamplePoissonOptionsDialog(QDialog):
         self.setWindowTitle("Two-Sample Poisson Rate: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(400, 240)
+        self.setMinimumSize(400, 260)
+        self.resize(400, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Difference = (sample 1 rate) - (sample 2 rate)"))
@@ -137,7 +139,9 @@ class TwoSamplePoissonDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Two-Sample Poisson Rate")
         self.setModal(True)
-        self.resize(580, 380)
+        self.setMinimumSize(580, 420)
+        self.resize(580, 420)
+        self.setSizeGripEnabled(True)
 
         self.options: Dict[str, Any] = {
             "confidence_level": 95.0,

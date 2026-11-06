@@ -19,7 +19,9 @@ class OneSampleProportionOptionsDialog(QDialog):
         self.setWindowTitle("One-Sample Proportion: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(340, 180)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         grid = QGridLayout()
@@ -109,7 +111,9 @@ class OneSampleProportionDialog(QDialog):
         self.result_payload: Optional[Dict[str, Any]] = None
 
         self.settings = one_sample_proportion_settings()
-        self.resize(520, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self._build_ui()
 
     def _build_ui(self):

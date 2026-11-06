@@ -17,7 +17,9 @@ class CovarianceDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Covariance")
         self.setMinimumSize(420, 320)
-        self.resize(450, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 

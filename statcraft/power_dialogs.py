@@ -58,7 +58,9 @@ class OneSampleZPowerDialog(QDialog):
     def __init__(self, settings: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Power and Sample Size for 1-Sample Z")
-        self.resize(460, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.settings = copy.deepcopy(settings) if settings else {}
         self._build_ui()
 
@@ -197,7 +199,9 @@ class OneProportionPowerDialog(QDialog):
     def __init__(self, settings: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Power and Sample Size for 1 Proportion")
-        self.resize(460, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.settings = copy.deepcopy(settings) if settings else {}
         self._build_ui()
 
@@ -298,7 +302,9 @@ class TwoProportionsPowerDialog(QDialog):
     def __init__(self, settings: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Power and Sample Size for 2 Proportions")
-        self.resize(460, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.settings = copy.deepcopy(settings) if settings else {}
         self._build_ui()
 
@@ -399,7 +405,9 @@ class OneWayAnovaPowerDialog(QDialog):
     def __init__(self, settings: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Power and Sample Size for One-Way ANOVA")
-        self.resize(460, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.settings = copy.deepcopy(settings) if settings else {}
         self._build_ui()
 
@@ -501,7 +509,9 @@ class FactorialPowerDialog(QDialog):
     def __init__(self, settings: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Power and Sample Size for 2-Level Factorial Design")
-        self.resize(460, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.settings = copy.deepcopy(settings) if settings else {}
         self._build_ui()
 

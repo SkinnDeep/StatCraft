@@ -19,7 +19,9 @@ class TwoSampleTOptionsDialog(QDialog):
         self.setWindowTitle("Two-Sample t: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(360, 200)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
 
@@ -110,7 +112,9 @@ class TwoSampleTGraphsDialog(QDialog):
         self.setWindowTitle("Two-Sample t: Graphs")
         self.setModal(True)
         self.graphs = dict(graphs)
-        self.resize(300, 140)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
 
@@ -148,7 +152,9 @@ class TwoSampleTDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Two-Sample t for the Mean")
         self.setModal(True)
-        self.resize(520, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         self.settings = two_sample_t_settings()
         self.result_payload: Optional[Dict[str, Any]] = None

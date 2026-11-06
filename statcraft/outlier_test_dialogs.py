@@ -14,7 +14,9 @@ class OutlierTestDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Outlier Test")
         self.setMinimumSize(480, 320)
-        self.resize(520, 350)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 

@@ -114,20 +114,43 @@ class ColumnPropertiesDialog(QDialog):
     def __init__(self, parent: QWidget, col_name: str, modeling_type: str, kind: str):
         super().__init__(parent)
         self.setWindowTitle(f"Column Info - {col_name}")
-        self.setFixedSize(360, 260)
+        self.setMinimumSize(380, 290)
+        self.resize(380, 290)
+        self.setSizeGripEnabled(True)
         self.setFont(QFont("Segoe UI", 9))
-        self.setStyleSheet("""
-            QDialog { background-color: #f8fafc; color: #1e293b; }
-            QLabel { color: #1e293b; font-size: 9pt; }
-            QLineEdit { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; }
-            QLineEdit:focus { border-color: #0078d7; }
-            QRadioButton { color: #1e293b; font-size: 9pt; spacing: 6px; }
-            QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; border: 1px solid #94a3b8; background-color: #ffffff; }
-            QRadioButton::indicator:checked { border: 1px solid #0078d7; background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #0078d7, stop:0.55 #0078d7, stop:0.65 #ffffff, stop:1 #ffffff); }
-            QPushButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 14px; min-height: 22px; }
-            QPushButton:hover { background-color: #f1f5f9; border-color: #94a3b8; }
-            QPushButton:default { background-color: #005a9e; color: #ffffff; border-color: #004578; font-weight: 600; }
-        """)
+        
+        is_dark = False
+        if parent is not None:
+            bg_col = parent.palette().window().color().name().lower()
+            if bg_col in ("#18181b", "#1f1f23", "#0f172a", "#111827", "#1e1e1e", "#27272a") or parent.palette().window().color().lightness() < 120:
+                is_dark = True
+
+        if is_dark:
+            self.setStyleSheet("""
+                QDialog { background-color: #18181b; color: #f4f4f5; }
+                QLabel { color: #f4f4f5; font-size: 9pt; }
+                QLineEdit { background-color: #1f1f23; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 8px; }
+                QLineEdit:focus { border-color: #38bdf8; }
+                QRadioButton { color: #f4f4f5; font-size: 9pt; spacing: 6px; }
+                QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; border: 1px solid #71717a; background-color: #1f1f23; }
+                QRadioButton::indicator:checked { border: 1px solid #38bdf8; background-color: #38bdf8; }
+                QPushButton { background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 14px; min-height: 24px; }
+                QPushButton:hover { background-color: #3f3f46; border-color: #71717a; }
+                QPushButton:default { background-color: #0284c7; color: #ffffff; border-color: #0369a1; font-weight: 600; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog { background-color: #f8fafc; color: #1e293b; }
+                QLabel { color: #1e293b; font-size: 9pt; }
+                QLineEdit { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; }
+                QLineEdit:focus { border-color: #0078d7; }
+                QRadioButton { color: #1e293b; font-size: 9pt; spacing: 6px; }
+                QRadioButton::indicator { width: 14px; height: 14px; border-radius: 7px; border: 1px solid #94a3b8; background-color: #ffffff; }
+                QRadioButton::indicator:checked { border: 1px solid #0078d7; background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #0078d7, stop:0.55 #0078d7, stop:0.65 #ffffff, stop:1 #ffffff); }
+                QPushButton { background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 14px; min-height: 22px; }
+                QPushButton:hover { background-color: #f1f5f9; border-color: #94a3b8; }
+                QPushButton:default { background-color: #005a9e; color: #ffffff; border-color: #004578; font-weight: 600; }
+            """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)

@@ -19,7 +19,9 @@ class OneSampleTOptionsDialog(QDialog):
         self.setWindowTitle("One-Sample t: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(340, 160)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         grid = QGridLayout()
@@ -87,7 +89,9 @@ class OneSampleTGraphsDialog(QDialog):
         self.setWindowTitle("One-Sample t: Graphs")
         self.setModal(True)
         self.graphs = dict(graphs)
-        self.resize(280, 160)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
 
@@ -133,7 +137,9 @@ class OneSampleTDialog(QDialog):
         self.result_payload: Optional[Dict[str, Any]] = None
 
         self.settings = one_sample_t_settings()
-        self.resize(520, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self._build_ui()
 
     def _build_ui(self):

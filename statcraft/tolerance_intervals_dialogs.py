@@ -38,7 +38,9 @@ class ToleranceIntervalsOptionsDialog(QDialog):
     def __init__(self, current_opts: Optional[Dict[str, Any]] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Tolerance Intervals: Options")
-        self.resize(380, 160)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         opts = current_opts or {}
         layout = QVBoxLayout(self)
@@ -87,7 +89,9 @@ class ToleranceIntervalsGraphsDialog(QDialog):
     def __init__(self, current_graphs: bool = True, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Tolerance Intervals: Graphs")
-        self.resize(340, 120)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
         self.chk_plot = QCheckBox("&Tolerance interval plots")
@@ -115,7 +119,9 @@ class ToleranceIntervalsDialog(QDialog):
         super().__init__(parent)
         self.worksheet = worksheet
         self.setWindowTitle("Tolerance Intervals (Normal Distribution)")
-        self.resize(540, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.last_active_edit: Optional[QLineEdit] = None
 
         self.options: Dict[str, Any] = {

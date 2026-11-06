@@ -36,6 +36,7 @@ from .variable_dialogs import format_variable_reference, resolve_variables
 
 
 def _footer(dialog: QDialog, layout: QVBoxLayout, callback) -> QDialogButtonBox:
+    dialog.setSizeGripEnabled(True)
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
     buttons.accepted.connect(callback)
     buttons.rejected.connect(dialog.reject)
@@ -49,7 +50,9 @@ class OneWayComparisonsDialog(QDialog):
     def __init__(self, parent: QDialog, options: dict[str, Any], factor_levels: list[str]):
         super().__init__(parent)
         self.setWindowTitle('One-Way Analysis of Variance: Comparisons')
-        self.resize(380, 440)
+        self.setMinimumSize(400, 380)
+        self.resize(400, 440)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
         comp = self.options.get('comparisons', {})
         self.factor_levels = list(factor_levels or [])
@@ -161,7 +164,9 @@ class OneWayGraphsDialog(QDialog):
     def __init__(self, parent: QDialog, options: dict[str, Any]):
         super().__init__(parent)
         self.setWindowTitle('One-Way Analysis of Variance: Graphs')
-        self.resize(360, 410)
+        self.setMinimumSize(380, 320)
+        self.resize(380, 360)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
         gr = self.options.get('graphs', {})
 
@@ -261,7 +266,9 @@ class OneWayOptionsDialog(QDialog):
     def __init__(self, parent: QDialog, options: dict[str, Any]):
         super().__init__(parent)
         self.setWindowTitle('One-Way Analysis of Variance: Options')
-        self.resize(360, 200)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
 
         layout = QVBoxLayout(self)
@@ -313,7 +320,9 @@ class OneWayResultsDialog(QDialog):
     def __init__(self, parent: QDialog, options: dict[str, Any]):
         super().__init__(parent)
         self.setWindowTitle('One-Way Analysis of Variance: Results')
-        self.resize(300, 260)
+        self.setMinimumSize(360, 300)
+        self.resize(360, 300)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
         res = self.options.get('results', {})
 
@@ -367,7 +376,9 @@ class OneWayStorageDialog(QDialog):
     def __init__(self, parent: QDialog, options: dict[str, Any]):
         super().__init__(parent)
         self.setWindowTitle('One-Way Analysis of Variance: Storage')
-        self.resize(260, 160)
+        self.setMinimumSize(340, 220)
+        self.resize(340, 220)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
         st = self.options.get('storage', {})
 
@@ -400,7 +411,9 @@ class OneWayAnovaDialog(QDialog):
         self.active_edit: QLineEdit | None = None
 
         self.setWindowTitle('One-Way Analysis of Variance')
-        self.resize(540, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(580, 440)
+        self.setSizeGripEnabled(True)
 
         main_layout = QHBoxLayout(self)
 

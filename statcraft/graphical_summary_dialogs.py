@@ -14,7 +14,9 @@ class GraphicalSummaryDialog(QDialog):
         self.worksheet = worksheet
         self.setWindowTitle("Graphical Summary")
         self.setMinimumSize(480, 340)
-        self.resize(520, 360)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         main_layout = QVBoxLayout(self)
 

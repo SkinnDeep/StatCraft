@@ -19,7 +19,9 @@ class PairedTOptionsDialog(QDialog):
         self.setWindowTitle("Paired t: Options")
         self.setModal(True)
         self.options = dict(options)
-        self.resize(360, 180)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
 
@@ -104,7 +106,9 @@ class PairedTGraphsDialog(QDialog):
         self.setWindowTitle("Paired t: Graphs")
         self.setModal(True)
         self.graphs = dict(graphs)
-        self.resize(320, 160)
+        self.setMinimumSize(380, 260)
+        self.resize(380, 260)
+        self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
 
@@ -150,7 +154,9 @@ class PairedTDialog(QDialog):
         self.result_payload: Optional[Dict[str, Any]] = None
 
         self.settings = paired_t_settings()
-        self.resize(520, 300)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self._build_ui()
 
     def _build_ui(self):

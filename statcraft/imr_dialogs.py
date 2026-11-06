@@ -45,7 +45,9 @@ class IMROptionsDialog(QDialog):
     def __init__(self, parent: QDialog, options: Dict[str, Any]):
         super().__init__(parent)
         self.setWindowTitle("I-MR Options")
-        self.resize(480, 420)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
         self.options = copy.deepcopy(options)
 
         layout = QVBoxLayout(self)
@@ -385,7 +387,9 @@ class IMRChartDialog(QDialog):
         super().__init__(parent)
         self.worksheet = worksheet
         self.setWindowTitle("Individuals - Moving Range Chart")
-        self.resize(520, 320)
+        self.setMinimumSize(560, 420)
+        self.resize(560, 420)
+        self.setSizeGripEnabled(True)
 
         self.options: Dict[str, Any] = {
             "span": 2,

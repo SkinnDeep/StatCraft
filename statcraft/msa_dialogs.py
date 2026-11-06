@@ -33,7 +33,11 @@ def _nested_options(options):
 class GageRRNestedOptionsDialog(QDialog):
     def __init__(self,current_options=None,parent=None):
         super().__init__(parent);self.setWindowTitle('Gage R&R Study (Nested): Options')
-        self.setModal(True);self.resize(440,240);self.selected_options=None
+        self.setModal(True)
+        self.setMinimumSize(440, 280)
+        self.resize(440, 280)
+        self.setSizeGripEnabled(True)
+        self.selected_options=None
         options=current_options or {};layout=QVBoxLayout(self);form=QFormLayout()
         for attr,key,label,placeholder in [
             ('edit_multiplier','study_multiplier','Study variation (number of SDs):','6'),

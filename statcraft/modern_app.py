@@ -1276,9 +1276,6 @@ class ModernWindow(QMainWindow):
         self._action(multivar, "Cluster &K-Means...", self.cluster_kmeans_dialog, None, None, True)
         self._action(multivar, "Cluster &Variables...", self.cluster_variables_dialog, None, None, True)
 
-        # 5f. StatCraft Connect Flagship Menu
-        connect_menu = bar.addMenu("&Connect")
-        self._populate_connect_menu(connect_menu)
         multivar.addSeparator()
         self._action(multivar, "&Discriminant Analysis...", self.discriminant_analysis_dialog, None, None, True)
         self._action(multivar, "&Simple Correspondence Analysis...", self.simple_correspondence_dialog, None, None, True)
@@ -1294,6 +1291,8 @@ class ModernWindow(QMainWindow):
         predictive = stat.addMenu("&Predictive Analytics")
         self._action(predictive, "Fit &Y by X (Bivariate / Oneway / Contingency)…", self.fit_y_by_x_dialog, None, "scatter", True)
         self._action(predictive, "CART® / &Partition Decision Tree…", self.cart_tree_dialog, None, None, True)
+        self._action(predictive, "Fit &Regression Model…", self.multiple_regression, None, "regression", True)
+        self._action(predictive, "&Correlation Matrix…", self.correlation, None, "correlation", True)
 
         # 5g. Power and Sample Size menu
         power_menu = stat.addMenu("&Power and Sample Size")
@@ -1319,7 +1318,11 @@ class ModernWindow(QMainWindow):
         self._action(r_menu, "Open &R Workbench Mode...", lambda: self.set_ui_mode("r"), None, None, True)
         self._action(r_menu, "Run &R Script...", self.run_r_script_dialog, None, None, True)
 
-        # 6. Graph menu
+        # 6. StatCraft Connect Flagship Menu
+        connect_menu = bar.addMenu("&Connect")
+        self._populate_connect_menu(connect_menu)
+
+        # 7. Graph menu
         graph = bar.addMenu("&Graph")
         from .graph_catalog import MENU
         self.graph_actions = {}
@@ -1328,7 +1331,7 @@ class ModernWindow(QMainWindow):
             title, method = item
             self.graph_actions[method] = self._action(graph, title + "…", lambda checked=False, m=method: self.graph(m), None, method, True)
 
-        # 7. View menu (`RT_MENU 8445`: Navigator, Command Line/History, Data and Output, Data Only, Output Only, Zoom)
+        # 8. View menu (`RT_MENU 8445`: Navigator, Command Line/History, Data and Output, Data Only, Output Only, Zoom)
         view = bar.addMenu("&View")
         self.dark_mode_action = QAction("Dark Mode", self, checkable=True, checked=getattr(self, "_dark_mode", False))
         self.dark_mode_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
@@ -1378,13 +1381,6 @@ class ModernWindow(QMainWindow):
         self._action(view, "Toggle Entry Direction (Down / Right)", self.toggle_entry_direction)
         self._action(view, "Refresh Worksheet", self.refresh)
 
-        # 8. Help menu
-        help_menu = bar.addMenu("&Help")
-        self.help_action = self._action(help_menu, "Help", self.about, QKeySequence.StandardKey.HelpContents, "help")
-        help_menu.addSeparator()
-        self._action(help_menu, "Check for &Updates…", self.check_for_updates_dialog, None, "update", True)
-        self._action(help_menu, "About StatCraft", self.about)
-
         # 9. Assistant menu (`RT_MENU 8445` guided workflow shortcuts)
         assistant = bar.addMenu("Assista&nt")
         self._action(assistant, "Graphical Analysis (Graph Builder)…", lambda: self.graph("builder"), None, "graph_builder", True)
@@ -1394,17 +1390,12 @@ class ModernWindow(QMainWindow):
         self._action(assistant, "DOE (Factorial Design)…", self.create_factorial, None, "doe", True)
         self._action(assistant, "Control Charts (I-MR)…", self.imr_dialog, None, None, True)
 
-        # 10. Predictive Analytics Module menu (`STR 18574` top-level menu)
-        predictive = bar.addMenu("&Predictive Analytics Module")
-        self._action(predictive, "Fit Regression Model…", self.multiple_regression, None, "regression", True)
-        self._action(predictive, "Correlation Matrix…", self.correlation, None, "correlation", True)
-        self._action(predictive, "Automated Model Screening (Status)…", lambda: self._module_notice("Predictive Analytics Module", "CART®, TreeNet®, Random Forests® and MARS® automated machine-learning engines are not yet implemented in StatCraft. Use Fit Regression Model or Factorial DOE for linear modeling."))
-
-        # 11. Solutions Modules menu
-        solutions = bar.addMenu("Solutions &Modules")
-        self._action(solutions, "Quality & Process Improvement (Capability)…", self.capability, None, None, True)
-        self._action(solutions, "Design of Experiments (Factorial)…", self.create_factorial, None, "doe", True)
-        self._action(solutions, "Solutions Modules Overview…", lambda: self._module_notice("Solutions Modules", "Industry-specific guided templates remain under development. Use Stat, DOE, Control Charts and Quality Tools directly."))
+        # 10. Help menu (Always final menu on desktop menubar)
+        help_menu = bar.addMenu("&Help")
+        self.help_action = self._action(help_menu, "Help", self.about, QKeySequence.StandardKey.HelpContents, "help")
+        help_menu.addSeparator()
+        self._action(help_menu, "Check for &Updates…", self.check_for_updates_dialog, None, "update", True)
+        self._action(help_menu, "About StatCraft", self.about)
 
         # Toolbar: Exact 21-button StatCraft layout (`RT_TOOLBAR 8445` + `RT_TOOLBAR 9915`)
     def _create_actions(self):
@@ -5076,7 +5067,8 @@ class ModernWindow(QMainWindow):
                     graph_scroll.set_zoom(self._output_zoom_levels.get(self._zoom_key(), 100))
                     graph_tab_indices.append(tab_idx)
 
-                has_report_text = bool(result.get('text', '').strip()) or bool(native_tables)
+                has_tables = bool(native_tables)
+                has_report_text = bool(result.get('text', '').strip())
                 if target_graph_index is not None and 0 <= target_graph_index < len(graph_tab_indices):
                     chosen_tab = graph_tab_indices[target_graph_index]
                 elif target_tab is not None and target_tab in getattr(self, '_report_table_widgets', {}):
@@ -5087,8 +5079,12 @@ class ModernWindow(QMainWindow):
                         pass
                 elif target_tab == "Report":
                     chosen_tab = 0
+                elif has_tables:
+                    chosen_tab = 0
                 elif graph_tab_indices:
                     chosen_tab = graph_tab_indices[0]
+                elif has_report_text:
+                    chosen_tab = 0
                 else:
                     chosen_tab = 0
                 self.result_tabs.setCurrentIndex(chosen_tab)
