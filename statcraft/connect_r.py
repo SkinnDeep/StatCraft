@@ -882,29 +882,145 @@ def generate_r_correlation_script(connected: "ConnectedAnalysis", worksheet: "Wo
 
 
 def generate_r_descriptives_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
-    """Generate clean Base R script for descriptive statistics."""
+    """Generate comprehensive Base R script for descriptive statistics with complete statistical calculations and diagnostics."""
     all_cols = [connected.response_name] + connected.predictor_names if connected.response_name else connected.predictor_names
     col_str_literals = ", ".join(json.dumps(c) for c in all_cols)
 
     lines = [
         "# ==============================================================================",
-        "# StatCraft Connect — R Translation",
-        f"# Model: {connected.title}",
+        "# StatCraft — Reproducible Base R Translation",
+        f"# Procedure: {connected.title}",
         f"# Worksheet: {connected.worksheet_name}",
         f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "# ==============================================================================",
         "",
-        "# Summary & Descriptive Statistics",
+        "# Target Variables for Descriptive Analysis",
         f"cols <- c({col_str_literals})",
         "sub_df <- df[, cols, drop = FALSE]",
-        "cat('--- Summary Statistics ---\\n')",
+        "",
+        "# ------------------------------------------------------------------------------",
+        "# 1. Dynamic Statistical Calculations (Minitab-Equivalent Engine)",
+        "# ------------------------------------------------------------------------------",
+        "calc_descriptives <- function(x, name) {",
+        "  x_clean <- as.numeric(x[!is.na(x)])",
+        "  n <- length(x_clean)",
+        "  n_miss <- sum(is.na(x))",
+        "  if (n == 0) return(NULL)",
+        "  ",
+        "  m <- mean(x_clean)",
+        "  s <- sd(x_clean)",
+        "  v <- var(x_clean)",
+        "  se <- s / sqrt(n)",
+        "  cv <- if (abs(m) > 1e-12) (s / m) * 100 else NA",
+        "  ",
+        "  # Minitab empirical percentile definition (type 6: Weibull standard)",
+        "  q1 <- as.numeric(quantile(x_clean, 0.25, type = 6))",
+        "  med <- median(x_clean)",
+        "  q3 <- as.numeric(quantile(x_clean, 0.75, type = 6))",
+        "  iqr_val <- q3 - q1",
+        "  min_val <- min(x_clean)",
+        "  max_val <- max(x_clean)",
+        "  ",
+        "  # Sample Skewness & Excess Kurtosis",
+        "  m3 <- sum((x_clean - m)^3) / n",
+        "  skew <- if (s > 0) m3 / (s^3) else 0",
+        "  m4 <- sum((x_clean - m)^4) / n",
+        "  kurt <- if (s > 0) (m4 / (s^4)) - 3 else 0",
+        "  ",
+        "  # Normality Assessment (Shapiro-Wilk)",
+        "  norm_test <- if (n >= 3 && n <= 5000) shapiro.test(x_clean) else list(statistic = NA, p.value = NA)",
+        "  ",
+        "  list(",
+        "    Variable = name,",
+        "    N = n,",
+        "    N_Star = n_miss,",
+        "    Mean = m,",
+        "    SE_Mean = se,",
+        "    StDev = s,",
+        "    Variance = v,",
+        "    CoeffVar = cv,",
+        "    Minimum = min_val,",
+        "    Q1 = q1,",
+        "    Median = med,",
+        "    Q3 = q3,",
+        "    Maximum = max_val,",
+        "    IQR = iqr_val,",
+        "    Skewness = skew,",
+        "    Kurtosis = kurt,",
+        "    Shapiro_W = unname(norm_test$statistic),",
+        "    P_Value = norm_test$p.value",
+        "  )",
+        "}",
+        "",
+        "# Execute calculations for all selected columns",
+        "results_list <- lapply(cols, function(cn) calc_descriptives(df[[cn]], cn))",
+        "results_list <- results_list[!sapply(results_list, is.null)]",
+        "",
+        "cat('================================================================================\n')",
+        "cat('                 StatCraft: Descriptive Statistics Report                       \n')",
+        "cat('================================================================================\n\n')",
+        "",
+        "for (res in results_list) {",
+        "  cat(sprintf('Variable: %s\n', res$Variable))",
+        "  cat(sprintf('  Total Count (N):    %d\n', res$N))",
+        "  cat(sprintf('  Missing Count (N*): %d\n', res$N_Star))",
+        "  cat(sprintf('  Mean:               %.4f\n', res$Mean))",
+        "  cat(sprintf('  SE Mean:            %.4f\n', res$SE_Mean))",
+        "  cat(sprintf('  Standard Deviation: %.4f\n', res$StDev))",
+        "  cat(sprintf('  Variance:           %.4f\n', res$Variance))",
+        "  cat(sprintf('  Coeff of Variation: %.2f%%\n', res$CoeffVar))",
+        "  cat(sprintf('  Minimum:            %.4f\n', res$Minimum))",
+        "  cat(sprintf('  First Quartile Q1:  %.4f\n', res$Q1))",
+        "  cat(sprintf('  Median:             %.4f\n', res$Median))",
+        "  cat(sprintf('  Third Quartile Q3:  %.4f\n', res$Q3))",
+        "  cat(sprintf('  Maximum:            %.4f\n', res$Maximum))",
+        "  cat(sprintf('  Interquartile Range:%.4f\n', res$IQR))",
+        "  cat(sprintf('  Skewness:           %.4f\n', res$Skewness))",
+        "  cat(sprintf('  Excess Kurtosis:    %.4f\n', res$Kurtosis))",
+        "  if (!is.na(res$P_Value)) {",
+        "    cat(sprintf('  Normality Test (p): %.5f %s\n', res$P_Value, if (res$P_Value < 0.05) '(Non-normal at alpha=0.05)' else '(Normal at alpha=0.05)'))",
+        "  }",
+        "  cat('--------------------------------------------------------------------------------\n')",
+        "}",
+        "",
+        "cat('\n--- Base R Summary ---\n')",
         "print(summary(sub_df))",
         "",
-        "cat('\\n--- Standard Deviations ---\\n')",
-        "print(sapply(sub_df, sd, na.rm = TRUE))",
-        "",
-        "# Boxplot Distribution",
-        "boxplot(sub_df, col = '#3b82f6', main = 'Distributions', border = '#1e3a8a')",
+        "# ------------------------------------------------------------------------------",
+        "# 2. Graphical Diagnostics & Visualizations",
+        "# ------------------------------------------------------------------------------",
+        "for (cn in cols) {",
+        "  val <- as.numeric(df[[cn]])",
+        "  val_clean <- val[!is.na(val)]",
+        "  if (length(val_clean) >= 2) {",
+        "    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 2))",
+        "    ",
+        "    # 1. Histogram with Fitted Normal Distribution Curve",
+        "    h <- hist(val_clean, col = '#93c5fd', border = '#1e3a8a',",
+        "              main = paste('Histogram of', cn), xlab = cn, prob = TRUE)",
+        "    x_seq <- seq(min(val_clean), max(val_clean), length.out = 200)",
+        "    lines(x_seq, dnorm(x_seq, mean = mean(val_clean), sd = sd(val_clean)), col = '#dc2626', lwd = 2)",
+        "    abline(v = mean(val_clean), col = '#2563eb', lwd = 2, lty = 2)",
+        "    abline(v = median(val_clean), col = '#16a34a', lwd = 2, lty = 3)",
+        "    legend('topright', legend = c('Normal Fit', 'Mean', 'Median'), col = c('#dc2626', '#2563eb', '#16a34a'), lty = c(1, 2, 3), lwd = 2, bty = 'n', cex = 0.8)",
+        "    ",
+        "    # 2. Individual Value Plot",
+        "    stripchart(val_clean, method = 'jitter', pch = 19, col = '#2563eb',",
+        "               main = paste('Individual Values:', cn), xlab = cn)",
+        "    abline(v = mean(val_clean), col = '#dc2626', lwd = 2, lty = 2)",
+        "    ",
+        "    # 3. Boxplot Distribution with Outliers and Mean",
+        "    boxplot(val_clean, col = '#bfdbfe', border = '#1e3a8a', horizontal = TRUE,",
+        "            main = paste('Boxplot of', cn), xlab = cn)",
+        "    points(mean(val_clean), 1, pch = 18, col = '#dc2626', cex = 1.5)",
+        "    ",
+        "    # 4. Normal Probability Plot (Q-Q Plot)",
+        "    qqnorm(val_clean, main = paste('Normal Q-Q Plot of', cn), pch = 19, col = '#2563eb')",
+        "    qqline(val_clean, col = '#dc2626', lwd = 2)",
+        "    ",
+        "    par(old_par)",
+        "  }",
+        "}",
     ]
     return "\n".join(lines)
 
@@ -1316,8 +1432,8 @@ def generate_generic_r_script(entry: Dict[str, Any], worksheet: "Worksheet") -> 
     return "\n".join(lines)
 
 
-def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
-    """Generate a clean, reproducible Base R script reconstructing the active worksheet as 'df'."""
+def generate_dataframe_definition(worksheet: "Worksheet") -> str:
+    """Generate clean, reproducible Base R code reconstructing the active worksheet as 'df'."""
     col_defs = []
     for col in worksheet.columns:
         safe_name = col.name.replace('"', '\"')
@@ -1330,12 +1446,76 @@ def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
     body = ",\n".join(col_defs)
     return (
         "# ==============================================================================\n"
-        f"# StatCraft — Active Worksheet R Data Frame Export\n"
+        f"# StatCraft — Reproducible Worksheet Data Definition\n"
         f"# Worksheet: {worksheet.name} ({len(worksheet.columns)} columns, {worksheet.row_count} rows)\n"
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         "# ==============================================================================\n\n"
-        f"df <- data.frame(\n{body},\n  stringsAsFactors = FALSE\n)\n\n"
-        "cat('Active worksheet loaded into R as \'df\':\\n')\n"
+        f"df <- data.frame(\n{body},\n  stringsAsFactors = FALSE\n)"
+    )
+
+
+def build_self_contained_r_script(r_script: str, worksheet: "Worksheet", title: str = "") -> str:
+    """Ensure any exported or copied R script includes the self-contained data frame definition."""
+    if not r_script:
+        return generate_dataframe_init_code(worksheet)
+    if "df <- data.frame(" in r_script:
+        return r_script
+    df_def = generate_dataframe_definition(worksheet)
+    return f"{df_def}\n\n{r_script}"
+
+
+def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
+    """Generate reproducible Base R script with active worksheet data and smart automated exploratory statistical calculations."""
+    df_def = generate_dataframe_definition(worksheet)
+    eda_code = (
+        "\n\ncat('Active worksheet loaded into R as \'df\':\\n')\n"
         "print(head(df))\n"
         "cat('\\nStructure of df:\\n')\n"
-        "str(df)\n"
+        "str(df)\n\n"
+        "# ==============================================================================\n"
+        "# Automated Exploratory Statistical Calculations\n"
+        "# ==============================================================================\n\n"
+        "numeric_cols <- names(df)[sapply(df, is.numeric)]\n"
+        "cat_cols <- names(df)[!sapply(df, is.numeric)]\n\n"
+        "if (length(numeric_cols) > 0) {\n"
+        "  cat('\\n================================================================================\\n')\n"
+        "  cat('                 Summary Statistics for Numeric Variables                       \\n')\n"
+        "  cat('================================================================================\\n\\n')\n"
+        "  for (cn in numeric_cols) {\n"
+        "    x <- as.numeric(df[[cn]])\n"
+        "    x_clean <- x[!is.na(x)]\n"
+        "    if (length(x_clean) > 0) {\n"
+        "      n <- length(x_clean)\n"
+        "      m <- mean(x_clean)\n"
+        "      s <- sd(x_clean)\n"
+        "      se <- s / sqrt(n)\n"
+        "      med <- median(x_clean)\n"
+        "      q1 <- as.numeric(quantile(x_clean, 0.25, type = 6))\n"
+        "      q3 <- as.numeric(quantile(x_clean, 0.75, type = 6))\n"
+        "      iqr_val <- q3 - q1\n"
+        "      m3 <- sum((x_clean - m)^3) / n\n"
+        "      skew <- if (s > 0) m3 / (s^3) else 0\n"
+        "      cat(sprintf('Variable: %s\\n', cn))\n"
+        "      cat(sprintf('  N: %d, N*: %d, Mean: %.4f, SE Mean: %.4f, StDev: %.4f\\n', n, sum(is.na(x)), m, se, s))\n"
+        "      cat(sprintf('  Min: %.4f, Q1: %.4f, Median: %.4f, Q3: %.4f, Max: %.4f, IQR: %.4f\\n', min(x_clean), q1, med, q3, max(x_clean), iqr_val))\n"
+        "      cat(sprintf('  Skewness: %.4f\\n', skew))\n"
+        "      cat('--------------------------------------------------------------------------------\\n')\n"
+        "    }\n"
+        "  }\n\n"
+        "  if (length(numeric_cols) >= 2) {\n"
+        "    cat('\\nPairwise Pearson Correlation Matrix:\\n')\n"
+        "    print(round(cor(df[numeric_cols], use = 'pairwise.complete.obs'), 4))\n"
+        "    pairs(df[numeric_cols], col = '#2563eb', pch = 19, main = 'Pairwise Scatterplot Matrix')\n"
+        "  }\n"
+        "}\n\n"
+        "if (length(cat_cols) > 0) {\n"
+        "  cat('\\nCategorical / Factor Variable Distributions:\\n')\n"
+        "  for (cn in cat_cols) {\n"
+        "    cat(sprintf('\\nFrequency Table: %s\\n', cn))\n"
+        "    print(table(df[[cn]], useNA = 'ifany'))\n"
+        "    cat('Relative Percentages:\\n')\n"
+        "    print(round(prop.table(table(df[[cn]])) * 100, 2))\n"
+        "  }\n"
+        "}\n"
     )
+    return f"{df_def}{eda_code}"

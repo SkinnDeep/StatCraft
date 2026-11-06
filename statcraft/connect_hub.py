@@ -444,24 +444,36 @@ class StatCraftAnalysisBar(QFrame):
         btn_bar.addStretch()
         root.addLayout(btn_bar)
 
+    def get_full_r_script(self) -> str:
+        raw = self.conn_obj.r_script or ""
+        from .connect_r import build_self_contained_r_script
+        ws = getattr(self.window.presenter, "worksheet", None) if hasattr(self.window, "presenter") else None
+        if ws is not None:
+            return build_self_contained_r_script(raw, ws, self.conn_obj.title)
+        return raw
+
     def copy_r_script(self):
         from PySide6.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.conn_obj.r_script)
+        script = self.get_full_r_script()
+        QApplication.clipboard().setText(script)
         if hasattr(self.window, "statusBar") and self.window.statusBar():
-            self.window.statusBar().showMessage("✓ Copied pure Base R script to clipboard!", 5000)
+            self.window.statusBar().showMessage("✓ Copied self-contained Base R script to clipboard!", 5000)
 
     def view_r_code(self):
-        dlg = ViewRCodeDialog(self.window, self.conn_obj.r_script, title=f"R Code: {self.conn_obj.title}")
+        script = self.get_full_r_script()
+        dlg = ViewRCodeDialog(self.window, script, title=f"R Code: {self.conn_obj.title}")
         dlg.exec()
 
     def export_r_file(self):
         from PySide6.QtWidgets import QFileDialog, QMessageBox
-        default_name = f"{self.conn_obj.analysis_type}_script.R"
+        script = self.get_full_r_script()
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in self.conn_obj.title).strip("_")
+        default_name = f"{clean}_script.R"
         path, _ = QFileDialog.getSaveFileName(self, "Export R Script", default_name, "R Scripts (*.R *.r)")
         if path:
             try:
                 with open(path, "w", encoding="utf-8") as f:
-                    f.write(self.conn_obj.r_script)
+                    f.write(script)
                 if hasattr(self.window, "statusBar") and self.window.statusBar():
                     self.window.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
             except OSError as err:

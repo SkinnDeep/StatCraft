@@ -7031,21 +7031,23 @@ class ModernWindow(QMainWindow):
         target = entry or self.selected_entry
         if target is None and self.presenter.history:
             target = self.presenter.history[-1]
+        ws = self.presenter.worksheet
+        from .connect_r import generate_dataframe_init_code, build_self_contained_r_script
         if target is not None:
             conn_dict = target.get("connected_analysis")
             if not conn_dict:
                 from .connect import create_connected_analysis_from_entry
                 try:
-                    conn_obj = create_connected_analysis_from_entry(target, self.presenter.worksheet)
+                    conn_obj = create_connected_analysis_from_entry(target, ws)
                     if conn_obj:
                         conn_dict = conn_obj.to_dict()
                         target["connected_analysis"] = conn_dict
                 except Exception:
                     conn_dict = None
             if conn_dict and conn_dict.get("r_script"):
-                return conn_dict.get("r_script", ""), conn_dict.get("title", target.get("title", "Analysis"))
-        from .connect_r import generate_dataframe_init_code
-        ws = self.presenter.worksheet
+                title = conn_dict.get("title", target.get("title", "Analysis"))
+                full_script = build_self_contained_r_script(conn_dict["r_script"], ws, title)
+                return full_script, title
         code = generate_dataframe_init_code(ws)
         return code, f"Worksheet: {ws.name}"
 
