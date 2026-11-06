@@ -732,3 +732,178 @@ def create_bootstrap_result_entry(
         }
     }
     return entry
+
+
+def _map_r_alternative(alt: str) -> str:
+    alt_lower = str(alt).lower()
+    if "great" in alt_lower:
+        return "greater"
+    if "less" in alt_lower:
+        return "less"
+    return "two.sided"
+
+
+def generate_r_two_sample_t_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for 2-sample t-test."""
+    meta = connected.metadata or {}
+    settings = meta.get("settings", {})
+    fmt = settings.get("data_format", 1)
+    conf = connected.confidence if connected.confidence else 0.95
+    alt = _map_r_alternative(settings.get("alternative", "not_equal"))
+    var_eq = "TRUE" if settings.get("assume_equal_variances", False) else "FALSE"
+    mu = settings.get("hypothesized_difference", 0.0)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {conf * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+    ]
+    if fmt == 2:
+        s_col = format_r_symbol(connected.response_name)
+        g_col = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "group"
+        lines.extend([
+            "# 2-Sample t-Test (Stacked Format)",
+            f"t_res <- t.test({s_col} ~ {g_col}, data = df, var.equal = {var_eq}, conf.level = {conf}, alternative = '{alt}', mu = {mu})",
+            "print(t_res)",
+            "",
+            "# Visualization",
+            f"boxplot({s_col} ~ {g_col}, data = df, col = c('#2563eb', '#10b981'), main = '{connected.title}', ylab = '{connected.response_name}')",
+        ])
+    else:
+        s1 = format_r_symbol(connected.response_name)
+        s2 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "sample2"
+        lines.extend([
+            "# 2-Sample t-Test (Separate Columns)",
+            f"x1 <- df[[{format_r_symbol(connected.response_name)}]]",
+            f"x2 <- df[[{s2}]]",
+            f"t_res <- t.test(x1, x2, var.equal = {var_eq}, conf.level = {conf}, alternative = '{alt}', mu = {mu})",
+            "print(t_res)",
+            "",
+            "# Visualization",
+            f"boxplot(list({s1} = x1, {s2} = x2), col = c('#2563eb', '#10b981'), main = '{connected.title}')",
+        ])
+    return "\n".join(lines)
+
+
+def generate_r_one_sample_t_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for 1-sample t-test."""
+    meta = connected.metadata or {}
+    settings = meta.get("settings", {})
+    conf = connected.confidence if connected.confidence else 0.95
+    alt = _map_r_alternative(settings.get("alternative", "not_equal"))
+    mu = settings.get("hypothesized_mean", 0.0)
+    col_sym = format_r_symbol(connected.response_name)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {conf * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1-Sample t-Test",
+        f"x <- df[[{col_sym}]]",
+        f"t_res <- t.test(x, mu = {mu}, conf.level = {conf}, alternative = '{alt}')",
+        "print(t_res)",
+        "",
+        "# Visualization",
+        f"hist(x, main = '{connected.title}', xlab = '{connected.response_name}', col = '#3b82f6', border = 'white')",
+        f"abline(v = {mu}, col = '#ef4444', lwd = 2, lty = 2)",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_paired_t_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for paired t-test."""
+    meta = connected.metadata or {}
+    settings = meta.get("settings", {})
+    conf = connected.confidence if connected.confidence else 0.95
+    alt = _map_r_alternative(settings.get("alternative", "not_equal"))
+    mu = settings.get("hypothesized_difference", 0.0)
+    s1 = format_r_symbol(connected.response_name)
+    s2 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "sample2"
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {conf * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Paired t-Test",
+        f"x1 <- df[[{s1}]]",
+        f"x2 <- df[[{s2}]]",
+        f"t_res <- t.test(x1, x2, paired = TRUE, conf.level = {conf}, alternative = '{alt}', mu = {mu})",
+        "print(t_res)",
+        "",
+        "# Differences & Visualization",
+        "diffs <- x1 - x2",
+        f"hist(diffs, main = 'Paired Differences ({connected.response_name} - {s2})', xlab = 'Difference', col = '#8b5cf6', border = 'white')",
+        f"abline(v = {mu}, col = '#ef4444', lwd = 2, lty = 2)",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_correlation_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for correlation analysis."""
+    all_cols = [connected.response_name] + connected.predictor_names
+    col_syms = ", ".join(format_r_symbol(c) for c in all_cols)
+    meta = connected.metadata or {}
+    method = str(meta.get("method", "Pearson")).lower()
+    missing_pol = meta.get("missing", "Pairwise")
+    use_arg = "pairwise.complete.obs" if str(missing_pol).lower() == "pairwise" else "complete.obs"
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        f"# Correlation Matrix ({method.title()}, Missing: {missing_pol})",
+        f"cols <- c({col_syms})",
+        "sub_df <- df[, cols, drop = FALSE]",
+        f"cor_mat <- cor(sub_df, use = '{use_arg}', method = '{method}')",
+        "cat('Correlation Matrix:\\n')",
+        "print(round(cor_mat, 4))",
+        "",
+        "# Scatterplot Matrix",
+        "pairs(sub_df, main = 'Scatterplot Matrix', col = '#2563eb', pch = 19)",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_descriptives_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for descriptive statistics."""
+    all_cols = [connected.response_name] + connected.predictor_names if connected.response_name else connected.predictor_names
+    col_syms = ", ".join(format_r_symbol(c) for c in all_cols)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Summary & Descriptive Statistics",
+        f"cols <- c({col_syms})",
+        "sub_df <- df[, cols, drop = FALSE]",
+        "cat('--- Summary Statistics ---\\n')",
+        "print(summary(sub_df))",
+        "",
+        "cat('\\n--- Standard Deviations ---\\n')",
+        "print(sapply(sub_df, sd, na.rm = TRUE))",
+        "",
+        "# Boxplot Distribution",
+        "boxplot(sub_df, col = '#3b82f6', main = 'Distributions', border = '#1e3a8a')",
+    ]
+    return "\n".join(lines)
+

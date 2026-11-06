@@ -657,6 +657,365 @@ def create_connected_glm(
     return connected
 
 
+def create_connected_two_sample_t(
+    worksheet: Worksheet,
+    settings: Dict[str, Any],
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a 2-sample t-test result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    fmt = settings.get("data_format", 1)
+
+    if fmt == 2:
+        resp_idx = settings.get("samples_col")
+        pred_idx = settings.get("sample_ids_col")
+    else:
+        resp_idx = settings.get("sample1_col")
+        pred_idx = settings.get("sample2_col")
+
+    resp_col = worksheet.columns[resp_idx] if resp_idx is not None and 0 <= resp_idx < len(worksheet.columns) else Column("Sample1", "number", [])
+    pred_col = worksheet.columns[pred_idx] if pred_idx is not None and 0 <= pred_idx < len(worksheet.columns) else Column("Sample2", "number", [])
+
+    resp_id = resp_col.metadata.get("id", f"col-{resp_idx}")
+    pred_id = pred_col.metadata.get("id", f"col-{pred_idx}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    active_indices = [i for i in [resp_idx, pred_idx] if i is not None and 0 <= i < len(worksheet.columns)]
+    fingerprint = compute_data_fingerprint(worksheet, active_indices)
+
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        valid = True
+        for ci in active_indices:
+            v = worksheet.columns[ci].values[i] if i < len(worksheet.columns[ci].values) else None
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                valid = False
+                break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    conf_pct = float(settings.get("confidence_level", result.get("confidence_level", 95.0)))
+    conf = conf_pct / 100.0 if conf_pct > 1.0 else conf_pct
+
+    stats = {
+        "t_statistic": result.get("t_statistic", 0.0),
+        "p_value": result.get("p_value", 1.0),
+        "df": result.get("df", 0.0),
+        "difference": result.get("difference", 0.0),
+        "ci_lower": result.get("ci_lower", 0.0),
+        "ci_upper": result.get("ci_upper", 0.0),
+        "pooled_stdev": result.get("pooled_stdev"),
+    }
+
+    title = f"2-Sample t-Test: {resp_col.name} by {pred_col.name}" if fmt == 2 else f"2-Sample t-Test: {resp_col.name} vs {pred_col.name}"
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="two_sample_t",
+        title=title,
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=[pred_id],
+        predictor_names=[pred_col.name],
+        confidence=conf,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "settings": settings,
+            "data_format": fmt,
+            "sample1": result.get("sample1", {}),
+            "sample2": result.get("sample2", {}),
+        }
+    )
+    from .connect_r import generate_r_two_sample_t_script
+    connected.r_script = generate_r_two_sample_t_script(connected, worksheet)
+    return connected
+
+
+def create_connected_one_sample_t(
+    worksheet: Worksheet,
+    settings: Dict[str, Any],
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a 1-sample t-test result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    sample_cols = settings.get("sample_cols", [])
+    resp_idx = sample_cols[0] if sample_cols else 0
+    resp_col = worksheet.columns[resp_idx] if 0 <= resp_idx < len(worksheet.columns) else Column("Sample", "number", [])
+    resp_id = resp_col.metadata.get("id", f"col-{resp_idx}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    fingerprint = compute_data_fingerprint(worksheet, [resp_idx])
+
+    complete_indices = [
+        i for i in range(worksheet.row_count)
+        if i < len(resp_col.values) and resp_col.values[i] is not None and not (isinstance(resp_col.values[i], float) and math.isnan(resp_col.values[i]))
+    ]
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    conf_pct = float(settings.get("confidence_level", result.get("confidence_level", 95.0)))
+    conf = conf_pct / 100.0 if conf_pct > 1.0 else conf_pct
+
+    s0 = result.get("samples", [{}])[0] if result.get("samples") else {}
+    stats = {
+        "mean": s0.get("mean", 0.0),
+        "sd": s0.get("sd", 0.0),
+        "t_statistic": s0.get("t_statistic", 0.0),
+        "p_value": s0.get("p_value", 1.0),
+        "df": s0.get("df", 0.0),
+        "ci_lower": s0.get("ci_lower", 0.0),
+        "ci_upper": s0.get("ci_upper", 0.0),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="one_sample_t",
+        title=f"1-Sample t-Test: {resp_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=conf,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "settings": settings,
+            "hypothesized_mean": settings.get("hypothesized_mean", 0.0),
+            "samples": result.get("samples", []),
+        }
+    )
+    from .connect_r import generate_r_one_sample_t_script
+    connected.r_script = generate_r_one_sample_t_script(connected, worksheet)
+    return connected
+
+
+def create_connected_paired_t(
+    worksheet: Worksheet,
+    settings: Dict[str, Any],
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a paired t-test result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    s1_idx = settings.get("sample1_col", 0)
+    s2_idx = settings.get("sample2_col", 1)
+
+    s1_col = worksheet.columns[s1_idx] if 0 <= s1_idx < len(worksheet.columns) else Column("Sample1", "number", [])
+    s2_col = worksheet.columns[s2_idx] if 0 <= s2_idx < len(worksheet.columns) else Column("Sample2", "number", [])
+
+    s1_id = s1_col.metadata.get("id", f"col-{s1_idx}")
+    s2_id = s2_col.metadata.get("id", f"col-{s2_idx}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    fingerprint = compute_data_fingerprint(worksheet, [s1_idx, s2_idx])
+
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        v1 = s1_col.values[i] if i < len(s1_col.values) else None
+        v2 = s2_col.values[i] if i < len(s2_col.values) else None
+        if v1 is not None and v2 is not None and not (isinstance(v1, float) and math.isnan(v1)) and not (isinstance(v2, float) and math.isnan(v2)):
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    conf_pct = float(settings.get("confidence_level", result.get("confidence_level", 95.0)))
+    conf = conf_pct / 100.0 if conf_pct > 1.0 else conf_pct
+
+    diffs = result.get("differences", {})
+    stats = {
+        "t_statistic": result.get("t_statistic", 0.0),
+        "p_value": result.get("p_value", 1.0),
+        "df": result.get("df", 0.0),
+        "mean_difference": diffs.get("mean", 0.0),
+        "sd_difference": diffs.get("sd", 0.0),
+        "ci_lower": diffs.get("ci_lower", 0.0),
+        "ci_upper": diffs.get("ci_upper", 0.0),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="paired_t",
+        title=f"Paired t-Test: {s1_col.name} vs {s2_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=s1_id,
+        response_name=s1_col.name,
+        predictor_col_ids=[s2_id],
+        predictor_names=[s2_col.name],
+        confidence=conf,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "settings": settings,
+            "sample1": result.get("sample1", {}),
+            "sample2": result.get("sample2", {}),
+            "differences": diffs,
+        }
+    )
+    from .connect_r import generate_r_paired_t_script
+    connected.r_script = generate_r_paired_t_script(connected, worksheet)
+    return connected
+
+
+def create_connected_correlation(
+    worksheet: Worksheet,
+    indices: List[int],
+    result: Dict[str, Any],
+    method: str = "Pearson",
+    missing: str = "Pairwise",
+    confidence: float = 0.95,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a correlation analysis result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    valid_indices = [i for i in indices if 0 <= i < len(worksheet.columns)]
+    if not valid_indices:
+        valid_indices = list(range(min(2, len(worksheet.columns))))
+
+    cols = [worksheet.columns[i] for i in valid_indices]
+    col_ids = [c.metadata.get("id", f"col-{i}") for i, c in zip(valid_indices, cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    fingerprint = compute_data_fingerprint(worksheet, valid_indices)
+
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        valid = True
+        for c in cols:
+            v = c.values[i] if i < len(c.values) else None
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                valid = False
+                break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    names = [c.name for c in cols]
+    resp_name = names[0] if names else "X1"
+    pred_names = names[1:] if len(names) > 1 else []
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="correlation",
+        title=f"Correlation Matrix: {', '.join(names)}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_ids[0] if col_ids else "",
+        response_name=resp_name,
+        predictor_col_ids=col_ids[1:] if len(col_ids) > 1 else [],
+        predictor_names=pred_names,
+        confidence=float(confidence),
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics={"correlations": result.get("correlations", {})},
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "method": method,
+            "missing": missing,
+            "all_column_names": names,
+        }
+    )
+    from .connect_r import generate_r_correlation_script
+    connected.r_script = generate_r_correlation_script(connected, worksheet)
+    return connected
+
+
+def create_connected_descriptives(
+    worksheet: Worksheet,
+    indices: List[int],
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from descriptive statistics."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    valid_indices = [i for i in indices if 0 <= i < len(worksheet.columns)]
+    if not valid_indices:
+        valid_indices = list(range(min(1, len(worksheet.columns))))
+
+    cols = [worksheet.columns[i] for i in valid_indices]
+    col_ids = [c.metadata.get("id", f"col-{i}") for i, c in zip(valid_indices, cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    fingerprint = compute_data_fingerprint(worksheet, valid_indices)
+
+    names = [c.name for c in cols]
+    resp_name = names[0] if names else "Var1"
+    pred_names = names[1:] if len(names) > 1 else []
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="descriptive_statistics",
+        title=f"Descriptive Statistics: {', '.join(names)}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_ids[0] if col_ids else "",
+        response_name=resp_name,
+        predictor_col_ids=col_ids[1:] if len(col_ids) > 1 else [],
+        predictor_names=pred_names,
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={"columns": result.get("columns", [])},
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "all_column_names": names,
+            "columns": result.get("columns", []),
+        }
+    )
+    from .connect_r import generate_r_descriptives_script
+    connected.r_script = generate_r_descriptives_script(connected, worksheet)
+    return connected
+
+
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
     conn_raw = entry.get("connected_analysis")
@@ -696,7 +1055,30 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
             worksheet, p["response_index"], p.get("factor_indices", []),
             p.get("covariate_indices", []), res, terms=p.get("terms"), options=p.get("options")
         )
+    elif action == "two_sample_t":
+        settings = p.get("settings", {})
+        conn = create_connected_two_sample_t(worksheet, settings, res)
+    elif action == "one_sample_t":
+        settings = p.get("settings", {})
+        conn = create_connected_one_sample_t(worksheet, settings, res)
+    elif action == "paired_t":
+        settings = p.get("settings", {})
+        conn = create_connected_paired_t(worksheet, settings, res)
+    elif action == "correlation":
+        indices = p.get("indices", [])
+        conn = create_connected_correlation(
+            worksheet, indices, res,
+            method=p.get("method", "Pearson"),
+            missing=p.get("missing", "Pairwise"),
+            confidence=p.get("confidence", 0.95),
+        )
+    elif action in ("describe_columns", "descriptive_statistics", "describe_column"):
+        indices = p.get("indices")
+        if indices is None and "index" in p:
+            indices = [p["index"]]
+        conn = create_connected_descriptives(worksheet, indices or [], res)
 
     if conn is not None:
         entry["connected_analysis"] = conn.to_dict()
     return conn
+

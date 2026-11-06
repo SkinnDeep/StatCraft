@@ -56,6 +56,61 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
                 )
                 return True
 
+    # Route 1b: 2-Sample t-Test -> JMP Oneway Platform (Fit Y by X)
+    if action == "two_sample_t":
+        settings = p_params.get("settings", {})
+        fmt = settings.get("data_format", 1)
+        if fmt == 2:
+            y_idx = settings.get("samples_col")
+            x_idx = settings.get("sample_ids_col")
+            if y_idx is not None and x_idx is not None and 0 <= y_idx < len(ws.columns) and 0 <= x_idx < len(ws.columns):
+                window.set_ui_mode("jmp")
+                fit_entry = window._call(
+                    lambda: window.presenter.fit_y_by_x(y_index=y_idx, x_index=x_idx),
+                    result=True
+                )
+                if fit_entry:
+                    window.show_result(fit_entry)
+                    window.statusBar().showMessage(
+                        f"StatCraft Connect: Opened JMP Oneway Platform for {ws.columns[y_idx].name} by {ws.columns[x_idx].name}",
+                        6000
+                    )
+                    return True
+        else:
+            window.set_ui_mode("jmp")
+            window.show_result(entry)
+            window.statusBar().showMessage("StatCraft Connect: Active 2-Sample t in JMP Mode", 5000)
+            return True
+
+    # Route 1c: Correlation (2 variables) -> JMP Bivariate Fit Y by X
+    if action == "correlation":
+        indices = p_params.get("indices", [])
+        if len(indices) == 2 and 0 <= indices[0] < len(ws.columns) and 0 <= indices[1] < len(ws.columns):
+            window.set_ui_mode("jmp")
+            fit_entry = window._call(
+                lambda: window.presenter.fit_y_by_x(y_index=indices[1], x_index=indices[0]),
+                result=True
+            )
+            if fit_entry:
+                window.show_result(fit_entry)
+                window.statusBar().showMessage(
+                    f"StatCraft Connect: Opened JMP Bivariate Platform for {ws.columns[indices[1]].name} by {ws.columns[indices[0]].name}",
+                    6000
+                )
+                return True
+        else:
+            window.set_ui_mode("jmp")
+            window.show_result(entry)
+            window.statusBar().showMessage("StatCraft Connect: Active Correlation in JMP Mode", 5000)
+            return True
+
+    # Route 1d: Descriptive Statistics -> JMP Mode
+    if action in ("describe_columns", "descriptive_statistics", "describe_column"):
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active Descriptive Statistics in JMP Mode", 5000)
+        return True
+
     # Route 2: Existing Fit Y by X -> Switch to JMP and display
     if action == "fit_y_by_x":
         window.set_ui_mode("jmp")
