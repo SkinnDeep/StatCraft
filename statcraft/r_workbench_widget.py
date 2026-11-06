@@ -77,7 +77,10 @@ class _RJob(QRunnable):
             value = self.work()
         except Exception as exc:
             value = exc
-        self.signals.finished.emit(value)
+        try:
+            self.signals.finished.emit(value)
+        except RuntimeError:
+            pass
 
 
 def _start_job(work, finished):
