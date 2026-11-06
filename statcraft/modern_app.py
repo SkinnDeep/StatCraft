@@ -588,8 +588,9 @@ def get_theme_stylesheet(is_dark: bool) -> str:
 class ModernWindow(QMainWindow):
     PAGE_SIZE = 300
 
-    def __init__(self, presenter=None):
+    def __init__(self, presenter=None, sandbox_mode: bool = False):
         super().__init__()
+        self.sandbox_mode = sandbox_mode
         app = QApplication.instance()
         self._dark_mode = QSettings("StatCraft", "StatCraft").value("dark_mode", False, type=bool)
         apply_theme_palette(app, self._dark_mode)
@@ -638,8 +639,49 @@ class ModernWindow(QMainWindow):
             sheet.columns[0].metadata["auto_type"] = True
             sheet.columns.extend(Column("C" + str(i), metadata={"auto_type": True}) for i in range(2, 17))
 
+    def setWindowTitle(self, title: str):
+        if getattr(self, "sandbox_mode", False) and not title.startswith("[🧪 LIVE SANDBOX"):
+            title = f"[🧪 LIVE SANDBOX · v111.0.0-dev] {title}"
+        super().setWindowTitle(title)
+
+    def _create_sandbox_banner(self, layout):
+        self.sandbox_banner = QFrame()
+        self.sandbox_banner.setObjectName("sandboxBanner")
+        self.sandbox_banner.setStyleSheet(
+            "QFrame#sandboxBanner { background-color: #78350f; border-bottom: 2px solid #f59e0b; padding: 4px 10px; }"
+            if self._dark_mode else
+            "QFrame#sandboxBanner { background-color: #fef3c7; border-bottom: 2px solid #d97706; padding: 4px 10px; }"
+        )
+        b_lay = QHBoxLayout(self.sandbox_banner)
+        b_lay.setContentsMargins(10, 4, 10, 4)
+        b_lay.setSpacing(10)
+
+        badge = QLabel("<b>🧪 LIVE SANDBOX · v111.0.0-dev</b>")
+        badge.setStyleSheet("color: #fbbf24; font-size: 9pt;" if self._dark_mode else "color: #b45309; font-size: 9pt;")
+        b_lay.addWidget(badge)
+
+        msg = QLabel("Running directly from local repository source. Code edits apply immediately upon restart.")
+        msg.setStyleSheet("color: #fef3c7; font-size: 8.5pt;" if self._dark_mode else "color: #92400e; font-size: 8.5pt;")
+        b_lay.addWidget(msg, 1)
+
+        btn_diag = QPushButton("📋 Copy Diagnostics")
+        btn_diag.setStyleSheet("font-size: 8pt; padding: 2px 8px;")
+        btn_diag.clicked.connect(self._copy_sandbox_diagnostics)
+        b_lay.addWidget(btn_diag)
+
+        layout.addWidget(self.sandbox_banner)
+
+    def _copy_sandbox_diagnostics(self):
+        import platform
+        text = f"StatCraft Live Sandbox v111.0.0-dev\nPlatform: {platform.platform()}\nPython: {sys.executable}\nSource: {Path(__file__).resolve().parent}"
+        QApplication.clipboard().setText(text)
+        if self.statusBar():
+            self.statusBar().showMessage("✓ Copied sandbox diagnostics to clipboard", 4000)
+
     def _create_layout(self):
         central = QWidget(); outer = QVBoxLayout(central); outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
+        if getattr(self, "sandbox_mode", False):
+            self._create_sandbox_banner(outer)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left pane: Navigator container with compact white header bar and dropdown menu button (`RT_MENU 10186`)
@@ -6951,10 +6993,11 @@ class ModernWindow(QMainWindow):
 
 
 def main():
+    sandbox_mode = "--sandbox" in sys.argv
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("StatCraft"); app.setOrganizationName("StatCraft")
     from .startup import start_window, dispose_startup
-    start_window(app,ModernWindow,sys.argv[1:])
+    start_window(app, lambda: ModernWindow(sandbox_mode=sandbox_mode), sys.argv[1:])
     result=app.exec()
     dispose_startup(app)
     return result
