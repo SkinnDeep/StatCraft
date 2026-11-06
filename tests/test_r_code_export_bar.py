@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from statcraft.model import Worksheet, Column
@@ -38,16 +38,20 @@ class TestRCodeExportBar(unittest.TestCase):
         self.assertTrue(any("View R Code" in t for t in labels), f"Labels: {labels}")
         self.assertTrue(any("ReportPad" in t for t in labels), f"Labels: {labels}")
 
-    def test_copy_r_script_to_clipboard(self):
+    @patch("PySide6.QtWidgets.QApplication.clipboard")
+    def test_copy_r_script_to_clipboard(self, mock_get_clipboard):
+        mock_clip = MagicMock()
+        mock_get_clipboard.return_value = mock_clip
         mock_window = MagicMock()
         mock_window.presenter = self.presenter
 
         bar = StatCraftAnalysisBar(mock_window, self.entry, self.conn.to_dict())
         bar.copy_r_script()
 
-        clipboard_text = QApplication.clipboard().text()
-        self.assertIn("lm(", clipboard_text)
-        self.assertIn('df[["Yield"]]', clipboard_text)
+        mock_clip.setText.assert_called_once()
+        copied_text = mock_clip.setText.call_args[0][0]
+        self.assertIn("lm(", copied_text)
+        self.assertIn('df[["Yield"]]', copied_text)
 
     def test_view_r_code_dialog(self):
         dlg = ViewRCodeDialog(None, self.conn.r_script, title="Regression R Script")
