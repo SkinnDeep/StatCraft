@@ -5702,9 +5702,13 @@ class ModernWindow(QMainWindow):
             self.inference_dialog("two_sample_t")
         elif action in ("one_sample_t", "1_sample_t"):
             self.inference_dialog("one_sample_t")
+        elif action in ("paired_t", "paired"):
+            self.inference_dialog("paired_t")
+        elif action == "correlation":
+            self.correlation()
         elif action == "fit_y_by_x":
             self.multiple_regression()
-        elif action == "describe_columns":
+        elif action in ("describe_columns", "descriptive_statistics", "describe_column"):
             self.describe()
         else:
             self.statusBar().showMessage(f"Switched to Minitab Mode for procedure '{action}'.", 5000)

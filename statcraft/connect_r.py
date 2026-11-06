@@ -7,6 +7,7 @@ safely imports R predictions back into the source worksheet via observation IDs.
 from __future__ import annotations
 
 import copy
+import json
 import math
 import re
 from datetime import datetime
@@ -774,17 +775,17 @@ def generate_r_two_sample_t_script(connected: "ConnectedAnalysis", worksheet: "W
             f"boxplot({s_col} ~ {g_col}, data = df, col = c('#2563eb', '#10b981'), main = '{connected.title}', ylab = '{connected.response_name}')",
         ])
     else:
-        s1 = format_r_symbol(connected.response_name)
-        s2 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "sample2"
+        s1 = json.dumps(connected.response_name)
+        s2 = json.dumps(connected.predictor_names[0]) if connected.predictor_names else '"sample2"'
         lines.extend([
             "# 2-Sample t-Test (Separate Columns)",
-            f"x1 <- df[[{format_r_symbol(connected.response_name)}]]",
+            f"x1 <- df[[{s1}]]",
             f"x2 <- df[[{s2}]]",
             f"t_res <- t.test(x1, x2, var.equal = {var_eq}, conf.level = {conf}, alternative = '{alt}', mu = {mu})",
             "print(t_res)",
             "",
             "# Visualization",
-            f"boxplot(list({s1} = x1, {s2} = x2), col = c('#2563eb', '#10b981'), main = '{connected.title}')",
+            f"boxplot(list(x1, x2), names = c({s1}, {s2}), col = c('#2563eb', '#10b981'), main = '{connected.title}')",
         ])
     return "\n".join(lines)
 
@@ -796,7 +797,7 @@ def generate_r_one_sample_t_script(connected: "ConnectedAnalysis", worksheet: "W
     conf = connected.confidence if connected.confidence else 0.95
     alt = _map_r_alternative(settings.get("alternative", "not_equal"))
     mu = settings.get("hypothesized_mean", 0.0)
-    col_sym = format_r_symbol(connected.response_name)
+    col_name = json.dumps(connected.response_name)
 
     lines = [
         "# ==============================================================================",
@@ -807,7 +808,7 @@ def generate_r_one_sample_t_script(connected: "ConnectedAnalysis", worksheet: "W
         "# ==============================================================================",
         "",
         "# 1-Sample t-Test",
-        f"x <- df[[{col_sym}]]",
+        f"x <- df[[{col_name}]]",
         f"t_res <- t.test(x, mu = {mu}, conf.level = {conf}, alternative = '{alt}')",
         "print(t_res)",
         "",
@@ -825,8 +826,8 @@ def generate_r_paired_t_script(connected: "ConnectedAnalysis", worksheet: "Works
     conf = connected.confidence if connected.confidence else 0.95
     alt = _map_r_alternative(settings.get("alternative", "not_equal"))
     mu = settings.get("hypothesized_difference", 0.0)
-    s1 = format_r_symbol(connected.response_name)
-    s2 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "sample2"
+    s1 = json.dumps(connected.response_name)
+    s2 = json.dumps(connected.predictor_names[0]) if connected.predictor_names else '"sample2"'
 
     lines = [
         "# ==============================================================================",
@@ -844,7 +845,7 @@ def generate_r_paired_t_script(connected: "ConnectedAnalysis", worksheet: "Works
         "",
         "# Differences & Visualization",
         "diffs <- x1 - x2",
-        f"hist(diffs, main = 'Paired Differences ({connected.response_name} - {s2})', xlab = 'Difference', col = '#8b5cf6', border = 'white')",
+        f"hist(diffs, main = 'Paired Differences ({connected.response_name} vs {s2})', xlab = 'Difference', col = '#8b5cf6', border = 'white')",
         f"abline(v = {mu}, col = '#ef4444', lwd = 2, lty = 2)",
     ]
     return "\n".join(lines)
@@ -853,7 +854,7 @@ def generate_r_paired_t_script(connected: "ConnectedAnalysis", worksheet: "Works
 def generate_r_correlation_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean Base R script for correlation analysis."""
     all_cols = [connected.response_name] + connected.predictor_names
-    col_syms = ", ".join(format_r_symbol(c) for c in all_cols)
+    col_str_literals = ", ".join(json.dumps(c) for c in all_cols)
     meta = connected.metadata or {}
     method = str(meta.get("method", "Pearson")).lower()
     missing_pol = meta.get("missing", "Pairwise")
@@ -868,7 +869,7 @@ def generate_r_correlation_script(connected: "ConnectedAnalysis", worksheet: "Wo
         "# ==============================================================================",
         "",
         f"# Correlation Matrix ({method.title()}, Missing: {missing_pol})",
-        f"cols <- c({col_syms})",
+        f"cols <- c({col_str_literals})",
         "sub_df <- df[, cols, drop = FALSE]",
         f"cor_mat <- cor(sub_df, use = '{use_arg}', method = '{method}')",
         "cat('Correlation Matrix:\\n')",
@@ -883,7 +884,7 @@ def generate_r_correlation_script(connected: "ConnectedAnalysis", worksheet: "Wo
 def generate_r_descriptives_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean Base R script for descriptive statistics."""
     all_cols = [connected.response_name] + connected.predictor_names if connected.response_name else connected.predictor_names
-    col_syms = ", ".join(format_r_symbol(c) for c in all_cols)
+    col_str_literals = ", ".join(json.dumps(c) for c in all_cols)
 
     lines = [
         "# ==============================================================================",
@@ -894,7 +895,7 @@ def generate_r_descriptives_script(connected: "ConnectedAnalysis", worksheet: "W
         "# ==============================================================================",
         "",
         "# Summary & Descriptive Statistics",
-        f"cols <- c({col_syms})",
+        f"cols <- c({col_str_literals})",
         "sub_df <- df[, cols, drop = FALSE]",
         "cat('--- Summary Statistics ---\\n')",
         "print(summary(sub_df))",

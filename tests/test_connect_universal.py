@@ -20,8 +20,8 @@ class TestConnectUniversal(unittest.TestCase):
         self.assertIsNotNone(conn)
         self.assertEqual(conn.analysis_type, "two_sample_t")
         self.assertIn("t.test(", conn.r_script)
-        self.assertIn("Strength_A", conn.r_script)
-        self.assertIn("Strength_B", conn.r_script)
+        self.assertIn('df[["Strength_A"]]', conn.r_script)
+        self.assertIn('df[["Strength_B"]]', conn.r_script)
 
     def test_two_sample_t_connected_contract_and_r_script_stacked(self):
         ws = Worksheet("TwoSampleStacked", [
@@ -53,7 +53,7 @@ class TestConnectUniversal(unittest.TestCase):
         self.assertIsNotNone(conn)
         self.assertEqual(conn.analysis_type, "one_sample_t")
         self.assertIn("t.test(", conn.r_script)
-        self.assertIn("Weight", conn.r_script)
+        self.assertIn('df[["Weight"]]', conn.r_script)
         self.assertIn("mu = 100", conn.r_script)
 
     def test_paired_t_connected_contract_and_r_script(self):
@@ -69,6 +69,8 @@ class TestConnectUniversal(unittest.TestCase):
         conn = create_connected_analysis_from_entry(entry, ws)
         self.assertIsNotNone(conn)
         self.assertEqual(conn.analysis_type, "paired_t")
+        self.assertIn('df[["Before"]]', conn.r_script)
+        self.assertIn('df[["After"]]', conn.r_script)
         self.assertIn("paired = TRUE", conn.r_script)
 
     def test_correlation_connected_contract_and_r_script(self):
@@ -85,6 +87,7 @@ class TestConnectUniversal(unittest.TestCase):
         self.assertIsNotNone(conn)
         self.assertEqual(conn.analysis_type, "correlation")
         self.assertIn("cor(", conn.r_script)
+        self.assertIn('cols <- c("X1", "X2")', conn.r_script)
 
     def test_descriptives_connected_contract_and_r_script(self):
         ws = Worksheet("DescStudy", [
@@ -98,7 +101,7 @@ class TestConnectUniversal(unittest.TestCase):
         conn = create_connected_analysis_from_entry(entry, ws)
         self.assertIsNotNone(conn)
         self.assertIn("descript", conn.analysis_type)
-        self.assertIn("Measurements", conn.r_script)
+        self.assertIn('cols <- c("Measurements")', conn.r_script)
         self.assertIn("summary(", conn.r_script)
 
 
