@@ -90,7 +90,7 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
     lines.extend([
         "# 4. Align Predictions with Source Observations via .statcraft_row_id",
         "fit_preds <- predict(fit, newdata = df)",
-        f"fit_resids <- ifelse(is.na(df[[{repr(connected.response_name)}]]), NA, df[[{repr(connected.response_name)}]] - fit_preds)",
+        f"fit_resids <- ifelse(is.na(df[[{json.dumps(connected.response_name)}]]), NA, df[[{json.dumps(connected.response_name)}]] - fit_preds)",
         "",
         "diagnostics <- data.frame(",
         "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
@@ -188,7 +188,7 @@ def generate_r_rsm_script(
         "boot_preds <- numeric(B)",
         "for (b in seq_len(B)) {",
         "  df_boot <- df",
-        f"  df_boot[[{repr(connected.response_name)}]] <- fitted(fit) + sample(resids, replace = TRUE)",
+        f"  df_boot[[{json.dumps(connected.response_name)}]] <- fitted(fit) + sample(resids, replace = TRUE)",
         "  b_fit <- lm(formula_obj, data = df_boot)",
         "  boot_preds[b] <- predict(b_fit, newdata = candidate_point)",
         "}",
@@ -199,7 +199,7 @@ def generate_r_rsm_script(
         "",
         "# 5. Export Diagnostics back to StatCraft Worksheet",
         "fit_preds <- predict(fit, newdata = df)",
-        f"fit_resids <- ifelse(is.na(df[[{repr(connected.response_name)}]]), NA, df[[{repr(connected.response_name)}]] - fit_preds)",
+        f"fit_resids <- ifelse(is.na(df[[{json.dumps(connected.response_name)}]]), NA, df[[{json.dumps(connected.response_name)}]] - fit_preds)",
         "diagnostics <- data.frame(",
         "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
         "  Fitted = fit_preds,",
@@ -246,7 +246,7 @@ def generate_r_oneway_anova_script(connected: "ConnectedAnalysis", worksheet: "W
         "# ==============================================================================",
         "",
         "# 1. Ensure Factor is treated as Categorical",
-        f"df[[{repr(fact_name)}]] <- as.factor(df[[{repr(fact_name)}]])",
+        f"df[[{json.dumps(fact_name)}]] <- as.factor(df[[{json.dumps(fact_name)}]])",
         f"formula_obj <- {resp_sym} ~ {fact_sym}",
         "fit <- aov(formula_obj, data = df)",
         "",
@@ -270,7 +270,7 @@ def generate_r_oneway_anova_script(connected: "ConnectedAnalysis", worksheet: "W
         "",
         "# 5. Export Diagnostics back to StatCraft Worksheet",
         "fit_preds <- predict(fit, newdata = df)",
-        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        f"fit_resids <- ifelse(is.na(df[[{json.dumps(resp_name)}]]), NA, df[[{json.dumps(resp_name)}]] - fit_preds)",
         "diagnostics <- data.frame(",
         "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
         "  Fitted = fit_preds,",
@@ -323,7 +323,7 @@ def generate_r_factorial_script(connected: "ConnectedAnalysis", worksheet: "Work
         "",
         "# 4. Export Diagnostics back to StatCraft Worksheet",
         "fit_preds <- predict(fit, newdata = df)",
-        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        f"fit_resids <- ifelse(is.na(df[[{json.dumps(resp_name)}]]), NA, df[[{json.dumps(resp_name)}]] - fit_preds)",
         "diagnostics <- data.frame(",
         "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
         "  Fitted = fit_preds,",
@@ -352,7 +352,7 @@ def generate_r_glm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "# 1. Ensure Factors are treated as Categorical",
     ]
     for fn in fact_names:
-        lines.append(f"df[[{repr(fn)}]] <- as.factor(df[[{repr(fn)}]])")
+        lines.append(f"df[[{json.dumps(fn)}]] <- as.factor(df[[{json.dumps(fn)}]])")
 
     all_terms = [format_r_symbol(p) for p in connected.predictor_names]
     formula_rhs = " + ".join(all_terms) if all_terms else "1"
@@ -381,7 +381,7 @@ def generate_r_glm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "",
         "# 4. Export Diagnostics",
         "fit_preds <- predict(fit, newdata = df)",
-        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        f"fit_resids <- ifelse(is.na(df[[{json.dumps(resp_name)}]]), NA, df[[{json.dumps(resp_name)}]] - fit_preds)",
         "diagnostics <- data.frame(",
         "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
         "  Fitted = fit_preds,",

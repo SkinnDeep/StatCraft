@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from statcraft.model import Worksheet, Column
 from statcraft.app import Presenter
 from statcraft.connect import create_connected_analysis_from_entry, create_connected_subgroup_spc
-from statcraft.connect_hub import ConnectBridgeWidget
+from statcraft.connect_hub import StatCraftAnalysisBar
 
 
 class TestConnectSubgroupSPC(unittest.TestCase):
@@ -82,10 +82,12 @@ class TestConnectSubgroupSPC(unittest.TestCase):
         mock_window = MagicMock()
         mock_window.presenter = self.presenter
 
-        bridge = ConnectBridgeWidget(mock_window, entry, conn.to_dict())
+        bridge = StatCraftAnalysisBar(mock_window, entry, conn.to_dict())
         buttons = bridge.findChildren(QPushButton)
         labels = [b.text() for b in buttons]
-        self.assertTrue(any("JMP Control Chart Builder" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("Minitab Dialog" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("Copy R Script" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("View R Code" in text for text in labels), f"Got labels: {labels}")
 
 
 if __name__ == "__main__":

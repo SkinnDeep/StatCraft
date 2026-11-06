@@ -237,8 +237,87 @@ class ConnectOverviewDialog(QDialog):
         self.window.load_connect_sample()
 
 
-class ConnectBridgeWidget(QFrame):
-    """Visual bridge ribbon displayed on connected results cards."""
+
+
+class ViewRCodeDialog(QDialog):
+    """Clean, resizable dialog displaying reproducible Base R code with 1-click clipboard copy."""
+
+    def __init__(self, parent=None, r_script: str = "", title: str = "Reproducible Base R Script"):
+        super().__init__(parent)
+        self.setSizeGripEnabled(True)
+        self.r_script = r_script
+        self.setWindowTitle(title)
+        self.resize(760, 520)
+        self.setMinimumSize(600, 400)
+        self._init_ui()
+
+    def _init_ui(self):
+        from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QFileDialog
+        from PySide6.QtGui import QFont
+        dark = _is_dark_active(self)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        # Header
+        header = QLabel(f"<b>Reproducible Base R Code</b>")
+        header.setStyleSheet("font-size: 11pt; color: #0284c7;" if not dark else "font-size: 11pt; color: #38bdf8;")
+        sub = QLabel("100% pure Base R script (zero external dependencies). Ready to run in any R console or RStudio.")
+        sub.setStyleSheet("font-size: 8.5pt; color: #64748b;" if not dark else "font-size: 8.5pt; color: #94a3b8;")
+        layout.addWidget(header)
+        layout.addWidget(sub)
+
+        # Monospace Code Editor
+        self.code_view = QPlainTextEdit(self)
+        self.code_view.setReadOnly(True)
+        self.code_view.setPlainText(self.r_script)
+        font = QFont("Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.code_view.setFont(font)
+        if dark:
+            self.code_view.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px; padding: 6px;")
+        else:
+            self.code_view.setStyleSheet("background-color: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;")
+        layout.addWidget(self.code_view, 1)
+
+        # Action Buttons
+        btn_bar = QHBoxLayout()
+        btn_bar.setSpacing(8)
+
+        self.btn_copy = QPushButton("📋 Copy to Clipboard")
+        self.btn_copy.setStyleSheet("QPushButton { font-weight: 600; padding: 6px 14px; background: #0284c7; color: white; border-radius: 4px; } QPushButton:hover { background: #0369a1; }")
+        self.btn_copy.clicked.connect(self._copy_code)
+        btn_bar.addWidget(self.btn_copy)
+
+        btn_save = QPushButton("💾 Save .R File...")
+        btn_save.setStyleSheet("QPushButton { padding: 6px 12px; }")
+        btn_save.clicked.connect(self._save_file)
+        btn_bar.addWidget(btn_save)
+
+        btn_bar.addStretch()
+
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.accept)
+        btn_bar.addWidget(btn_close)
+
+        layout.addLayout(btn_bar)
+
+    def _copy_code(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.r_script)
+        self.btn_copy.setText("✓ Copied!")
+
+    def _save_file(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(self, "Save R Script", "analysis_script.R", "R Files (*.R *.r)")
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.r_script)
+
+
+class StatCraftAnalysisBar(QFrame):
+    """Modern StatCraft Analysis ribbon with 1-click R script copy/export and dialog recall."""
 
     def __init__(self, window: "ModernWindow", entry: Dict[str, Any], conn_dict: Dict[str, Any], parent=None):
         super().__init__(parent)
@@ -249,36 +328,39 @@ class ConnectBridgeWidget(QFrame):
 
     def _init_ui(self):
         from .connect import ConnectedAnalysis, check_analysis_freshness
+        from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication, QFileDialog
 
-        conn_obj = ConnectedAnalysis.from_dict(self.conn_dict)
-        status, status_msg = check_analysis_freshness(conn_obj, self.window.presenter.worksheet)
+        self.conn_obj = ConnectedAnalysis.from_dict(self.conn_dict)
+        worksheet = self.window.presenter.worksheet if hasattr(self.window, "presenter") and self.window.presenter else None
+        status, status_msg = check_analysis_freshness(self.conn_obj, worksheet) if worksheet else ("current", "In Sync")
         dark = _is_dark_active(self)
 
-        self.setObjectName("connectBridgeCard")
+        self.setObjectName("statcraftAnalysisBar")
         if dark:
             self.setStyleSheet(
-                "QFrame#connectBridgeCard { background-color: #18181b; border: 1px solid #0284c7; border-radius: 6px; padding: 8px 12px; }"
+                "QFrame#statcraftAnalysisBar { background-color: #18181b; border: 1px solid #0284c7; border-radius: 6px; padding: 6px 12px; }"
             )
         else:
             self.setStyleSheet(
-                "QFrame#connectBridgeCard { background-color: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 6px; padding: 8px 12px; }"
+                "QFrame#statcraftAnalysisBar { background-color: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 6px; padding: 6px 12px; }"
             )
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 8, 10, 8)
+        root.setContentsMargins(10, 6, 10, 6)
         root.setSpacing(6)
 
         # Top Bar: Identity & Summary
         top_bar = QHBoxLayout()
         top_bar.setSpacing(8)
 
-        badge = QLabel("<b>🔗 STATCRAFT CONNECT</b>")
+        badge = QLabel("<b>📊 STATCRAFT ANALYSIS</b>")
         badge.setStyleSheet("color: #0284c7; font-size: 9pt;" if not dark else "color: #38bdf8; font-size: 9pt;")
         top_bar.addWidget(badge)
 
         r2_val = self.entry.get("result", {}).get("r_squared")
-        r2_str = f"R² = {r2_val:.4f}" if r2_val is not None else "Fitted Model"
-        model_info = QLabel(f"<b>Model:</b> {conn_obj.title}  |  {r2_str}  |  N = {len(conn_obj.fitted_row_ids)}")
+        r2_str = f"R² = {r2_val:.4f}" if r2_val is not None else "Fitted Procedure"
+        n_obs = len(self.conn_obj.fitted_row_ids)
+        model_info = QLabel(f"<b>{self.conn_obj.title}</b>  |  {r2_str}  |  N = {n_obs}")
         model_info.setStyleSheet("font-size: 8.5pt; color: #334155;" if not dark else "font-size: 8.5pt; color: #cbd5e1;")
         top_bar.addWidget(model_info, 1)
 
@@ -295,18 +377,14 @@ class ConnectBridgeWidget(QFrame):
             sync_badge.setStyleSheet(
                 "color: #10b981; font-size: 8pt; font-weight: 600; padding: 2px 6px; border: 1px solid #10b981; border-radius: 3px;"
             )
-            sync_badge.setToolTip("Active worksheet data matches model training state.")
+            sync_badge.setToolTip("Active worksheet data matches analysis training state.")
             top_bar.addWidget(sync_badge)
 
         root.addLayout(top_bar)
 
-        # Mode Action Buttons Ribbon
+        # Action Buttons Ribbon
         btn_bar = QHBoxLayout()
         btn_bar.setSpacing(6)
-
-        lbl_lead = QLabel("Bridge to:")
-        lbl_lead.setStyleSheet("font-size: 8.5pt; font-weight: 600; color: #475569;" if not dark else "font-size: 8.5pt; font-weight: 600; color: #94a3b8;")
-        btn_bar.addWidget(lbl_lead)
 
         btn_qss = (
             "QPushButton { background: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 10px; font-size: 8.5pt; font-weight: 500; }"
@@ -316,85 +394,79 @@ class ConnectBridgeWidget(QFrame):
             "QPushButton:hover { background: #e0f2fe; border-color: #0284c7; color: #005a9e; }"
         )
 
-        b_dialog = QPushButton("📊 Minitab Dialog")
+        b_dialog = QPushButton("📊 Edit Minitab Dialog...")
         b_dialog.setStyleSheet(btn_qss)
-        b_dialog.setToolTip("Edit variables, model terms, and confidence level in the classic procedure dialog")
+        b_dialog.setToolTip("Edit variables, options, and parameters in the classic procedure dialog (restoring previous selections)")
         b_dialog.clicked.connect(lambda: self.window.connect_open_dialog(self.entry))
         btn_bar.addWidget(b_dialog)
 
-        arrow1 = QLabel("➔")
-        arrow1.setStyleSheet("color: #94a3b8; font-weight: bold;")
-        btn_bar.addWidget(arrow1)
+        sep1 = QLabel("|")
+        sep1.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
+        btn_bar.addWidget(sep1)
 
-        # Contextual label for JMP button based on model type
-        if conn_obj.analysis_type in ("oneway_anova", "one_way_anova"):
-            jmp_label = "📈 JMP Oneway"
-        elif conn_obj.analysis_type == "two_sample_t":
-            jmp_label = "📈 JMP Oneway"
-        elif conn_obj.analysis_type in ("twoway_anova", "two_way_anova"):
-            jmp_label = "📈 JMP Fit Model"
-        elif conn_obj.analysis_type in ("binary_logistic", "fit_binary_logistic"):
-            jmp_label = "📈 JMP Logistic"
-        elif conn_obj.analysis_type in ("normal_capability", "process_capability", "capability"):
-            jmp_label = "📈 JMP Capability"
-        elif conn_obj.analysis_type in ("individuals_moving_range", "imr_chart", "imr", "xbar_r", "xbar_s", "subgroup_control_chart"):
-            jmp_label = "📈 JMP Control Chart Builder"
-        elif conn_obj.analysis_type in ("gage_rr", "gage_rr_crossed", "crossed_gage_rr"):
-            jmp_label = "📈 JMP Variability Gauge"
-        elif conn_obj.analysis_type == "correlation":
-            jmp_label = "📈 JMP Multivariate" if len(conn_obj.predictor_names) > 1 else "📈 JMP Bivariate"
-        elif conn_obj.analysis_type in ("descriptive_statistics", "describe_columns"):
-            jmp_label = "📈 JMP Distribution"
-        elif len(conn_obj.predictor_names) == 1 and conn_obj.analysis_type == "multiple_regression":
-            jmp_label = "📈 JMP Bivariate"
-        else:
-            jmp_label = "📈 JMP Profiler"
+        b_copy_r = QPushButton("📋 Copy R Script")
+        b_copy_r.setStyleSheet(btn_qss)
+        b_copy_r.setToolTip("Copy 100% pure Base R script for this analysis to the system clipboard (zero external packages)")
+        b_copy_r.clicked.connect(self.copy_r_script)
+        btn_bar.addWidget(b_copy_r)
 
-        b_jmp = QPushButton(jmp_label)
-        b_jmp.setStyleSheet(btn_qss)
-        b_jmp.setToolTip("Open in JMP interactive visual analysis platform (draggable crosshairs / Oneway / Bivariate)")
-        b_jmp.clicked.connect(lambda: self.window.connect_open_explorer(self.entry))
-        btn_bar.addWidget(b_jmp)
+        b_view_r = QPushButton("👁️ View R Code")
+        b_view_r.setStyleSheet(btn_qss)
+        b_view_r.setToolTip("Inspect generated Base R code in a syntax-highlighted code viewer")
+        b_view_r.clicked.connect(self.view_r_code)
+        btn_bar.addWidget(b_view_r)
 
-        arrow2 = QLabel("➔")
-        arrow2.setStyleSheet("color: #94a3b8; font-weight: bold;")
-        btn_bar.addWidget(arrow2)
+        b_export_r = QPushButton("💾 Export .R")
+        b_export_r.setStyleSheet(btn_qss)
+        b_export_r.setToolTip("Save standalone Base R script to a file")
+        b_export_r.clicked.connect(self.export_r_file)
+        btn_bar.addWidget(b_export_r)
 
-        b_r = QPushButton("💻 R Workbench")
-        b_r.setStyleSheet(btn_qss)
-        b_r.setToolTip("Open generated Base R code in R Workbench with active worksheet automatically bound as 'df'")
-        b_r.clicked.connect(lambda: self.window.connect_open_in_r(self.entry))
-        btn_bar.addWidget(b_r)
+        sep2 = QLabel("|")
+        sep2.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
+        btn_bar.addWidget(sep2)
 
-        sep = QLabel("|")
-        sep.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
-        btn_bar.addWidget(sep)
+        b_report = QPushButton("📑 Add to ReportPad")
+        b_report.setStyleSheet(btn_qss)
+        b_report.setToolTip("Append this analysis report to the active StatCraft ReportPad")
+        b_report.clicked.connect(lambda: self.window.append_connected_report_to_report_pad(self.entry) if hasattr(self.window, "append_connected_report_to_report_pad") else None)
+        btn_bar.addWidget(b_report)
 
-        b_compare = QPushButton("⚖️ Compare vs R")
-        b_compare.setStyleSheet(btn_qss)
-        b_compare.setToolTip("Audit parameter estimates and diagnostics against R base::lm (1e-4 tolerance)")
-        b_compare.clicked.connect(lambda: self.window.connect_compare_implementations(self.entry))
-        btn_bar.addWidget(b_compare)
+        if self.conn_obj.predictor_names:
+            b_prof = QPushButton("📈 Interactive Profiler")
+            b_prof.setStyleSheet(btn_qss)
+            b_prof.setToolTip("Open interactive prediction profiler with crosshairs for model exploration")
+            b_prof.clicked.connect(lambda: self.window.connect_open_explorer(self.entry))
+            btn_bar.addWidget(b_prof)
 
         b_sync = QPushButton("📥 Sync to Sheet")
         b_sync.setStyleSheet(btn_qss)
-        b_sync.setToolTip("Append model predictions & residuals back into the active worksheet matched by row IDs")
+        b_sync.setToolTip("Append model predictions & residuals back into active worksheet matched by row IDs")
         b_sync.clicked.connect(lambda: self.window.connect_apply_predictions(self.entry))
         btn_bar.addWidget(b_sync)
 
-        act = self.entry.get("recipe", {}).get("action") or conn_obj.analysis_type
-        if act in ("analyze_response_surface", "response_surface", "analyze_factorial", "analyze_factorial_terms", "factorial_regression"):
-            b_boot = QPushButton("🔬 R Bootstrap")
-            b_boot.setStyleSheet(btn_qss)
-            b_boot.setToolTip("Generate and execute 2,000-replication non-parametric residual bootstrap uncertainty script in R")
-            b_boot.clicked.connect(lambda: self.window.connect_open_r_bootstrap(self.entry))
-            btn_bar.addWidget(b_boot)
-
-        b_report = QPushButton("📑 Append to ReportPad")
-        b_report.setStyleSheet(btn_qss)
-        b_report.setToolTip("Generate comprehensive Connected Model report and append to ReportPad")
-        b_report.clicked.connect(lambda: self.window.append_connected_report_to_report_pad(self.entry))
-        btn_bar.addWidget(b_report)
-
         btn_bar.addStretch()
         root.addLayout(btn_bar)
+
+    def copy_r_script(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.conn_obj.r_script)
+        if hasattr(self.window, "statusBar") and self.window.statusBar():
+            self.window.statusBar().showMessage("✓ Copied pure Base R script to clipboard!", 5000)
+
+    def view_r_code(self):
+        dlg = ViewRCodeDialog(self.window, self.conn_obj.r_script, title=f"R Code: {self.conn_obj.title}")
+        dlg.exec()
+
+    def export_r_file(self):
+        from PySide6.QtWidgets import QFileDialog
+        default_name = f"{self.conn_obj.analysis_type}_script.R"
+        path, _ = QFileDialog.getSaveFileName(self, "Export R Script", default_name, "R Scripts (*.R *.r)")
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.conn_obj.r_script)
+            if hasattr(self.window, "statusBar") and self.window.statusBar():
+                self.window.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+
+
+ConnectBridgeWidget = StatCraftAnalysisBar

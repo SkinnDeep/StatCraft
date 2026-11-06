@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 
 from statcraft.model import Worksheet, Column
 from statcraft.modern_app import ModernWindow
-from statcraft.connect_hub import ConnectBridgeWidget
+from statcraft.connect_hub import StatCraftAnalysisBar
 
 
 class TestConnectHud(unittest.TestCase):
@@ -13,6 +13,7 @@ class TestConnectHud(unittest.TestCase):
 
     def test_connect_bridge_banner_present_on_connected_results(self):
         window = ModernWindow()
+        window.closeEvent = lambda event: event.accept()
         ws = Worksheet("ChemStudy", [
             Column("Yield", "number", [80.0, 85.0, 88.0, 92.0]),
             Column("Temp", "number", [150.0, 160.0, 170.0, 180.0]),
@@ -23,17 +24,17 @@ class TestConnectHud(unittest.TestCase):
 
         window.show_result(entry)
 
-        # Find the ConnectBridgeWidget inside the result view
-        bridges = window.findChildren(ConnectBridgeWidget)
-        self.assertGreaterEqual(len(bridges), 1, "ConnectBridgeWidget should be embedded in the result view")
+        # Find the StatCraftAnalysisBar inside the result view
+        bridges = window.findChildren(StatCraftAnalysisBar)
+        self.assertGreaterEqual(len(bridges), 1, "StatCraftAnalysisBar should be embedded in the result view")
 
         bridge = bridges[0]
         buttons = bridge.findChildren(QPushButton)
         button_texts = [b.text() for b in buttons]
 
         self.assertTrue(any("Minitab" in t for t in button_texts), f"Expected Minitab button, got {button_texts}")
-        self.assertTrue(any("JMP" in t for t in button_texts), f"Expected JMP button, got {button_texts}")
-        self.assertTrue(any("R Workbench" in t for t in button_texts), f"Expected R Workbench button, got {button_texts}")
+        self.assertTrue(any("R Script" in t for t in button_texts), f"Expected R Script button, got {button_texts}")
+        self.assertTrue(any("View R Code" in t for t in button_texts), f"Expected View R Code button, got {button_texts}")
         self.assertTrue(any("ReportPad" in t for t in button_texts), f"Expected ReportPad button, got {button_texts}")
 
         window.close()

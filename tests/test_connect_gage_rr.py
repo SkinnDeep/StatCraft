@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from statcraft.model import Worksheet, Column
 from statcraft.app import Presenter
 from statcraft.connect import create_connected_analysis_from_entry, create_connected_gage_rr
-from statcraft.connect_hub import ConnectBridgeWidget
+from statcraft.connect_hub import StatCraftAnalysisBar
 
 
 class TestConnectGageRR(unittest.TestCase):
@@ -60,11 +60,13 @@ class TestConnectGageRR(unittest.TestCase):
         mock_window = MagicMock()
         mock_window.presenter = self.presenter
 
-        # Check bridge widget reflects JMP Variability Gauge platform
-        bridge = ConnectBridgeWidget(mock_window, entry, conn.to_dict())
+        # Check analysis bar reflects Minitab Dialog and R export actions
+        bridge = StatCraftAnalysisBar(mock_window, entry, conn.to_dict())
         buttons = bridge.findChildren(QPushButton)
         labels = [b.text() for b in buttons]
-        self.assertTrue(any("JMP Variability Gauge" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("Minitab Dialog" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("Copy R Script" in text for text in labels), f"Got labels: {labels}")
+        self.assertTrue(any("View R Code" in text for text in labels), f"Got labels: {labels}")
 
 
 if __name__ == "__main__":
