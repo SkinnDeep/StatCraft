@@ -1034,7 +1034,9 @@ class ModernWindow(QMainWindow):
         self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
         self._action(file, "Save Project As…", lambda: self.save_document(True), QKeySequence.StandardKey.SaveAs, "save_copy")
         self._action(file, "Save Current Worksheet As…", self.export_data, None, "export")
-        self._action(file, "Export Output to Base &R Script (.R)…", self.export_active_r_file, None, "save")
+        self._action(file, "Export Output to Modern &Tidyverse / ggplot2 (.R)…", self.export_active_r_file, None, "save")
+        self._action(file, "Export Output to Pure &Base R Script (.R)…", self.export_active_base_r_file, None, "save")
+        self._action(file, "Export Worksheet with &vroom / readxl (.R)…", self.export_worksheet_vroom, None, "save")
         self._action(file, "Export Worksheet to &R Data Frame (.R)…", self.export_worksheet_r_dataframe, None, "save")
         file.addSeparator()
         excel=file.addMenu('Export to Excel')
@@ -1382,9 +1384,13 @@ class ModernWindow(QMainWindow):
         # 5i. R Translator menu
         stat.addSeparator()
         r_menu = stat.addMenu("&R Translator")
-        self._action(r_menu, "Copy &R Script for Active Output\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
-        self._action(r_menu, "View &R Code for Active Output...", self.view_active_r_code, None, "code_view")
-        self._action(r_menu, "Export Output as Standalone &R Script (.R)...", self.export_active_r_file, None, "save")
+        self._action(r_menu, "Copy Modern &Tidyverse & ggplot2 Script\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
+        self._action(r_menu, "Copy Pure &Base R Script", self.copy_active_base_r_script, None, "copy")
+        self._action(r_menu, "View &R Code (Tidyverse & Base R)...", self.view_active_r_code, None, "code_view")
+        r_menu.addSeparator()
+        self._action(r_menu, "Export Output to Modern &Tidyverse (.R)...", self.export_active_r_file, None, "save")
+        self._action(r_menu, "Export Output to Pure &Base R (.R)...", self.export_active_base_r_file, None, "save")
+        self._action(r_menu, "Export Worksheet with &vroom / readxl (.R)...", self.export_worksheet_vroom, None, "save")
         self._action(r_menu, "Export Worksheet to &R Data Frame (.R)...", self.export_worksheet_r_dataframe, None, "save")
         r_menu.addSeparator()
         self._action(r_menu, "Run &R Script...", self.run_r_script_dialog, None, None, True)
@@ -7051,32 +7057,105 @@ class ModernWindow(QMainWindow):
         code = generate_dataframe_init_code(ws)
         return code, f"Worksheet: {ws.name}"
 
+    def _get_entry_tidyverse_script(self, entry=None) -> tuple[str, str]:
+        target = entry or self.selected_entry
+        if target is None and self.presenter.history:
+            target = self.presenter.history[-1]
+        ws = self.presenter.worksheet
+        from .connect_r import generate_r_tidyverse_script, generate_vroom_data_import_code
+        if target is not None:
+            conn_dict = target.get("connected_analysis")
+            if not conn_dict:
+                from .connect import create_connected_analysis_from_entry
+                try:
+                    conn_obj = create_connected_analysis_from_entry(target, ws)
+                    if conn_obj:
+                        conn_dict = conn_obj.to_dict()
+                        target["connected_analysis"] = conn_dict
+                except Exception:
+                    conn_dict = None
+            if conn_dict:
+                from .connect import ConnectedAnalysis
+                conn_obj = ConnectedAnalysis.from_dict(conn_dict)
+                title = conn_obj.title or target.get("title", "Analysis")
+                script = generate_r_tidyverse_script(conn_obj, ws)
+                return script, title
+        return generate_vroom_data_import_code(ws), f"Worksheet: {ws.name}"
+
+    def _get_entry_vroom_script(self) -> str:
+        from .connect_r import generate_vroom_data_import_code
+        ws = self.presenter.worksheet
+        return generate_vroom_data_import_code(ws)
+
     def copy_active_r_script(self):
+        script, title = self._get_entry_tidyverse_script()
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage(f"✓ Copied modern Tidyverse & ggplot2 R script for '{title}' to clipboard!", 5000)
+
+    def copy_active_base_r_script(self):
         script, title = self._get_entry_r_script()
         cb = QApplication.clipboard()
         if cb is not None:
             cb.setText(script)
         if self.statusBar():
-            self.statusBar().showMessage(f"✓ Copied reproducible Base R script for '{title}' to clipboard!", 5000)
+            self.statusBar().showMessage(f"✓ Copied pure Base R script for '{title}' to clipboard!", 5000)
 
     def view_active_r_code(self):
-        script, title = self._get_entry_r_script()
+        base_script, title = self._get_entry_r_script()
+        tidy_script, _ = self._get_entry_tidyverse_script()
+        vroom_script = self._get_entry_vroom_script()
         from .connect_hub import ViewRCodeDialog
-        dlg = ViewRCodeDialog(self, script, title=f"R Code: {title}")
+        dlg = ViewRCodeDialog(
+            self,
+            r_script=base_script,
+            title=f"R Code: {title}",
+            tidyverse_script=tidy_script,
+            vroom_script=vroom_script,
+        )
         dlg.exec()
 
     def export_active_r_file(self):
-        script, title = self._get_entry_r_script()
+        script, title = self._get_entry_tidyverse_script()
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
-        path, _ = QFileDialog.getSaveFileName(self, "Export R Script", f"{clean}_script.R", "R Scripts (*.R *.r)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Modern Tidyverse R Script", f"{clean}_tidyverse.R", "R Scripts (*.R *.r)")
         if path:
             try:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(script)
                 if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+                    self.statusBar().showMessage(f"✓ Saved Tidyverse R script to {path}", 5000)
             except OSError as err:
                 QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
+
+    def export_active_base_r_file(self):
+        script, title = self._get_entry_r_script()
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Pure Base R Script", f"{clean}_base.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"✓ Saved Base R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save Base R script:\n{err}")
+
+    def export_worksheet_vroom(self):
+        script = self._get_entry_vroom_script()
+        ws = self.presenter.worksheet
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws.name).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Worksheet with vroom/readxl", f"{clean}_vroom_ingest.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"✓ Saved vroom ingestion script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save script:\n{err}")
 
     def copy_entry_r_script(self, entry):
         script, title = self._get_entry_r_script(entry)

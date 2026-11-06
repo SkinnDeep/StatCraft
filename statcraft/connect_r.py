@@ -1519,3 +1519,308 @@ def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
         "}\n"
     )
     return f"{df_def}{eda_code}"
+
+# ==============================================================================
+# Modern Tidyverse, ggplot2, and vroom Ingestion Engine
+# ==============================================================================
+
+def generate_vroom_data_import_code(worksheet: "Worksheet") -> str:
+    """Generate high-performance data ingestion script using vroom, readr, or readxl."""
+    col_defs = []
+    for col in worksheet.columns:
+        safe_name = col.name.replace('"', '\"')
+        if col.kind == "number":
+            vals = [str(v) if v is not None and not (isinstance(v, float) and math.isnan(v)) else "NA" for v in col.values]
+            col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
+        else:
+            vals = [f'"{str(v)}"' if v is not None else "NA" for v in col.values]
+            col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
+    body = ",\n".join(col_defs)
+    clean_name = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in worksheet.name).strip("_") or "data"
+
+    return (
+        "# ==============================================================================\n"
+        f"# StatCraft — High-Performance Data Ingestion via vroom / readr / readxl\n"
+        f"# Worksheet: {worksheet.name} ({len(worksheet.columns)} columns, {worksheet.row_count} rows)\n"
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        "# ==============================================================================\n\n"
+        "# 1. Automated Package Verification & Loading\n"
+        "io_pkgs <- c('vroom', 'readr', 'readxl', 'tibble')\n"
+        "needed <- io_pkgs[!(io_pkgs %in% installed.packages()[, 'Package'])]\n"
+        "if (length(needed) > 0) install.packages(needed, repos = 'https://cloud.r-project.org')\n"
+        "library(tibble)\n\n"
+        "# ------------------------------------------------------------------------------\n"
+        "# Ingestion Option A: Blazing Fast CSV/TSV Ingestion with vroom\n"
+        "# Multi-threaded, memory-mapped reader (orders of magnitude faster on large files)\n"
+        "# ------------------------------------------------------------------------------\n"
+        f"# df <- vroom::vroom('{clean_name}.csv', delim = ',', show_col_types = FALSE)\n\n"
+        "# ------------------------------------------------------------------------------\n"
+        "# Ingestion Option B: Native Excel Ingestion with readxl\n"
+        "# Reads binary .xlsx / .xls directly without external Java dependencies\n"
+        "# ------------------------------------------------------------------------------\n"
+        f"# df <- readxl::read_excel('{clean_name}.xlsx', sheet = '{worksheet.name}')\n\n"
+        "# ------------------------------------------------------------------------------\n"
+        "# Ingestion Option C: Embedded Self-Contained Reproducible Tibble\n"
+        "# ------------------------------------------------------------------------------\n"
+        f"df <- tibble::tibble(\n{body}\n)\n\n"
+        "cat('Successfully loaded active worksheet data into tibble \'df\':\\n')\n"
+        "print(head(df))\n"
+    )
+
+
+def generate_r_tidyverse_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate modern, publication-grade R script using Tidyverse, dplyr, and ggplot2."""
+    vroom_block = generate_vroom_data_import_code(worksheet)
+    atype = connected.analysis_type
+    meta = connected.metadata or {}
+    title = connected.title
+
+    lines = [
+        vroom_block,
+        "",
+        "# ==============================================================================",
+        f"# StatCraft — Modern Tidyverse & ggplot2 Analysis Pipeline",
+        f"# Procedure: {title}",
+        f"# Action: {atype}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Ensure Tidyverse, ggplot2, and modeling packages are loaded",
+        "tidy_pkgs <- c('tidyverse', 'ggplot2', 'dplyr', 'tidyr')",
+        "needed <- tidy_pkgs[!(tidy_pkgs %in% installed.packages()[, 'Package'])]",
+        "if (length(needed) > 0) install.packages(needed, repos = 'https://cloud.r-project.org')",
+        "library(tidyverse)",
+        "library(ggplot2)",
+        "library(dplyr)",
+        "library(tidyr)",
+        "",
+    ]
+
+    all_cols = [connected.response_name] + connected.predictor_names if connected.response_name else connected.predictor_names
+    col_str_literals = ", ".join(json.dumps(c) for c in all_cols)
+
+    if atype in ("descriptive_statistics", "describe_columns", "describe"):
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# 1. Tidyverse Data Wrangling & Descriptive Summary Pipeline",
+            "# ------------------------------------------------------------------------------",
+            f"target_cols <- c({col_str_literals})",
+            "",
+            "descriptive_summary <- df %>%",
+            "  select(all_of(target_cols)) %>%",
+            "  pivot_longer(cols = everything(), names_to = 'Variable', values_to = 'Value') %>%",
+            "  filter(!is.na(Value)) %>%",
+            "  group_by(Variable) %>%",
+            "  summarise(",
+            "    N = n(),",
+            "    Mean = mean(Value),",
+            "    SE_Mean = sd(Value) / sqrt(n()),",
+            "    StDev = sd(Value),",
+            "    Variance = var(Value),",
+            "    CoeffVar = (StDev / Mean) * 100,",
+            "    Min = min(Value),",
+            "    Q1 = as.numeric(quantile(Value, 0.25, type = 6)),",
+            "    Median = median(Value),",
+            "    Q3 = as.numeric(quantile(Value, 0.75, type = 6)),",
+            "    Max = max(Value),",
+            "    IQR = IQR(Value, type = 6),",
+            "    Skewness = (sum((Value - Mean)^3) / n()) / (StDev^3),",
+            "    Kurtosis = (sum((Value - Mean)^4) / n()) / (StDev^4) - 3,",
+            "    .groups = 'drop'",
+            "  )",
+            "",
+            "cat('================================================================================\n')",
+            "cat('            StatCraft: Tidyverse Descriptive Statistics Summary                 \n')",
+            "cat('================================================================================\n\n')",
+            "print(as.data.frame(descriptive_summary))",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# 2. Modern ggplot2 Publication-Grade Visualizations",
+            "# ------------------------------------------------------------------------------",
+            "# Multi-panel Faceted Histogram with Normal Density Fit Curves",
+            "p_hist <- df %>%",
+            "  select(all_of(target_cols)) %>%",
+            "  pivot_longer(cols = everything(), names_to = 'Variable', values_to = 'Value') %>%",
+            "  ggplot(aes(x = Value, fill = Variable)) +",
+            "  geom_histogram(aes(y = after_stat(density)), bins = 15, color = 'white', alpha = 0.75) +",
+            "  geom_density(color = '#dc2626', linewidth = 1) +",
+            "  facet_wrap(~ Variable, scales = 'free') +",
+            "  theme_minimal(base_size = 12) +",
+            "  theme(legend.position = 'none', panel.grid.minor = element_blank()) +",
+            "  labs(title = 'Distribution Analysis: Histogram & Density Fit', y = 'Density')",
+            "print(p_hist)",
+            "",
+            "# Modern Boxplot with Observed Jitter & Mean Diamond",
+            "p_box <- df %>%",
+            "  select(all_of(target_cols)) %>%",
+            "  pivot_longer(cols = everything(), names_to = 'Variable', values_to = 'Value') %>%",
+            "  ggplot(aes(x = Variable, y = Value, fill = Variable)) +",
+            "  geom_boxplot(alpha = 0.6, outlier.colour = '#dc2626', outlier.size = 2, width = 0.5) +",
+            "  geom_jitter(width = 0.15, alpha = 0.4, color = '#1e3a8a', size = 1.5) +",
+            "  stat_summary(fun = mean, geom = 'point', shape = 18, size = 3.5, color = '#dc2626') +",
+            "  theme_minimal(base_size = 12) +",
+            "  theme(legend.position = 'none') +",
+            "  labs(title = 'Boxplots with Observed Jitter & Mean Diamond (Red)', y = 'Value')",
+            "print(p_box)",
+        ])
+    elif atype in ("multiple_regression", "linear_regression", "regression"):
+        resp = format_r_symbol(connected.response_name)
+        preds = " + ".join(format_r_symbol(p) for p in connected.predictor_names)
+        first_p = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else resp
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# 1. Ordinary Least Squares Linear Model Fit",
+            "# ------------------------------------------------------------------------------",
+            f"formula_obj <- {resp} ~ {preds}",
+            "fit <- lm(formula_obj, data = df)",
+            "print(summary(fit))",
+            "",
+            "cat('\n--- 95% Confidence Intervals for Coefficients ---\n')",
+            "print(confint(fit))",
+            "",
+            "# Augmented Data with Residuals & Fitted Values",
+            "model_df <- df %>%",
+            "  mutate(",
+            "    .fitted = fitted(fit),",
+            "    .resid = resid(fit),",
+            "    .std_resid = rstandard(fit)",
+            "  )",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# 2. Modern ggplot2 Regression Diagnostics",
+            "# ------------------------------------------------------------------------------",
+            "# Fitted Line Plot with 95% Confidence Band",
+            f"p_fit <- ggplot(df, aes(x = {first_p}, y = {resp})) +",
+            "  geom_point(color = '#1e3a8a', alpha = 0.7, size = 2.5) +",
+            "  geom_smooth(method = 'lm', formula = y ~ x, color = '#0284c7', fill = '#bae6fd', alpha = 0.4) +",
+            "  labs(title = 'Fitted Line Plot with 95% Confidence Band', subtitle = paste('R-squared =', round(summary(fit)$r.squared, 4))) +",
+            "  theme_minimal(base_size = 12)",
+            "print(p_fit)",
+            "",
+            "# Residuals vs Fitted Plot",
+            "p_resid <- ggplot(model_df, aes(x = .fitted, y = .std_resid)) +",
+            "  geom_hline(yintercept = 0, linetype = 'dashed', color = 'gray50') +",
+            "  geom_point(color = '#dc2626', alpha = 0.75, size = 2) +",
+            "  geom_smooth(method = 'loess', formula = y ~ x, se = FALSE, color = '#2563eb', linewidth = 0.8) +",
+            "  labs(title = 'Residuals vs Fitted Values', x = 'Fitted Values', y = 'Standardized Residuals') +",
+            "  theme_minimal(base_size = 12)",
+            "print(p_resid)",
+        ])
+    elif atype in ("oneway_anova", "one_way_anova"):
+        resp = format_r_symbol(connected.response_name)
+        fac = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "Group"
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# 1. One-Way Analysis of Variance",
+            "# ------------------------------------------------------------------------------",
+            f"formula_obj <- {resp} ~ as.factor({fac})",
+            "fit <- aov(formula_obj, data = df)",
+            "print(summary(fit))",
+            "",
+            "cat('\n--- Tukey Honest Significant Differences (Tukey HSD) ---\n')",
+            "print(TukeyHSD(fit))",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# 2. Modern ggplot2 Factor Level Visualizations",
+            "# ------------------------------------------------------------------------------",
+            f"p_aov <- ggplot(df, aes(x = as.factor({fac}), y = {resp}, fill = as.factor({fac}))) +",
+            "  geom_boxplot(alpha = 0.6, width = 0.5, outlier.color = 'red') +",
+            "  geom_jitter(width = 0.15, alpha = 0.4, size = 2) +",
+            "  stat_summary(fun = mean, geom = 'point', shape = 18, size = 4, color = '#1e3a8a') +",
+            f"  labs(title = 'One-Way ANOVA: Factor Levels vs Response', x = {json.dumps(connected.predictor_names[0] if connected.predictor_names else 'Group')}, y = {json.dumps(connected.response_name)}) +",
+            "  theme_minimal(base_size = 12) +",
+            "  theme(legend.position = 'none')",
+            "print(p_aov)",
+        ])
+    elif atype in ("two_sample_t", "one_sample_t", "paired_t"):
+        if atype == "two_sample_t":
+            c1, c2 = connected.response_name, connected.predictor_names[0] if connected.predictor_names else "Group"
+            lines.extend([
+                "# ------------------------------------------------------------------------------",
+                "# Two-Sample Hypothesis Testing (t-Test)",
+                "# ------------------------------------------------------------------------------",
+                f"t_res <- t.test(df[[{json.dumps(c1)}]], df[[{json.dumps(c2)}]], conf.level = {connected.confidence})",
+                "print(t_res)",
+                "",
+                "# ggplot2 Comparison Plot",
+                f"p_comp <- df %>%",
+                f"  select(all_of(c({json.dumps(c1)}, {json.dumps(c2)}))) %>%",
+                "  pivot_longer(cols = everything(), names_to = 'Sample', values_to = 'Measurement') %>%",
+                "  ggplot(aes(x = Sample, y = Measurement, fill = Sample)) +",
+                "  geom_boxplot(alpha = 0.6, width = 0.4, outlier.shape = NA) +",
+                "  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +",
+                "  theme_minimal(base_size = 12) +",
+                "  theme(legend.position = 'none') +",
+                "  labs(title = 'Two-Sample Comparison', subtitle = paste('p-value =', format.pval(t_res$p.value)))",
+                "print(p_comp)",
+            ])
+        else:
+            lines.extend([
+                f"# Hypothesis Test: {connected.title}",
+                f"t_res <- t.test(df[[{json.dumps(connected.response_name)}]], conf.level = {connected.confidence})",
+                "print(t_res)",
+                f"p_one <- ggplot(df, aes(x = df[[{json.dumps(connected.response_name)}]])) +",
+                "  geom_histogram(fill = '#93c5fd', color = '#1e3a8a', bins = 15) +",
+                "  theme_minimal(base_size = 12) +",
+                f"  labs(title = {json.dumps(connected.title)}, x = {json.dumps(connected.response_name)})",
+                "print(p_one)",
+            ])
+    elif atype in ("imr_chart", "subgroup_spc", "process_control"):
+        m_col = connected.response_name or (connected.predictor_names[0] if connected.predictor_names else "Measurement")
+        stats = connected.statistics or {}
+        ucl = stats.get("ucl", 0)
+        cl = stats.get("centerline", stats.get("mean", 0))
+        lcl = stats.get("lcl", 0)
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# Modern ggplot2 Statistical Process Control Chart",
+            "# ------------------------------------------------------------------------------",
+            "chart_df <- df %>%",
+            "  mutate(Observation = row_number())",
+            "",
+            f"p_spc <- ggplot(chart_df, aes(x = Observation, y = .data[[{json.dumps(m_col)}]])) +",
+            "  geom_line(color = '#2563eb', linewidth = 0.7) +",
+            "  geom_point(color = '#1e3a8a', size = 2) +",
+            f"  geom_hline(yintercept = {ucl}, linetype = 'dashed', color = '#dc2626', linewidth = 0.8) +",
+            f"  geom_hline(yintercept = {cl}, color = '#16a34a', linewidth = 0.8) +",
+            f"  geom_hline(yintercept = {lcl}, linetype = 'dashed', color = '#dc2626', linewidth = 0.8) +",
+            f"  annotate('text', x = nrow(chart_df), y = {ucl}, label = 'UCL', vjust = -0.5, color = '#dc2626', fontface = 'bold') +",
+            f"  annotate('text', x = nrow(chart_df), y = {cl}, label = 'Centerline', vjust = -0.5, color = '#16a34a', fontface = 'bold') +",
+            f"  annotate('text', x = nrow(chart_df), y = {lcl}, label = 'LCL', vjust = 1.5, color = '#dc2626', fontface = 'bold') +",
+            f"  labs(title = 'Statistical Process Control Chart: {m_col}', y = {json.dumps(m_col)}) +",
+            "  theme_minimal(base_size = 12)",
+            "print(p_spc)",
+        ])
+    else:
+        # Generic automated exploratory tidyverse summary
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# Automated Exploratory Tidyverse Summary",
+            "# ------------------------------------------------------------------------------",
+            "eda_summary <- df %>%",
+            "  select(where(is.numeric)) %>%",
+            "  pivot_longer(cols = everything(), names_to = 'Variable', values_to = 'Value') %>%",
+            "  filter(!is.na(Value)) %>%",
+            "  group_by(Variable) %>%",
+            "  summarise(",
+            "    N = n(),",
+            "    Mean = mean(Value),",
+            "    StDev = sd(Value),",
+            "    Median = median(Value),",
+            "    IQR = IQR(Value, type = 6),",
+            "    Min = min(Value),",
+            "    Max = max(Value),",
+            "    .groups = 'drop'",
+            "  )",
+            "print(as.data.frame(eda_summary))",
+            "",
+            "# Correlation Matrix & Scatterplot Matrix",
+            "num_cols <- names(df)[sapply(df, is.numeric)]",
+            "if (length(num_cols) >= 2) {",
+            "  cat('\nPairwise Pearson Correlation Matrix:\n')",
+            "  print(round(cor(df[, num_cols], use = 'pairwise.complete.obs'), 4))",
+            "  pairs(df[, num_cols], col = '#2563eb', pch = 19, main = 'Pairwise Scatterplot Matrix')",
+            "}",
+        ])
+
+    return "\n".join(lines)

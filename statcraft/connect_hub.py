@@ -240,15 +240,31 @@ class ConnectOverviewDialog(QDialog):
 
 
 class ViewRCodeDialog(QDialog):
-    """Clean, resizable dialog displaying reproducible Base R code with 1-click clipboard copy."""
+    """Modern, multi-engine R Code Viewer displaying Tidyverse/ggplot2, Base R, and vroom ingestion with 1-click toggling."""
 
-    def __init__(self, parent=None, r_script: str = "", title: str = "Reproducible Base R Script"):
+    def __init__(
+        self,
+        parent=None,
+        r_script: str = "",
+        title: str = "Reproducible R Script",
+        tidyverse_script: str = "",
+        vroom_script: str = "",
+    ):
         super().__init__(parent)
         self.setSizeGripEnabled(True)
-        self.r_script = r_script
-        self.setWindowTitle(title)
-        self.resize(760, 520)
-        self.setMinimumSize(600, 400)
+        self.title_text = title
+        self.setWindowTitle(f"R Code Viewer — {title}")
+        self.resize(840, 580)
+        self.setMinimumSize(680, 440)
+
+        self.base_r_script = r_script
+        self.tidyverse_script = tidyverse_script or r_script
+        self.vroom_script = vroom_script
+
+        # Default to tidyverse if available, otherwise base_r
+        self.current_mode = "tidyverse" if tidyverse_script else "base_r"
+        self.r_script = self.tidyverse_script if self.current_mode == "tidyverse" else self.base_r_script
+
         self._init_ui()
 
     def _init_ui(self):
@@ -260,13 +276,38 @@ class ViewRCodeDialog(QDialog):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        # Header
-        header = QLabel(f"<b>Reproducible Base R Code</b>")
-        header.setStyleSheet("font-size: 11pt; color: #0284c7;" if not dark else "font-size: 11pt; color: #38bdf8;")
-        sub = QLabel("100% pure Base R script (zero external dependencies). Ready to run in any R console or RStudio.")
-        sub.setStyleSheet("font-size: 8.5pt; color: #64748b;" if not dark else "font-size: 8.5pt; color: #94a3b8;")
-        layout.addWidget(header)
-        layout.addWidget(sub)
+        # Header Section
+        self.header_label = QLabel()
+        self.header_label.setStyleSheet("font-size: 11pt; font-weight: 700; color: #0284c7;" if not dark else "font-size: 11pt; font-weight: 700; color: #38bdf8;")
+        self.sub_label = QLabel()
+        self.sub_label.setStyleSheet("font-size: 8.5pt; color: #64748b;" if not dark else "font-size: 8.5pt; color: #94a3b8;")
+        layout.addWidget(self.header_label)
+        layout.addWidget(self.sub_label)
+
+        # Mode Selector Ribbon (Segmented Pills)
+        pill_box = QHBoxLayout()
+        pill_box.setSpacing(6)
+
+        self.btn_mode_tidy = QPushButton("📊 Modern Tidyverse & ggplot2")
+        self.btn_mode_tidy.setCheckable(True)
+        self.btn_mode_tidy.clicked.connect(lambda: self.set_mode("tidyverse"))
+        pill_box.addWidget(self.btn_mode_tidy)
+
+        self.btn_mode_base = QPushButton("⚙️ Pure Base R (Zero Dependencies)")
+        self.btn_mode_base.setCheckable(True)
+        self.btn_mode_base.clicked.connect(lambda: self.set_mode("base_r"))
+        pill_box.addWidget(self.btn_mode_base)
+
+        if self.vroom_script:
+            self.btn_mode_vroom = QPushButton("⚡ Fast Data Ingest (vroom / readxl)")
+            self.btn_mode_vroom.setCheckable(True)
+            self.btn_mode_vroom.clicked.connect(lambda: self.set_mode("vroom"))
+            pill_box.addWidget(self.btn_mode_vroom)
+        else:
+            self.btn_mode_vroom = None
+
+        pill_box.addStretch()
+        layout.addLayout(pill_box)
 
         # Monospace Code Editor
         self.code_view = QPlainTextEdit(self)
@@ -276,9 +317,9 @@ class ViewRCodeDialog(QDialog):
         font.setStyleHint(QFont.StyleHint.Monospace)
         self.code_view.setFont(font)
         if dark:
-            self.code_view.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px; padding: 6px;")
+            self.code_view.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px; padding: 8px;")
         else:
-            self.code_view.setStyleSheet("background-color: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;")
+            self.code_view.setStyleSheet("background-color: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px;")
         layout.addWidget(self.code_view, 1)
 
         # Action Buttons
@@ -303,6 +344,55 @@ class ViewRCodeDialog(QDialog):
 
         layout.addLayout(btn_bar)
 
+        self._refresh_display()
+
+    def set_mode(self, mode: str):
+        self.current_mode = mode
+        if mode == "tidyverse":
+            self.r_script = self.tidyverse_script
+        elif mode == "base_r":
+            self.r_script = self.base_r_script
+        elif mode == "vroom":
+            self.r_script = self.vroom_script or self.base_r_script
+        self.code_view.setPlainText(self.r_script)
+        self.btn_copy.setText("📋 Copy to Clipboard")
+        self._refresh_display()
+
+    def _refresh_display(self):
+        dark = _is_dark_active(self)
+        active_pill = (
+            "QPushButton { background: #0284c7; color: #ffffff; border: 1px solid #0369a1; border-radius: 14px; padding: 4px 12px; font-weight: 600; font-size: 8.5pt; }"
+            if not dark else
+            "QPushButton { background: #0284c7; color: #ffffff; border: 1px solid #38bdf8; border-radius: 14px; padding: 4px 12px; font-weight: 600; font-size: 8.5pt; }"
+        )
+        inactive_pill = (
+            "QPushButton { background: #ffffff; color: #475569; border: 1px solid #cbd5e1; border-radius: 14px; padding: 4px 12px; font-size: 8.5pt; }"
+            "QPushButton:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8; }"
+            if not dark else
+            "QPushButton { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; border-radius: 14px; padding: 4px 12px; font-size: 8.5pt; }"
+            "QPushButton:hover { background: #3f3f46; color: #f4f4f5; border-color: #52525b; }"
+        )
+
+        self.btn_mode_tidy.setChecked(self.current_mode == "tidyverse")
+        self.btn_mode_tidy.setStyleSheet(active_pill if self.current_mode == "tidyverse" else inactive_pill)
+
+        self.btn_mode_base.setChecked(self.current_mode == "base_r")
+        self.btn_mode_base.setStyleSheet(active_pill if self.current_mode == "base_r" else inactive_pill)
+
+        if self.btn_mode_vroom is not None:
+            self.btn_mode_vroom.setChecked(self.current_mode == "vroom")
+            self.btn_mode_vroom.setStyleSheet(active_pill if self.current_mode == "vroom" else inactive_pill)
+
+        if self.current_mode == "tidyverse":
+            self.header_label.setText("Modern Tidyverse & ggplot2 Pipeline")
+            self.sub_label.setText("Publication-ready dplyr / tidyr / ggplot2 code. Self-contained with embedded tibble dataset.")
+        elif self.current_mode == "base_r":
+            self.header_label.setText("Pure Base R Script (Zero Dependencies)")
+            self.sub_label.setText("100% standard R library code. Runs cleanly out-of-the-box in any vanilla R console or RStudio.")
+        elif self.current_mode == "vroom":
+            self.header_label.setText("High-Performance Data Ingestion (vroom / readxl)")
+            self.sub_label.setText("Multi-threaded memory-mapped CSV/TSV ingestion and native Excel reader workflows.")
+
     def _copy_code(self):
         from PySide6.QtWidgets import QApplication
         QApplication.clipboard().setText(self.r_script)
@@ -310,7 +400,10 @@ class ViewRCodeDialog(QDialog):
 
     def _save_file(self):
         from PySide6.QtWidgets import QFileDialog, QMessageBox
-        path, _ = QFileDialog.getSaveFileName(self, "Save R Script", "analysis_script.R", "R Files (*.R *.r)")
+        clean_title = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in self.title_text).strip("_") or "analysis"
+        suffix = "tidyverse" if self.current_mode == "tidyverse" else ("base_r" if self.current_mode == "base_r" else "vroom_import")
+        default_name = f"{clean_title}_{suffix}.R"
+        path, _ = QFileDialog.getSaveFileName(self, "Save R Script", default_name, "R Files (*.R *.r)")
         if path:
             try:
                 with open(path, "w", encoding="utf-8") as f:
@@ -406,10 +499,17 @@ class StatCraftAnalysisBar(QFrame):
 
         b_copy_r = QPushButton("📋 Copy R Script")
         b_copy_r.setStyleSheet(btn_primary_qss)
-        b_copy_r.setToolTip("Copy 100% pure Base R script for this analysis to the system clipboard (zero external packages)")
+        b_copy_r.setToolTip("Copy modern Tidyverse & ggplot2 R script for this analysis to clipboard (self-contained with embedded data)")
         b_copy_r.clicked.connect(self.copy_r_script)
         btn_bar.addWidget(b_copy_r)
         self.btn_copy_r = b_copy_r
+
+        b_copy_base = QPushButton("⚙️ Pure Base R")
+        b_copy_base.setStyleSheet(btn_qss)
+        b_copy_base.setToolTip("Copy 100% pure Base R script (zero external packages) to clipboard")
+        b_copy_base.clicked.connect(self.copy_base_r_script)
+        btn_bar.addWidget(b_copy_base)
+        self.btn_copy_base = b_copy_base
 
         b_view_r = QPushButton("👁️ View R Code")
         b_view_r.setStyleSheet(btn_qss)
@@ -452,23 +552,48 @@ class StatCraftAnalysisBar(QFrame):
             return build_self_contained_r_script(raw, ws, self.conn_obj.title)
         return raw
 
+    def get_tidyverse_r_script(self) -> str:
+        from .connect_r import generate_r_tidyverse_script
+        ws = getattr(self.window.presenter, "worksheet", None) if hasattr(self.window, "presenter") else None
+        return generate_r_tidyverse_script(self.conn_obj, ws)
+
+    def get_vroom_r_script(self) -> str:
+        from .connect_r import generate_vroom_data_import_code
+        ws = getattr(self.window.presenter, "worksheet", None) if hasattr(self.window, "presenter") else None
+        return generate_vroom_data_import_code(ws)
+
     def copy_r_script(self):
+        from PySide6.QtWidgets import QApplication
+        script = self.get_tidyverse_r_script() or self.get_full_r_script()
+        QApplication.clipboard().setText(script)
+        if hasattr(self.window, "statusBar") and self.window.statusBar():
+            self.window.statusBar().showMessage(f"✓ Copied modern Tidyverse & ggplot2 R script for '{self.conn_obj.title}' to clipboard!", 5000)
+
+    def copy_base_r_script(self):
         from PySide6.QtWidgets import QApplication
         script = self.get_full_r_script()
         QApplication.clipboard().setText(script)
         if hasattr(self.window, "statusBar") and self.window.statusBar():
-            self.window.statusBar().showMessage("✓ Copied self-contained Base R script to clipboard!", 5000)
+            self.window.statusBar().showMessage(f"✓ Copied pure Base R script for '{self.conn_obj.title}' to clipboard!", 5000)
 
     def view_r_code(self):
-        script = self.get_full_r_script()
-        dlg = ViewRCodeDialog(self.window, script, title=f"R Code: {self.conn_obj.title}")
+        base_script = self.get_full_r_script()
+        tidy_script = self.get_tidyverse_r_script()
+        vroom_script = self.get_vroom_r_script()
+        dlg = ViewRCodeDialog(
+            self.window,
+            r_script=base_script,
+            title=f"R Code: {self.conn_obj.title}",
+            tidyverse_script=tidy_script,
+            vroom_script=vroom_script,
+        )
         dlg.exec()
 
     def export_r_file(self):
         from PySide6.QtWidgets import QFileDialog, QMessageBox
-        script = self.get_full_r_script()
+        script = self.get_tidyverse_r_script() or self.get_full_r_script()
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in self.conn_obj.title).strip("_")
-        default_name = f"{clean}_script.R"
+        default_name = f"{clean}_tidyverse.R"
         path, _ = QFileDialog.getSaveFileName(self, "Export R Script", default_name, "R Scripts (*.R *.r)")
         if path:
             try:
