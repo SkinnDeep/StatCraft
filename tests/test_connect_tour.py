@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from PySide6.QtWidgets import QApplication
 
@@ -27,6 +29,11 @@ class TestConnectTour(unittest.TestCase):
         history = window.presenter.history
         self.assertGreaterEqual(len(history), 3)
 
+        # Verify that each history entry is correctly associated with its source worksheet
+        self.assertEqual(window.presenter.result_worksheet(history[0]).name, "DOE_Battery")
+        self.assertEqual(window.presenter.result_worksheet(history[1]).name, "GageRR_Gasket")
+        self.assertEqual(window.presenter.result_worksheet(history[2]).name, "SPC_PistonRings")
+
         # Verify that connected analyses exist for the loaded results
         conn_types = [
             e.get("connected_analysis", {}).get("analysis_type")
@@ -35,6 +42,16 @@ class TestConnectTour(unittest.TestCase):
         self.assertTrue(any(t in ("twoway_anova", "general_linear_model", "multiple_regression") for t in conn_types))
         self.assertIn("gage_rr", conn_types)
         self.assertIn("xbar_r", conn_types)
+
+        # Verify project can be saved cleanly without identity mismatch
+        with tempfile.NamedTemporaryFile(suffix=".mpx", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            window.presenter.save(tmp_path)
+            self.assertTrue(os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
         window.close()
 

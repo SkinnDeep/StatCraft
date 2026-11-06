@@ -1124,6 +1124,11 @@ def generate_r_gage_rr_script(connected: "ConnectedAnalysis", worksheet: "Worksh
 
 def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean Base R script for Subgroup SPC (Xbar-R / Xbar-S) control charts."""
+    def _scalar(v, default=0.0):
+        if isinstance(v, (list, tuple)):
+            return float(v[0]) if v else default
+        return float(v) if v is not None else default
+
     meas_col = connected.response_name
     preds = connected.predictor_names
     factor_col = preds[0] if preds else None
@@ -1134,12 +1139,12 @@ def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "W
     subgroup_size = meta.get("subgroup_size") or 5
 
     stats = connected.statistics or {}
-    xb_c = stats.get("xbar_center", 0.0)
-    xb_u = stats.get("xbar_ucl", 0.0)
-    xb_l = stats.get("xbar_lcl", 0.0)
-    dp_c = stats.get("disp_center", 0.0)
-    dp_u = stats.get("disp_ucl", 0.0)
-    dp_l = stats.get("disp_lcl", 0.0)
+    xb_c = _scalar(stats.get("xbar_center"), 0.0)
+    xb_u = _scalar(stats.get("xbar_ucl"), 0.0)
+    xb_l = _scalar(stats.get("xbar_lcl"), 0.0)
+    dp_c = _scalar(stats.get("disp_center"), 0.0)
+    dp_u = _scalar(stats.get("disp_ucl"), 0.0)
+    dp_l = _scalar(stats.get("disp_lcl"), 0.0)
 
     lines = [
         "# ==============================================================================",
@@ -1154,7 +1159,7 @@ def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "W
 
     if factor_col:
         lines.extend([
-            f"groups <- split(df[[{json.dumps(meas_col)}]], df[[{json.dumps(factor_col)}]])",
+            f"groups <- split(df[[{json.dumps(meas_col)}]], factor(df[[{json.dumps(factor_col)}]], levels = unique(df[[{json.dumps(factor_col)}]][!is.na(df[[{json.dumps(factor_col)}]])])))",
             "# Filter out empty subgroups if any",
             "groups <- groups[sapply(groups, length) > 0]",
         ])
@@ -1176,33 +1181,36 @@ def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "W
     else:
         lines.append("subgroup_disp <- sapply(groups, sd, na.rm = TRUE)")
 
+    xbar_plot_title = f"X-bar Chart for {meas_col}"
+    disp_plot_title = f"{disp_label} for {meas_col}"
+
     lines.extend([
         "",
         "# 2. Summary Statistics",
         "cat('================================================================\n')",
         f"cat('        StatCraft Connect : {disp_label} Control Chart Summary   \n')",
         "cat('================================================================\n\n')",
-        f"cat(sprintf('X-bar Center: %.4f | UCL: %.4f | LCL: %.4f\n', {xb_c}, {xb_u}, {xb_l}))",
-        f"cat(sprintf('{disp_label} Center: %.4f | UCL: %.4f | LCL: %.4f\n', {dp_c}, {dp_u}, {dp_l}))",
+        f"cat(sprintf('X-bar Center: %.4f | UCL: %.4f | LCL: %.4f\n', {xb_c:.4f}, {xb_u:.4f}, {xb_l:.4f}))",
+        f"cat(sprintf('{disp_label} Center: %.4f | UCL: %.4f | LCL: %.4f\n', {dp_c:.4f}, {dp_u:.4f}, {dp_l:.4f}))",
         "",
         "# 3. Two-Panel Control Chart",
         "par(mfrow = c(2, 1))",
         "",
         "# Panel 1: X-bar Chart",
-        f"plot(subgroup_means, type = 'b', pch = 19, col = '#2563eb', main = 'X-bar Chart for {meas_col}', ylab = 'Subgroup Mean', xlab = 'Subgroup')",
-        f"abline(h = {xb_c}, col = '#10b981', lwd = 2)",
-        f"abline(h = {xb_u}, col = '#ef4444', lwd = 2, lty = 2)",
-        f"abline(h = {xb_l}, col = '#ef4444', lwd = 2, lty = 2)",
-        f"text(length(subgroup_means), {xb_u}, 'UCL', pos = 4, col = '#ef4444')",
-        f"text(length(subgroup_means), {xb_l}, 'LCL', pos = 4, col = '#ef4444')",
+        f"plot(subgroup_means, type = 'b', pch = 19, col = '#2563eb', main = {json.dumps(xbar_plot_title)}, ylab = 'Subgroup Mean', xlab = 'Subgroup')",
+        f"abline(h = {xb_c:.4f}, col = '#10b981', lwd = 2)",
+        f"abline(h = {xb_u:.4f}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {xb_l:.4f}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(subgroup_means), {xb_u:.4f}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(subgroup_means), {xb_l:.4f}, 'LCL', pos = 4, col = '#ef4444')",
         "",
         f"# Panel 2: {disp_label}",
-        f"plot(subgroup_disp, type = 'b', pch = 19, col = '#8b5cf6', main = '{disp_label} for {meas_col}', ylab = '{disp_label}', xlab = 'Subgroup')",
-        f"abline(h = {dp_c}, col = '#10b981', lwd = 2)",
-        f"abline(h = {dp_u}, col = '#ef4444', lwd = 2, lty = 2)",
-        f"abline(h = {dp_l}, col = '#ef4444', lwd = 2, lty = 2)",
-        f"text(length(subgroup_disp), {dp_u}, 'UCL', pos = 4, col = '#ef4444')",
-        f"text(length(subgroup_disp), {dp_l}, 'LCL', pos = 4, col = '#ef4444')",
+        f"plot(subgroup_disp, type = 'b', pch = 19, col = '#8b5cf6', main = {json.dumps(disp_plot_title)}, ylab = {json.dumps(disp_label)}, xlab = 'Subgroup')",
+        f"abline(h = {dp_c:.4f}, col = '#10b981', lwd = 2)",
+        f"abline(h = {dp_u:.4f}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {dp_l:.4f}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(subgroup_disp), {dp_u:.4f}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(subgroup_disp), {dp_l:.4f}, 'LCL', pos = 4, col = '#ef4444')",
         "par(mfrow = c(1, 1))",
     ])
     return "\n".join(lines)

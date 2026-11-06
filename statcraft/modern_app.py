@@ -5736,6 +5736,7 @@ class ModernWindow(QMainWindow):
     def load_connect_sample_project(self):
         from .model import Worksheet, Column
         from .connect import create_connected_analysis_from_entry
+        from .mpx_create import create_project
 
         self.presenter.new()
         self.page = 0
@@ -5761,22 +5762,22 @@ class ModernWindow(QMainWindow):
             Column("Sample", "text", ["S1"] * 5 + ["S2"] * 5 + ["S3"] * 5 + ["S4"] * 5),
         ])
 
-        project = self.presenter._owned_project()
-        project.worksheets = [ws1, ws2, ws3]
+        project = create_project([ws1, ws2, ws3], active_index=0)
+        self.presenter.native_project = project
 
-        self.presenter.worksheet = ws1
+        self.presenter.select_worksheet(0)
         e1 = self.presenter.twoway_anova(2, 0, 1, fit_interaction=True)
         create_connected_analysis_from_entry(e1, ws1)
 
-        self.presenter.worksheet = ws2
+        self.presenter.select_worksheet(1)
         e2 = self.presenter.gage_rr(0, 1, 2)
         create_connected_analysis_from_entry(e2, ws2)
 
-        self.presenter.worksheet = ws3
+        self.presenter.select_worksheet(2)
         e3 = self.presenter.subgroup_control_chart(chart_type="xbar_r", stacked=True, response_index=0, factor_index=1)
         create_connected_analysis_from_entry(e3, ws3)
 
-        self.presenter.worksheet = ws1
+        self.presenter.select_worksheet(0)
         self._prepare_blank()
         self.refresh()
         self.show_result(e1)
