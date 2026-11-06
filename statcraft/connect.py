@@ -1458,6 +1458,45 @@ def create_connected_subgroup_spc(
     return connected
 
 
+def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> ConnectedAnalysis:
+    """Create a universal ConnectedAnalysis record with pure Base R script for any procedure."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    recipe = entry.get("recipe", {})
+    action = recipe.get("action", "analysis")
+    title = entry.get("title") or f"StatCraft: {action.replace('_', ' ').title()}"
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    from .connect_r import generate_generic_r_script
+    r_code = generate_generic_r_script(entry, worksheet)
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type=action,
+        title=title,
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=compute_data_fingerprint(worksheet, list(range(len(worksheet.columns)))),
+        response_col_id="generic",
+        response_name="Generic",
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={},
+        fitted_values=[],
+        residuals=[],
+        metadata={"recipe": recipe, "entry_title": title},
+        r_script=r_code,
+    )
+    return connected
+
+
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
     conn_raw = entry.get("connected_analysis")
@@ -1557,6 +1596,9 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
                 stacked=p.get("stacked", True),
                 options=p.get("options"),
             )
+
+    if conn is None:
+        conn = create_connected_generic(entry, worksheet)
 
     if conn is not None:
         entry["connected_analysis"] = conn.to_dict()

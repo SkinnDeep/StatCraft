@@ -1214,3 +1214,103 @@ def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "W
         "par(mfrow = c(1, 1))",
     ])
     return "\n".join(lines)
+
+
+
+def generate_generic_r_script(entry: Dict[str, Any], worksheet: "Worksheet") -> str:
+    """Generate clean, standalone pure Base R code for any analysis or graph in StatCraft."""
+    title = entry.get("title", "StatCraft Analysis")
+    recipe = entry.get("recipe", {})
+    action = recipe.get("action", "analysis")
+    params = recipe.get("parameters", {})
+
+    referenced_col_names = []
+    for k, v in params.items():
+        if isinstance(v, int) and 0 <= v < len(worksheet.columns):
+            c_name = worksheet.columns[v].name
+            if c_name not in referenced_col_names:
+                referenced_col_names.append(c_name)
+        elif isinstance(v, (list, tuple)):
+            for item in v:
+                if isinstance(item, int) and 0 <= item < len(worksheet.columns):
+                    c_name = worksheet.columns[item].name
+                    if c_name not in referenced_col_names:
+                        referenced_col_names.append(c_name)
+                elif isinstance(item, str) and any(c.name == item for c in worksheet.columns):
+                    if item not in referenced_col_names:
+                        referenced_col_names.append(item)
+        elif isinstance(v, dict):
+            for sub_k, sub_v in v.items():
+                if isinstance(sub_v, int) and 0 <= sub_v < len(worksheet.columns) and ("col" in sub_k or "idx" in sub_k or "index" in sub_k or "samples" in sub_k or "subscripts" in sub_k):
+                    c_name = worksheet.columns[sub_v].name
+                    if c_name not in referenced_col_names:
+                        referenced_col_names.append(c_name)
+
+    if not referenced_col_names and worksheet.columns:
+        referenced_col_names.append(worksheet.columns[0].name)
+
+    lines = [
+        "# ==============================================================================",
+        f"# StatCraft — Reproducible Base R Translation",
+        f"# Procedure: {title}",
+        f"# Action: {action}",
+        f"# Worksheet: {worksheet.name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Target Columns in Active Worksheet",
+    ]
+
+    for col in referenced_col_names:
+        lines.append(f"# - {col}")
+    lines.append("")
+
+    if "run_chart" in action:
+        primary_col = referenced_col_names[0]
+        lines.extend([
+            f"x <- df[[{json.dumps(primary_col)}]]",
+            "x <- x[!is.na(x)]",
+            "n <- length(x)",
+            "med <- median(x)",
+            f"plot(x, type = 'b', pch = 19, col = '#2563eb', main = {json.dumps(f'Run Chart for {primary_col}')}, ylab = {json.dumps(primary_col)}, xlab = 'Observation')",
+            "abline(h = med, col = '#10b981', lwd = 2)",
+            "text(n, med, 'Median', pos = 4, col = '#10b981')",
+        ])
+    elif "two_variances" in action:
+        val_col = referenced_col_names[0]
+        grp_col = referenced_col_names[1] if len(referenced_col_names) > 1 else None
+        if grp_col:
+            lines.extend([
+                "# Two-Variances Test (F-Test)",
+                f"fit <- var.test(df[[{json.dumps(val_col)}]] ~ df[[{json.dumps(grp_col)}]], data = df)",
+                "print(fit)",
+                f"boxplot(df[[{json.dumps(val_col)}]] ~ df[[{json.dumps(grp_col)}]], col = '#93c5fd', main = {json.dumps(f'Variances: {val_col} by {grp_col}')}, xlab = {json.dumps(grp_col)}, ylab = {json.dumps(val_col)})",
+            ])
+        else:
+            lines.extend([
+                f"print(summary(df[[{json.dumps(val_col)}]]))",
+            ])
+    else:
+        col_list_str = ", ".join(json.dumps(c) for c in referenced_col_names)
+        lines.extend([
+            f"sub_df <- df[, c({col_list_str}), drop = FALSE]",
+            "",
+            "# Summary Statistics",
+            "cat('================================================================\n')",
+            f"cat('               StatCraft Summary: {title}                       \n')",
+            "cat('================================================================\n\n')",
+            "print(summary(sub_df))",
+            "",
+            "# Diagnostic Visuals",
+            "if (ncol(sub_df) == 1) {",
+            "  if (is.numeric(sub_df[[1]])) {",
+            f"    hist(sub_df[[1]], col = '#93c5fd', border = 'white', main = {json.dumps(title)}, xlab = {json.dumps(referenced_col_names[0])})",
+            "  } else {",
+            f"    barplot(table(sub_df[[1]]), col = '#93c5fd', main = {json.dumps(title)})",
+            "  }",
+            "} else {",
+            f"  boxplot(sub_df, col = '#93c5fd', main = {json.dumps(title)})",
+            "}",
+        ])
+
+    return "\n".join(lines)
