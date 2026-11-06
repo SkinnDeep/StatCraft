@@ -1016,6 +1016,292 @@ def create_connected_descriptives(
     return connected
 
 
+def create_connected_twoway_anova(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_a_index: int,
+    factor_b_index: int,
+    result: Dict[str, Any],
+    fit_interaction: bool = True,
+    confidence: float = 0.95,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a 2-way ANOVA result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    fa_col = worksheet.columns[factor_a_index]
+    fb_col = worksheet.columns[factor_b_index]
+    resp_id = resp_col.metadata.get("id", f"col-{response_index}")
+    fa_id = fa_col.metadata.get("id", f"col-{factor_a_index}")
+    fb_id = fb_col.metadata.get("id", f"col-{factor_b_index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        valid = True
+        for ci in (response_index, factor_a_index, factor_b_index):
+            v = worksheet.columns[ci].values[i] if i < len(worksheet.columns[ci].values) else None
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                valid = False
+                break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+    fingerprint = compute_data_fingerprint(worksheet, [response_index, factor_a_index, factor_b_index])
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "adjusted_r_squared": result.get("adjusted_r_squared", 0.0),
+        "f_a": result.get("f_a"),
+        "p_a": result.get("p_a"),
+        "f_b": result.get("f_b"),
+        "p_b": result.get("p_b"),
+        "f_ab": result.get("f_ab"),
+        "p_ab": result.get("p_ab"),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="twoway_anova",
+        title=f"Two-Way ANOVA: {resp_col.name} by {fa_col.name}, {fb_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=[fa_id, fb_id],
+        predictor_names=[fa_col.name, fb_col.name],
+        confidence=confidence,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "factor_a_name": fa_col.name,
+            "factor_b_name": fb_col.name,
+            "fit_interaction": fit_interaction,
+            "cell_stats": result.get("cell_stats", {}),
+        }
+    )
+    from .connect_r import generate_r_twoway_anova_script
+    connected.r_script = generate_r_twoway_anova_script(connected, worksheet)
+    return connected
+
+
+def create_connected_binary_logistic(
+    worksheet: Worksheet,
+    response_index: int,
+    continuous_indices: List[int],
+    categorical_indices: List[int],
+    result: Dict[str, Any],
+    event: Optional[str] = None,
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from binary logistic regression."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-{response_index}")
+
+    pred_indices = list(continuous_indices) + list(categorical_indices)
+    pred_cols = [worksheet.columns[i] for i in pred_indices if 0 <= i < len(worksheet.columns)]
+    pred_ids = [c.metadata.get("id", f"col-{i}") for i, c in zip(pred_indices, pred_cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    active_indices = [response_index] + pred_indices
+    fingerprint = compute_data_fingerprint(worksheet, active_indices)
+
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        valid = True
+        for ci in active_indices:
+            v = worksheet.columns[ci].values[i] if i < len(worksheet.columns[ci].values) else None
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                valid = False
+                break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    event_val = event or result.get("event", "1")
+    conf = float((options or {}).get("confidence", 0.95))
+
+    stats = {
+        "aic": result.get("aic"),
+        "bic": result.get("bic"),
+        "deviance": result.get("deviance"),
+        "auc": result.get("auc"),
+        "model_lr": result.get("model_lr"),
+        "model_lr_p": result.get("model_lr_p"),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="binary_logistic",
+        title=f"Binary Logistic Regression: {resp_col.name} (Event = '{event_val}')",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=pred_ids,
+        predictor_names=[c.name for c in pred_cols],
+        confidence=conf,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=result.get("coefficients", []),
+        statistics=stats,
+        fitted_values=result.get("probabilities", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "event": event_val,
+            "continuous_indices": continuous_indices,
+            "categorical_indices": categorical_indices,
+            "options": options or {},
+        }
+    )
+    from .connect_r import generate_r_logistic_script
+    connected.r_script = generate_r_logistic_script(connected, worksheet)
+    return connected
+
+
+def create_connected_capability(
+    worksheet: Worksheet,
+    index: int,
+    result: Dict[str, Any],
+    lsl: Optional[float] = None,
+    usl: Optional[float] = None,
+    target: Optional[float] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from process capability analysis."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    col = worksheet.columns[index] if 0 <= index < len(worksheet.columns) else Column("Variable", "number", [])
+    col_id = col.metadata.get("id", f"col-{index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = [
+        i for i in range(worksheet.row_count)
+        if i < len(col.values) and col.values[i] is not None and not (isinstance(col.values[i], float) and math.isnan(col.values[i]))
+    ]
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+    fingerprint = compute_data_fingerprint(worksheet, [index])
+
+    stats = {
+        "mean": result.get("mean"),
+        "stdev_within": result.get("stdev_within"),
+        "stdev_overall": result.get("stdev_overall"),
+        "cp": result.get("cp"),
+        "cpk": result.get("cpk"),
+        "pp": result.get("pp"),
+        "ppk": result.get("ppk"),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="normal_capability",
+        title=f"Process Capability: {col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_id,
+        response_name=col.name,
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "lsl": lsl or result.get("lsl"),
+            "usl": usl or result.get("usl"),
+            "target": target or result.get("target"),
+        }
+    )
+    from .connect_r import generate_r_capability_script
+    connected.r_script = generate_r_capability_script(connected, worksheet)
+    return connected
+
+
+def create_connected_imr(
+    worksheet: Worksheet,
+    index: int,
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from an I-MR chart result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    col = worksheet.columns[index] if 0 <= index < len(worksheet.columns) else Column("Variable", "number", [])
+    col_id = col.metadata.get("id", f"col-{index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = [
+        i for i in range(worksheet.row_count)
+        if i < len(col.values) and col.values[i] is not None and not (isinstance(col.values[i], float) and math.isnan(col.values[i]))
+    ]
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+    fingerprint = compute_data_fingerprint(worksheet, [index])
+
+    stats = {
+        "i_center": result.get("i_center"),
+        "i_ucl": result.get("i_ucl"),
+        "i_lcl": result.get("i_lcl"),
+        "mr_center": result.get("mr_center"),
+        "mr_ucl": result.get("mr_ucl"),
+        "mr_lcl": result.get("mr_lcl"),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="individuals_moving_range",
+        title=f"I-MR Chart: {col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_id,
+        response_name=col.name,
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "i_signals": result.get("i_signals", []),
+            "mr_signals": result.get("mr_signals", []),
+        }
+    )
+    from .connect_r import generate_r_imr_script
+    connected.r_script = generate_r_imr_script(connected, worksheet)
+    return connected
+
+
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
     conn_raw = entry.get("connected_analysis")
@@ -1077,6 +1363,24 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
         if indices is None and "index" in p:
             indices = [p["index"]]
         conn = create_connected_descriptives(worksheet, indices or [], res)
+    elif action in ("twoway_anova", "two_way_anova") and "response_index" in p and "factor_a_index" in p and "factor_b_index" in p:
+        conn = create_connected_twoway_anova(
+            worksheet, p["response_index"], p["factor_a_index"], p["factor_b_index"], res,
+            fit_interaction=p.get("fit_interaction", True), confidence=p.get("confidence", 0.95)
+        )
+    elif action in ("fit_binary_logistic", "binary_logistic") and "response_index" in p:
+        conn = create_connected_binary_logistic(
+            worksheet, p["response_index"], p.get("continuous_indices", []),
+            p.get("categorical_indices", []), res, event=p.get("event"), options=p.get("options")
+        )
+    elif action in ("normal_capability", "process_capability", "capability"):
+        idx_c = p.get("index") or p.get("variable_index", 0)
+        conn = create_connected_capability(
+            worksheet, idx_c, res, lsl=p.get("lsl"), usl=p.get("usl"), target=p.get("target")
+        )
+    elif action in ("individuals_moving_range", "imr_chart", "imr"):
+        idx_imr = p.get("index") or p.get("variable_index", 0)
+        conn = create_connected_imr(worksheet, idx_imr, res)
 
     if conn is not None:
         entry["connected_analysis"] = conn.to_dict()

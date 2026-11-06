@@ -908,3 +908,154 @@ def generate_r_descriptives_script(connected: "ConnectedAnalysis", worksheet: "W
     ]
     return "\n".join(lines)
 
+
+
+def generate_r_twoway_anova_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for 2-way ANOVA."""
+    meta = connected.metadata or {}
+    resp = format_r_symbol(connected.response_name)
+    fa = format_r_symbol(meta.get("factor_a_name", connected.predictor_names[0] if connected.predictor_names else "FactorA"))
+    fb = format_r_symbol(meta.get("factor_b_name", connected.predictor_names[1] if len(connected.predictor_names) > 1 else "FactorB"))
+    fit_int = meta.get("fit_interaction", True)
+    formula_str = f"{resp} ~ {fa} * {fb}" if fit_int else f"{resp} ~ {fa} + {fb}"
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Two-Way Analysis of Variance",
+        f"fit <- aov({formula_str}, data = df)",
+        "print(summary(fit))",
+        "",
+        "# Interaction Plot",
+        f"interaction.plot(df[[{json.dumps(connected.predictor_names[0])}]], df[[{json.dumps(connected.predictor_names[1])}]], df[[{json.dumps(connected.response_name)}]], col = c('#2563eb', '#10b981', '#f59e0b', '#ef4444'), lwd = 2, xlab = {json.dumps(connected.predictor_names[0])}, ylab = {json.dumps(connected.response_name)}, trace.label = {json.dumps(connected.predictor_names[1])})",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_logistic_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for binary logistic regression."""
+    meta = connected.metadata or {}
+    event = meta.get("event", "1")
+    resp_name = connected.response_name
+    preds = connected.predictor_names
+    pred_str = " + ".join(format_r_symbol(p) for p in preds) if preds else "1"
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Binary Logistic Regression",
+        f"df$y_binary <- as.numeric(as.character(df[[{json.dumps(resp_name)}]]) == {json.dumps(str(event))})",
+        f"fit <- glm(y_binary ~ {pred_str}, data = df, family = binomial(link = 'logit'))",
+        "print(summary(fit))",
+        "",
+        "# Odds Ratios & 95% Confidence Intervals",
+        "cat('\n--- Odds Ratios ---\n')",
+        "print(exp(coef(fit)))",
+        "",
+        "# Diagnostic Plot",
+        "prob <- predict(fit, type = 'response')",
+        "plot(prob, pch = 19, col = ifelse(df$y_binary == 1, '#10b981', '#ef4444'), main = 'Predicted Probabilities', ylab = 'P(Event)')",
+        "abline(h = 0.5, lty = 2, col = 'gray')",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_capability_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for process capability analysis."""
+    meta = connected.metadata or {}
+    lsl = meta.get("lsl")
+    usl = meta.get("usl")
+    target = meta.get("target")
+    var_name = connected.response_name
+    stats = connected.statistics or {}
+    cp = stats.get("cp")
+    cpk = stats.get("cpk")
+    pp = stats.get("pp")
+    ppk = stats.get("ppk")
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Process Capability Metrics",
+        f"x <- df[[{json.dumps(var_name)}]]",
+        "x <- x[!is.na(x)]",
+        "n <- length(x)",
+        "x_bar <- mean(x)",
+        "s_overall <- sd(x)",
+        f"cat(sprintf('Sample Mean: %.4f | Overall StDev: %.4f\n', x_bar, s_overall))",
+    ]
+    if cp is not None:
+        lines.append(f"cat(sprintf('Cp: {cp:.4f} | Cpk: {cpk:.4f} | Pp: {pp:.4f} | Ppk: {ppk:.4f}\n'))")
+    lines.extend([
+        "",
+        "# Capability Histogram & Curve Overlay",
+        f"h <- hist(x, col = '#e0f2fe', border = 'white', freq = FALSE, main = '{connected.title}', xlab = '{var_name}')",
+        "curve(dnorm(x, mean = x_bar, sd = s_overall), add = TRUE, col = '#2563eb', lwd = 2)",
+    ])
+    if lsl is not None:
+        lines.append(f"abline(v = {lsl}, col = '#ef4444', lwd = 2, lty = 2)")
+    if usl is not None:
+        lines.append(f"abline(v = {usl}, col = '#ef4444', lwd = 2, lty = 2)")
+    if target is not None:
+        lines.append(f"abline(v = {target}, col = '#10b981', lwd = 2, lty = 3)")
+    return "\n".join(lines)
+
+
+def generate_r_imr_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for I-MR SPC control chart."""
+    meta = connected.metadata or {}
+    stats = connected.statistics or {}
+    var_name = connected.response_name
+    i_c = stats.get("i_center", 0.0)
+    i_ucl = stats.get("i_ucl", 0.0)
+    i_lcl = stats.get("i_lcl", 0.0)
+    mr_c = stats.get("mr_center", 0.0)
+    mr_ucl = stats.get("mr_ucl", 0.0)
+    mr_lcl = stats.get("mr_lcl", 0.0)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# Individuals & Moving Range (I-MR) Control Chart",
+        f"x <- df[[{json.dumps(var_name)}]]",
+        "mr <- c(NA, abs(diff(x)))",
+        "par(mfrow = c(2, 1))",
+        "",
+        "# 1. Individuals Chart (I-Chart)",
+        f"plot(x, type = 'b', pch = 19, col = '#2563eb', main = 'Individuals Chart for {var_name}', ylab = 'Individual Value', xlab = 'Observation')",
+        f"abline(h = {i_c}, col = '#10b981', lwd = 2)",
+        f"abline(h = {i_ucl}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {i_lcl}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(x), {i_ucl}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(x), {i_lcl}, 'LCL', pos = 4, col = '#ef4444')",
+        "",
+        "# 2. Moving Range Chart (MR-Chart)",
+        f"plot(mr, type = 'b', pch = 19, col = '#8b5cf6', main = 'Moving Range Chart for {var_name}', ylab = 'Moving Range', xlab = 'Observation')",
+        f"abline(h = {mr_c}, col = '#10b981', lwd = 2)",
+        f"abline(h = {mr_ucl}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {mr_lcl}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(mr), {mr_ucl}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(mr), {mr_lcl}, 'LCL', pos = 4, col = '#ef4444')",
+        "par(mfrow = c(1, 1))",
+    ]
+    return "\n".join(lines)

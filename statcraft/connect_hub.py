@@ -331,6 +331,14 @@ class ConnectBridgeWidget(QFrame):
             jmp_label = "📈 JMP Oneway"
         elif conn_obj.analysis_type == "two_sample_t":
             jmp_label = "📈 JMP Oneway"
+        elif conn_obj.analysis_type in ("twoway_anova", "two_way_anova"):
+            jmp_label = "📈 JMP Fit Model"
+        elif conn_obj.analysis_type in ("binary_logistic", "fit_binary_logistic"):
+            jmp_label = "📈 JMP Logistic"
+        elif conn_obj.analysis_type in ("normal_capability", "process_capability", "capability"):
+            jmp_label = "📈 JMP Capability"
+        elif conn_obj.analysis_type in ("individuals_moving_range", "imr_chart", "imr"):
+            jmp_label = "📈 JMP Control Chart"
         elif conn_obj.analysis_type == "correlation":
             jmp_label = "📈 JMP Multivariate" if len(conn_obj.predictor_names) > 1 else "📈 JMP Bivariate"
         elif conn_obj.analysis_type in ("descriptive_statistics", "describe_columns"):

@@ -111,6 +111,49 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
         window.statusBar().showMessage("StatCraft Connect: Active Descriptive Statistics in JMP Mode", 5000)
         return True
 
+    # Route 1e: Two-Way ANOVA -> JMP Mode
+    if action in ("twoway_anova", "two_way_anova"):
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active Two-Way ANOVA in JMP Mode", 5000)
+        return True
+
+    # Route 1f: Binary Logistic Regression -> JMP Fit Y by X (Logistic)
+    if action in ("fit_binary_logistic", "binary_logistic"):
+        y_idx = p_params.get("response_index")
+        cont_indices = p_params.get("continuous_indices", [])
+        if y_idx is not None and len(cont_indices) == 1 and 0 <= y_idx < len(ws.columns) and 0 <= cont_indices[0] < len(ws.columns):
+            window.set_ui_mode("jmp")
+            fit_entry = window._call(
+                lambda: window.presenter.fit_y_by_x(y_index=y_idx, x_index=cont_indices[0]),
+                result=True
+            )
+            if fit_entry:
+                window.show_result(fit_entry)
+                window.statusBar().showMessage(
+                    f"StatCraft Connect: Opened JMP Logistic Platform for {ws.columns[y_idx].name} by {ws.columns[cont_indices[0]].name}",
+                    6000
+                )
+                return True
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active Binary Logistic Regression in JMP Mode", 5000)
+        return True
+
+    # Route 1g: Process Capability -> JMP Mode
+    if action in ("normal_capability", "process_capability", "capability"):
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active Process Capability in JMP Mode", 5000)
+        return True
+
+    # Route 1h: Control Charts (I-MR) -> JMP Control Chart Builder
+    if action in ("individuals_moving_range", "imr_chart", "imr"):
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active I-MR Control Chart in JMP Mode", 5000)
+        return True
+
     # Route 2: Existing Fit Y by X -> Switch to JMP and display
     if action == "fit_y_by_x":
         window.set_ui_mode("jmp")

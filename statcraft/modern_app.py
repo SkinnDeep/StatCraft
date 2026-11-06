@@ -5706,6 +5706,14 @@ class ModernWindow(QMainWindow):
             self.inference_dialog("paired_t")
         elif action == "correlation":
             self.correlation()
+        elif action in ("twoway_anova", "two_way_anova"):
+            self.twoway_anova_dialog()
+        elif action in ("fit_binary_logistic", "binary_logistic"):
+            self.fit_binary_logistic()
+        elif action in ("normal_capability", "process_capability", "capability"):
+            self.capability()
+        elif action in ("individuals_moving_range", "imr_chart", "imr"):
+            self.imr_dialog()
         elif action == "fit_y_by_x":
             self.multiple_regression()
         elif action in ("describe_columns", "descriptive_statistics", "describe_column"):
