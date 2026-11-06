@@ -309,11 +309,14 @@ class ViewRCodeDialog(QDialog):
         self.btn_copy.setText("✓ Copied!")
 
     def _save_file(self):
-        from PySide6.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
         path, _ = QFileDialog.getSaveFileName(self, "Save R Script", "analysis_script.R", "R Files (*.R *.r)")
         if path:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(self.r_script)
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.r_script)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
 
 class StatCraftAnalysisBar(QFrame):
@@ -459,14 +462,17 @@ class StatCraftAnalysisBar(QFrame):
         dlg.exec()
 
     def export_r_file(self):
-        from PySide6.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
         default_name = f"{self.conn_obj.analysis_type}_script.R"
         path, _ = QFileDialog.getSaveFileName(self, "Export R Script", default_name, "R Scripts (*.R *.r)")
         if path:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(self.conn_obj.r_script)
-            if hasattr(self.window, "statusBar") and self.window.statusBar():
-                self.window.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.conn_obj.r_script)
+                if hasattr(self.window, "statusBar") and self.window.statusBar():
+                    self.window.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
 
 ConnectBridgeWidget = StatCraftAnalysisBar

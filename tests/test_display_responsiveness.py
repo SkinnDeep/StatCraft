@@ -23,13 +23,11 @@ class TestDisplayResponsiveness(unittest.TestCase):
         self.assertGreaterEqual(window.width(), 900)
         self.assertGreaterEqual(window.height(), 500)
 
-        # Check mode switch buttons are not hidden and are enabled
-        self.assertFalse(window.btn_mode_minitab.isHidden())
-        self.assertFalse(window.btn_mode_jmp.isHidden())
-        self.assertFalse(window.btn_mode_r.isHidden())
-        self.assertTrue(window.btn_mode_minitab.isEnabled())
-        self.assertTrue(window.btn_mode_jmp.isEnabled())
-        self.assertTrue(window.btn_mode_r.isEnabled())
+        # In unified StatCraft, mode buttons are retired/hidden, theme toggle is enabled
+        self.assertTrue(window.btn_mode_minitab.isHidden())
+        self.assertTrue(window.btn_mode_jmp.isHidden())
+        self.assertTrue(window.btn_mode_r.isHidden())
+        self.assertTrue(window.btn_theme_toggle.isEnabled())
 
         # Test mode switching at minimum screen dimension
         window.set_ui_mode("jmp")

@@ -1460,13 +1460,13 @@ def create_connected_subgroup_spc(
 
 def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> ConnectedAnalysis:
     """Create a universal ConnectedAnalysis record with pure Base R script for any procedure."""
-    ensure_worksheet_identities(worksheet)
-    ws_id = worksheet.metadata.get("id", "ws-default")
+    meta = worksheet.metadata if isinstance(worksheet.metadata, dict) else {}
+    ws_id = meta.get("id", "ws-default")
     recipe = entry.get("recipe", {})
     action = recipe.get("action", "analysis")
     title = entry.get("title") or f"StatCraft: {action.replace('_', ' ').title()}"
 
-    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    all_row_ids = list(meta.get("row_ids", []))
     from .connect_r import generate_generic_r_script
     r_code = generate_generic_r_script(entry, worksheet)
 
@@ -1499,6 +1499,8 @@ def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> Con
 
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
+    if not entry or entry.get("origin") == "native" or "recipe" not in entry:
+        return None
     conn_raw = entry.get("connected_analysis")
     if isinstance(conn_raw, dict):
         try:
