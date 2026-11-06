@@ -4781,8 +4781,14 @@ class ModernWindow(QMainWindow):
             )
             btn_open.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             open_menu = QMenu(btn_open)
+            open_menu.addAction("Statistical Dialog (Minitab)", lambda e=entry: self.connect_open_dialog(e))
             open_menu.addAction("Interactive Explorer (JMP)", lambda e=entry: self.connect_open_explorer(e))
+            if recipe_act in ("multiple_regression", "analyze_response_surface"):
+                open_menu.addAction("Contour Plot (Response Surface)", lambda e=entry: self.connect_open_contour(e))
+                open_menu.addAction("3D Surface Plot", lambda e=entry: self.connect_open_surface(e))
             open_menu.addAction("R Workbench", lambda e=entry: self.connect_open_in_r(e))
+            if recipe_act == "analyze_response_surface":
+                open_menu.addAction("R Bootstrap Uncertainty Script", lambda e=entry: self.connect_open_r_bootstrap(e))
             open_menu.addSeparator()
             open_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda e=entry: self.connect_apply_predictions(e))
             open_menu.addAction("Compare Implementations (StatCraft vs R)", lambda e=entry: self.connect_compare_implementations(e))
@@ -5649,7 +5655,13 @@ class ModernWindow(QMainWindow):
             connect_menu = menu.addMenu("StatCraft Connect")
             connect_menu.addAction("Statistical Dialog (Minitab Mode)...", lambda: self.connect_open_dialog(target_entry))
             connect_menu.addAction("Interactive Explorer (JMP Mode)...", lambda: self.connect_open_explorer(target_entry))
+            act_name = target_entry.get("recipe", {}).get("action")
+            if act_name in ("multiple_regression", "analyze_response_surface"):
+                connect_menu.addAction("Contour Plot (Response Surface)...", lambda: self.connect_open_contour(target_entry))
+                connect_menu.addAction("3D Surface Plot...", lambda: self.connect_open_surface(target_entry))
             connect_menu.addAction("R Workbench (R Mode)...", lambda: self.connect_open_in_r(target_entry))
+            if act_name == "analyze_response_surface":
+                connect_menu.addAction("R Bootstrap Uncertainty Script...", lambda: self.connect_open_r_bootstrap(target_entry))
             connect_menu.addSeparator()
             connect_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda: self.connect_apply_predictions(target_entry))
             connect_menu.addAction("Compare Implementations (StatCraft vs R)...", lambda: self.connect_compare_implementations(target_entry))
@@ -5688,6 +5700,54 @@ class ModernWindow(QMainWindow):
     def connect_open_explorer(self, entry):
         from .connect_explorer import open_interactive_explorer
         open_interactive_explorer(self, entry)
+
+    def connect_open_contour(self, entry):
+        recipe = entry.get("recipe", {})
+        action = recipe.get("action")
+        family = "response_surface" if action == "analyze_response_surface" else "regression"
+        self.model_contour_plot(family)
+
+    def connect_open_surface(self, entry):
+        recipe = entry.get("recipe", {})
+        action = recipe.get("action")
+        family = "response_surface" if action == "analyze_response_surface" else "regression"
+        self.model_surface_plot(family)
+
+    def connect_open_r_bootstrap(self, entry):
+        conn_dict = entry.get("connected_analysis")
+        recipe = entry.get("recipe", {})
+        action = recipe.get("action")
+        p = recipe.get("parameters", {})
+        if not conn_dict and action == "analyze_response_surface" and "response_index" in p:
+            from .connect import create_connected_response_surface
+            conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
+            conn_dict = create_connected_response_surface(
+                self.presenter.worksheet, p["response_index"], p["factor_indices"],
+                entry.get("result", {}), conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
+            ).to_dict()
+            entry["connected_analysis"] = conn_dict
+
+        if not conn_dict:
+            return
+
+        from .connect import ConnectedAnalysis
+        from .connect_r import generate_response_surface_bootstrap_script
+        conn = ConnectedAnalysis.from_dict(conn_dict)
+        boot_script = generate_response_surface_bootstrap_script(
+            conn,
+            self.presenter.worksheet,
+            replications=2000,
+            confidence=conn.confidence,
+        )
+
+        if self.r_workbench:
+            self.set_ui_mode("r")
+            self.r_workbench.load_connected_analysis({
+                **conn_dict,
+                "r_script": boot_script,
+                "title": f"RSM Bootstrap Uncertainty ({conn.response_name})",
+            })
+            self.statusBar().showMessage("StatCraft Connect: Loaded R Bootstrap Uncertainty Script", 6000)
 
     def connect_open_in_r(self, entry):
         conn_dict = entry.get("connected_analysis")
