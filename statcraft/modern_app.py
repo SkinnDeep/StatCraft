@@ -5098,10 +5098,6 @@ class ModernWindow(QMainWindow):
                         pass
                 elif target_tab == "Report":
                     chosen_tab = 0
-                elif not has_report_text and graph_tab_indices:
-                    chosen_tab = graph_tab_indices[0]
-                elif has_report_text:
-                    chosen_tab = 0
                 elif graph_tab_indices:
                     chosen_tab = graph_tab_indices[0]
                 else:
