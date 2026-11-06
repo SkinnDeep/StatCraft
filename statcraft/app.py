@@ -5552,6 +5552,8 @@ class Presenter:
 def format_entry(entry):
     title = entry["title"] + "\n" + entry["time"] + "\n" + "─" * 76 + "\n\n"
     result = entry["result"]
+    if isinstance(result, dict) and (result.get('analysis') == 'bootstrap_uncertainty' or 'bootstrap_report' in result):
+        return title + result.get('text', '')
     if isinstance(result, dict) and result.get('analysis') == 'covariance':
         from .covariance_report import format_covariance_report
         return title + format_covariance_report(result)

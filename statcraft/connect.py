@@ -170,6 +170,10 @@ class ConnectedAnalysis:
     def predictor_column_names(self) -> List[str]:
         return self.predictor_names
 
+    @property
+    def fit_statistics(self) -> Dict[str, Any]:
+        return self.statistics
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -452,13 +456,24 @@ def create_connected_oneway_anova(
 
     fingerprint = compute_data_fingerprint(worksheet, [response_index, factor_index])
 
+    anova_tab = result.get("anova_table", {})
+    mod_sum = result.get("model_summary", {})
+    r_sq = (mod_sum.get("r_sq", 0.0) / 100.0) if "r_sq" in mod_sum else result.get("r_squared", 0.0)
+    adj_r_sq = (mod_sum.get("r_sq_adj", 0.0) / 100.0) if "r_sq_adj" in mod_sum else result.get("adjusted_r_squared", 0.0)
+    s_val = mod_sum.get("s", result.get("residual_stdev", 0.0))
+
     stats = {
-        "r_squared": result.get("r_squared", 0.0),
-        "f_stat": result.get("f_stat", 0.0),
-        "p_value": result.get("p_value", 1.0),
-        "df_factor": result.get("df_factor", 0),
-        "df_error": result.get("df_error", 0),
+        "r_squared": r_sq,
+        "adjusted_r_squared": adj_r_sq,
+        "residual_stdev": s_val,
+        "f_stat": anova_tab.get("f_value", result.get("f_stat", 0.0)),
+        "p_value": anova_tab.get("p_value", result.get("p_value", 1.0)),
+        "df_factor": anova_tab.get("df_factor", result.get("df_factor", 0)),
+        "df_error": anova_tab.get("df_error", result.get("df_error", 0)),
     }
+
+    fits = result.get("fits", result.get("fitted", []))
+    resids = result.get("residuals", [])
 
     connected = ConnectedAnalysis(
         analysis_id=str(uuid.uuid4()),
@@ -479,13 +494,13 @@ def create_connected_oneway_anova(
         omitted_row_ids=omitted_row_ids,
         coefficients=[],
         statistics=stats,
-        fitted_values=result.get("fitted", []),
-        residuals=result.get("residuals", []),
+        fitted_values=fits,
+        residuals=resids,
         metadata={
             "factor_name": fact_col.name,
             "response_name": resp_col.name,
             "options": options or {},
-            "group_summary": result.get("group_summary", []),
+            "group_summary": result.get("means", result.get("group_summary", [])),
         }
     )
     from .connect_r import generate_r_oneway_anova_script

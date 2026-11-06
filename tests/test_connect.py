@@ -556,6 +556,137 @@ class TestStatCraftConnect(unittest.TestCase):
         self.assertIn("GLM_Diagnostics", conn.r_script)
         self.assertIn("as.factor", conn.r_script)
 
+    def test_profiler_save_candidate_point_and_bootstrap_script(self):
+        from PySide6.QtWidgets import QApplication
+        from statcraft.prediction_profiler_dialog import PredictionProfilerDialog
+        from statcraft.connect_r import generate_response_surface_bootstrap_script
+
+        app = QApplication.instance() or QApplication([])
+
+        ws = Worksheet("ChemicalRun", [
+            Column("Yield", "number", [72.5, 78.1, 84.6, 91.2, 74.0, 80.5, 86.0, 93.1]),
+            Column("Temp", "number", [140.0, 160.0, 140.0, 160.0, 140.0, 160.0, 140.0, 160.0]),
+            Column("Pressure", "number", [30.0, 30.0, 40.0, 40.0, 30.0, 30.0, 40.0, 40.0]),
+        ])
+        recipe = {
+            "action": "multiple_regression",
+            "parameters": {"response_index": 0, "predictor_indices": [1, 2], "confidence": 0.95}
+        }
+        conn = create_connected_regression(ws, 0, [1, 2], {"coefficients": [{"name": "Constant", "estimate": 10.0}, {"name": "Temp", "estimate": 0.4}, {"name": "Pressure", "estimate": 0.3}]})
+
+        dlg = PredictionProfilerDialog(None, ws, [recipe], connected=conn)
+        dlg.current_settings["Temp"] = 155.0
+        dlg.current_settings["Pressure"] = 38.0
+        dlg.on_save_candidate_point()
+
+        self.assertIn("candidate_points", ws.metadata)
+        self.assertEqual(len(ws.metadata["candidate_points"]), 1)
+        saved = ws.metadata["candidate_points"][0]
+        self.assertEqual(saved["factors"]["Temp"], 155.0)
+        self.assertEqual(saved["factors"]["Pressure"], 38.0)
+
+        # Generate bootstrap script with operating point
+        cand_pt = {"Temp": 155.0, "Pressure": 38.0}
+        boot_script = generate_response_surface_bootstrap_script(conn, ws, replications=500, candidate_point=cand_pt)
+        self.assertIn("candidate_point <- data.frame(", boot_script)
+        self.assertIn("Temp = 155", boot_script)
+        self.assertIn("Pressure = 38", boot_script)
+        self.assertIn("statcraft_export(boot_summary, 'Bootstrap_Summary')", boot_script)
+
+    def test_cross_engine_execution_comparison_oneway_anova(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_oneway_anova
+        from statcraft.connect_compare_dialog import run_cross_engine_comparison
+        from statcraft.r_bridge import is_r_available
+
+        if not is_r_available():
+            self.skipTest("R is not installed on this test environment.")
+
+        ws = Worksheet("AnovaCompare", [
+            Column("Yield", "number", [50.2, 52.1, 49.8, 62.4, 64.1, 61.9, 75.3, 77.0, 74.5]),
+            Column("Treatment", "text", ["Ctrl", "Ctrl", "Ctrl", "TrtA", "TrtA", "TrtA", "TrtB", "TrtB", "TrtB"]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.oneway_anova(0, 1)
+
+        conn = create_connected_oneway_anova(ws, 0, 1, entry["result"])
+        comp_res = run_cross_engine_comparison(conn, ws)
+
+        self.assertTrue(comp_res.get("success"), f"Comparison failed: {comp_res.get('error')}")
+        self.assertTrue(comp_res["comparison"]["aligned"])
+        self.assertLessEqual(comp_res["comparison"]["max_diff"], 1e-4)
+
+    def test_cross_engine_execution_comparison_factorial_doe(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_factorial
+        from statcraft.connect_compare_dialog import run_cross_engine_comparison
+        from statcraft.r_bridge import is_r_available
+
+        if not is_r_available():
+            self.skipTest("R is not installed on this test environment.")
+
+        ws = Worksheet("FactorialCompare", [
+            Column("Yield", "number", [20.5, 24.1, 28.3, 35.2, 21.0, 25.0, 27.9, 36.1]),
+            Column("Temp", "number", [-1, 1, -1, 1, -1, 1, -1, 1]),
+            Column("Catalyst", "number", [-1, -1, 1, 1, -1, -1, 1, 1]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.analyze_factorial(0, [1, 2])
+
+        conn = create_connected_factorial(ws, 0, [1, 2], entry["result"])
+        comp_res = run_cross_engine_comparison(conn, ws)
+
+        self.assertTrue(comp_res.get("success"), f"Comparison failed: {comp_res.get('error')}")
+        self.assertTrue(comp_res["comparison"]["aligned"])
+        self.assertLessEqual(comp_res["comparison"]["max_diff"], 1e-4)
+
+    def test_create_bootstrap_result_entry_and_report(self):
+        from statcraft.app import format_entry
+        from statcraft.connect_r import create_bootstrap_result_entry
+        from statcraft.connect_report import generate_connected_report
+
+        ws = Worksheet("ReportTest", [
+            Column("Response", "number", [10.0, 20.0, 30.0, 40.0]),
+            Column("FactorA", "number", [1.0, 2.0, 3.0, 4.0]),
+        ])
+        conn = create_connected_regression(ws, 0, [1], {
+            "coefficients": [{"name": "Constant", "estimate": 2.5, "se_coef": 0.5, "t_value": 5.0, "p_value": 0.001},
+                             {"name": "FactorA", "estimate": 9.5, "se_coef": 0.2, "t_value": 47.5, "p_value": 0.0001}],
+            "r_squared": 0.998,
+            "adjusted_r_squared": 0.997,
+            "residual_stdev": 0.45,
+        })
+
+        cand_pt = {"FactorA": 2.5}
+        metrics = {
+            "Candidate_Y_Hat": 26.25,
+            "Bootstrap_Mean": 26.248,
+            "Bootstrap_SE": 0.32,
+            "CI_Lower": 25.62,
+            "CI_Upper": 26.88,
+            "Confidence": 0.95,
+            "Replications": 2000,
+        }
+        card_entry = create_bootstrap_result_entry(conn, cand_pt, metrics)
+        self.assertEqual(card_entry["origin"], "statcraft")
+        self.assertIn("R Bootstrap Uncertainty", card_entry["title"])
+
+        formatted = format_entry(card_entry)
+        self.assertIn("Bootstrap Percentile CI:   [25.6200, 26.8800]", formatted)
+
+        # Generate Connected DOE & Model Report
+        report_text = generate_connected_report(conn, ws, candidate_point=cand_pt, bootstrap_metrics=metrics)
+        self.assertIn("STATCRAFT CONNECT — INTEGRATED DOE & MODEL REPORT", report_text)
+        self.assertIn("1. MODEL SUMMARY & FIT DIAGNOSTICS", report_text)
+        self.assertIn("2. MODEL COEFFICIENTS & ESTIMATES", report_text)
+        self.assertIn("3. PREDICTION PROFILER (CANDIDATE OPERATING POINT)", report_text)
+        self.assertIn("4. BASE R BOOTSTRAP UNCERTAINTY VALIDATION", report_text)
+        self.assertIn("5. REPRODUCIBILITY & PROVENANCE SIGNATURE", report_text)
+        self.assertIn("Operating Point Settings:   FactorA = 2.5", report_text)
+        self.assertIn("Candidate Operating Y_hat:  26.2500", report_text)
+
 
 if __name__ == "__main__":
     unittest.main()

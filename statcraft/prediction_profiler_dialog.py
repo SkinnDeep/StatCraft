@@ -7,6 +7,7 @@ parameter exploration matching SAS JMP's Prediction Profiler.
 from __future__ import annotations
 
 import copy
+from datetime import datetime
 import math
 from typing import Any, Dict, List, Optional
 
@@ -194,13 +195,22 @@ class ProfilerCellWidget(QWidget):
 class PredictionProfilerDialog(QDialog):
     """JMP-style Interactive Multi-Model Prediction Profiler Dialog."""
 
-    def __init__(self, parent, worksheet: Worksheet, model_recipes: list[dict[str, Any]]):
+    def __init__(
+        self,
+        parent,
+        worksheet: Worksheet,
+        model_recipes: list[dict[str, Any]],
+        connected: Optional[Any] = None,
+    ):
         super().__init__(parent)
         self.worksheet = worksheet
         self.model_recipes = [normalize_recipe(r) for r in model_recipes]
+        self.connected = connected
+        self.saved_candidate_points: list[dict[str, Any]] = []
 
         self.setWindowTitle("StatCraft Interactive Prediction Profiler (JMP Compatibility Suite)")
-        self.resize(880, 580)
+        self.resize(920, 600)
+        self.setMinimumSize(780, 480)
         self.setSizeGripEnabled(True)
         self._is_dark = getattr(parent, "_dark_mode", False) if parent else False
 
@@ -294,7 +304,7 @@ class PredictionProfilerDialog(QDialog):
         title_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #005a9e;")
         top_bar.addWidget(title_lbl)
 
-        top_bar.addSpacing(16)
+        top_bar.addSpacing(12)
 
         self.opt_btn = QPushButton("⚡ Maximize Desirability")
         self.opt_btn.setStyleSheet("background-color: #0284c7; color: white; font-weight: bold; padding: 5px 12px; border-radius: 4px; border: none;")
@@ -302,11 +312,23 @@ class PredictionProfilerDialog(QDialog):
         top_bar.addWidget(self.opt_btn)
 
         self.reset_btn = QPushButton("↺ Reset Midpoints")
-        self.reset_btn.setStyleSheet("padding: 5px 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; color: #334155;")
+        self.reset_btn.setStyleSheet("padding: 5px 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; color: #334155;" if not self._is_dark else "padding: 5px 10px; background-color: #27272a; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5;")
         self.reset_btn.clicked.connect(self.on_reset_midpoints)
         top_bar.addWidget(self.reset_btn)
 
-        top_bar.addSpacing(12)
+        self.save_point_btn = QPushButton("📍 Save Candidate Point")
+        self.save_point_btn.setStyleSheet("padding: 5px 10px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; color: #334155;" if not self._is_dark else "padding: 5px 10px; background-color: #27272a; border: 1px solid #3f3f46; border-radius: 4px; color: #f4f4f5;")
+        self.save_point_btn.setToolTip("Record the active candidate operating point settings and fitted response into the worksheet metadata")
+        self.save_point_btn.clicked.connect(self.on_save_candidate_point)
+        top_bar.addWidget(self.save_point_btn)
+
+        self.boot_btn = QPushButton("🔬 Bootstrap in R")
+        self.boot_btn.setStyleSheet("background-color: #0d9488; color: white; font-weight: bold; padding: 5px 12px; border-radius: 4px; border: none;")
+        self.boot_btn.setToolTip("Generate and execute 2,000-replication non-parametric residual bootstrap uncertainty at this operating point in R")
+        self.boot_btn.clicked.connect(self.on_bootstrap_in_r)
+        top_bar.addWidget(self.boot_btn)
+
+        top_bar.addSpacing(8)
 
         top_bar.addWidget(QLabel("Confidence:"))
         self.ci_combo = QComboBox()
@@ -448,6 +470,82 @@ class PredictionProfilerDialog(QDialog):
                 if f_name in self.spin_boxes:
                     self.spin_boxes[f_name].setValue(opt_val)
         self.refresh_profiler()
+
+    def on_save_candidate_point(self):
+        """Save the active candidate operating point settings and fitted responses into worksheet metadata."""
+        point_data = {
+            "timestamp": datetime.now().isoformat(),
+            "factors": {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in self.current_settings.items()},
+            "confidence": self.confidence_level,
+            "predictions": {},
+        }
+        for resp in self.responses:
+            curr_fit_lbl = self.response_labels.get(resp.name)
+            curr_ci_lbl = self.response_labels.get(f"{resp.name}_ci")
+            point_data["predictions"][resp.name] = {
+                "fit_text": curr_fit_lbl.text() if curr_fit_lbl else "",
+                "ci_text": curr_ci_lbl.text() if curr_ci_lbl else "",
+            }
+        self.saved_candidate_points.append(point_data)
+        cand_list = self.worksheet.metadata.setdefault("candidate_points", [])
+        cand_list.append(point_data)
+
+        settings_str = ", ".join(f"{k}={v:.3g}" if isinstance(v, (int, float)) else f"{k}={v}" for k, v in self.current_settings.items())
+        msg = f"Candidate Operating Point recorded: ({settings_str})"
+        parent = self.parent()
+        if parent and hasattr(parent, "statusBar") and parent.statusBar():
+            parent.statusBar().showMessage(f"StatCraft Connect: {msg}", 6000)
+        QToolTip.showText(QCursor.pos(), f"✓ {msg}", self)
+
+    def on_bootstrap_in_r(self):
+        """Generate R bootstrap uncertainty script for this operating point and open in R Workbench."""
+        cand_settings = {k: float(v) for k, v in self.current_settings.items() if isinstance(v, (int, float))}
+
+        conn = self.connected
+        parent = self.parent()
+        if conn is None and parent and hasattr(parent, "selected_entry") and parent.selected_entry:
+            from .connect import create_connected_analysis_from_entry
+            conn = create_connected_analysis_from_entry(parent.selected_entry, self.worksheet)
+
+        if conn is None and self.model_recipes:
+            from .connect import create_connected_analysis_from_entry
+            dummy_entry = {"recipe": self.model_recipes[0], "result": {}}
+            conn = create_connected_analysis_from_entry(dummy_entry, self.worksheet)
+
+        if not conn:
+            QMessageBox.information(
+                self,
+                "R Bootstrap Uncertainty",
+                "A connected model (Response Surface, Factorial, or Regression) is required to run bootstrap uncertainty.",
+            )
+            return
+
+        from .connect_r import generate_response_surface_bootstrap_script
+        boot_script = generate_response_surface_bootstrap_script(
+            conn,
+            self.worksheet,
+            replications=2000,
+            confidence=self.confidence_level,
+            candidate_point=cand_settings,
+        )
+
+        if parent and hasattr(parent, "r_workbench") and parent.r_workbench:
+            conn_dict = conn.to_dict() if hasattr(conn, "to_dict") else conn
+            parent.set_ui_mode("r")
+            parent.r_workbench.load_connected_analysis({
+                **conn_dict,
+                "r_script": boot_script,
+                "title": f"Bootstrap Uncertainty ({conn.response_name})",
+            })
+            if hasattr(parent, "statusBar") and parent.statusBar():
+                parent.statusBar().showMessage("StatCraft Connect: Loaded R Bootstrap Uncertainty Script", 6000)
+            self.accept()
+        else:
+            QMessageBox.information(
+                self,
+                "R Bootstrap Script",
+                "R Workbench is not available in standalone mode.",
+            )
 
     def refresh_profiler(self):
         """Recalculate prediction profiles and update all plot cells."""

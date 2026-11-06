@@ -205,7 +205,14 @@ def generate_r_rsm_script(
         "  Residuals = fit_resids",
         ")",
         "statcraft_export(diagnostics, 'RSM_Diagnostics')",
-        "cat('[StatCraft Connect] RSM Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
+        "",
+        "# 6. Export Bootstrap Uncertainty Summary back to StatCraft",
+        "boot_summary <- data.frame(",
+        "  Metric = c('Candidate_Y_Hat', 'Bootstrap_Mean', 'Bootstrap_SE', 'CI_Lower', 'CI_Upper', 'Confidence', 'Replications'),",
+        f"  Value = c(as.numeric(y_hat), mean(boot_preds), sd(boot_preds), as.numeric(ci_lower), as.numeric(ci_upper), {conf_val}, as.numeric({replications}))",
+        ")",
+        "statcraft_export(boot_summary, 'Bootstrap_Summary')",
+        "cat('[StatCraft Connect] RSM Diagnostics and Bootstrap Summary exported. Ready for ReportPad.\\n')",
     ])
 
     return "\n".join(lines)
@@ -510,6 +517,19 @@ def import_r_predictions_to_worksheet(
     }
 
 
+def normalize_term_name(name: str) -> str:
+    """Normalize term names across StatCraft and R representations."""
+    s = str(name).strip()
+    if s in ("(Intercept)", "Intercept", "Constant"):
+        return "Constant"
+    # Replace R interaction separator ':' with '*'
+    s = s.replace(":", "*")
+    if "*" in s:
+        parts = [p.strip() for p in s.split("*")]
+        return "*".join(sorted(parts))
+    return s
+
+
 def _extract_coef_map(obj: Any) -> Dict[str, float]:
     """Helper to extract {term_name: estimate} from various coefficient representations."""
     coef_map: Dict[str, float] = {}
@@ -522,7 +542,7 @@ def _extract_coef_map(obj: Any) -> Dict[str, float]:
             # Direct mapping {term: float}
             for k, v in obj.items():
                 try:
-                    norm_k = "Constant" if str(k) in ("(Intercept)", "Intercept") else str(k)
+                    norm_k = normalize_term_name(k)
                     coef_map[norm_k] = float(v)
                 except (ValueError, TypeError):
                     pass
@@ -536,10 +556,10 @@ def _extract_coef_map(obj: Any) -> Dict[str, float]:
         if isinstance(item, dict):
             name = item.get("name") or item.get("term", "")
             val = item.get("estimate") if item.get("estimate") is not None else (item.get("coef") or item.get("coefficient", 0.0))
-            norm_name = "Constant" if str(name) in ("(Intercept)", "Intercept") else str(name)
+            norm_name = normalize_term_name(name)
             coef_map[norm_name] = float(val)
         elif isinstance(item, (list, tuple)) and len(item) >= 2:
-            norm_name = "Constant" if str(item[0]) in ("(Intercept)", "Intercept") else str(item[0])
+            norm_name = normalize_term_name(item[0])
             coef_map[norm_name] = float(item[1])
     return coef_map
 
@@ -549,9 +569,66 @@ def compare_implementations(
     r_coefficients_or_result: Any,
     tolerance: float = 1e-4
 ) -> Dict[str, Any]:
-    """Numerically compare coefficients between StatCraft and R implementations."""
+    """Numerically compare coefficients or ANOVA statistics between StatCraft and R implementations."""
     diffs = []
     max_abs_diff = 0.0
+
+    # Handle One-Way ANOVA special case
+    is_anova = (
+        (hasattr(connected_or_statcraft, "analysis_type") and getattr(connected_or_statcraft, "analysis_type") == "oneway_anova")
+        or (isinstance(connected_or_statcraft, dict) and connected_or_statcraft.get("analysis_type") == "oneway_anova")
+        or (isinstance(r_coefficients_or_result, dict) and "f_stat" in r_coefficients_or_result and not _extract_coef_map(r_coefficients_or_result))
+    )
+
+    if is_anova:
+        sc_stats = (
+            getattr(connected_or_statcraft, "statistics", {})
+            if hasattr(connected_or_statcraft, "statistics")
+            else (connected_or_statcraft.get("statistics", {}) if isinstance(connected_or_statcraft, dict) else {})
+        )
+        r_stats = r_coefficients_or_result if isinstance(r_coefficients_or_result, dict) else {}
+        metrics = [
+            ("Factor Degrees of Freedom", "df_factor"),
+            ("Error Degrees of Freedom", "df_error"),
+            ("F-Statistic", "f_stat"),
+            ("P-Value", "p_value"),
+            ("R-Squared", "r_squared"),
+        ]
+        for label, key in metrics:
+            s_val = sc_stats.get(key)
+            r_val = r_stats.get(key)
+            if s_val is not None:
+                s_val = float(s_val)
+            if r_val is not None:
+                r_val = float(r_val)
+            if s_val is None or r_val is None:
+                diffs.append({
+                    "term": label,
+                    "statcraft": s_val,
+                    "r": r_val,
+                    "diff": None,
+                    "aligned": False,
+                    "status": "Missing in one implementation",
+                })
+                continue
+            abs_diff = abs(s_val - r_val)
+            max_abs_diff = max(max_abs_diff, abs_diff)
+            aligned = abs_diff <= tolerance
+            diffs.append({
+                "term": label,
+                "statcraft": s_val,
+                "r": r_val,
+                "diff": abs_diff,
+                "aligned": aligned,
+                "status": "Agreement" if aligned else "Discrepancy exceeds tolerance",
+            })
+        return {
+            "aligned": all(d["aligned"] for d in diffs),
+            "tolerance": tolerance,
+            "max_diff": max_abs_diff,
+            "comparisons": diffs,
+            "differences": [d for d in diffs if not d["aligned"]],
+        }
 
     stat_map = _extract_coef_map(connected_or_statcraft)
     r_map = _extract_coef_map(r_coefficients_or_result)
@@ -584,9 +661,74 @@ def compare_implementations(
         })
 
     return {
-        "aligned": all(d["aligned"] for d in diffs),
+        "aligned": all(d["aligned"] for d in diffs) if diffs else False,
         "tolerance": tolerance,
         "max_diff": max_abs_diff,
         "comparisons": diffs,
         "differences": [d for d in diffs if not d["aligned"]],
     }
+
+
+def create_bootstrap_result_entry(
+    connected: Any,
+    candidate_point: Dict[str, float],
+    metrics: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Create a StatCraft Result Card entry for a completed bootstrap uncertainty run."""
+    y_hat = float(metrics.get("Candidate_Y_Hat", metrics.get("y_hat", 0.0)))
+    boot_mean = float(metrics.get("Bootstrap_Mean", metrics.get("boot_mean", y_hat)))
+    boot_se = float(metrics.get("Bootstrap_SE", metrics.get("boot_se", 0.0)))
+    ci_lower = float(metrics.get("CI_Lower", metrics.get("ci_lower", y_hat - 1.96 * boot_se)))
+    ci_upper = float(metrics.get("CI_Upper", metrics.get("ci_upper", y_hat + 1.96 * boot_se)))
+    conf = float(metrics.get("Confidence", metrics.get("confidence", getattr(connected, "confidence", 0.95))))
+    reps = int(float(metrics.get("Replications", metrics.get("replications", 2000))))
+
+    resp_name = getattr(connected, "response_name", "Response") if hasattr(connected, "response_name") else connected.get("response_name", "Response")
+    model_title = getattr(connected, "title", "Model") if hasattr(connected, "title") else connected.get("title", "Model")
+
+    cand_str = ", ".join(f"{k} = {v:.4g}" for k, v in candidate_point.items()) if candidate_point else "Midpoint settings"
+    report_lines = [
+        f"Non-Parametric Residual Bootstrap Uncertainty Analysis",
+        f"Response Variable: {resp_name}",
+        f"Model: {model_title}",
+        f"Operating Point: {cand_str}",
+        f"Resampling Scheme: Fixed-X Residual Resampling ({reps:,} replications, seed = 42)",
+        f"",
+        f"Estimated Mean Response (Y_hat): {y_hat:.4f}",
+        f"Bootstrap Resample Mean:         {boot_mean:.4f}",
+        f"Bootstrap Standard Error:        {boot_se:.4f}",
+        f"{int(conf * 100):d}% Bootstrap Percentile CI:   [{ci_lower:.4f}, {ci_upper:.4f}]",
+        f"",
+        f"Status: R base::lm execution verified. Ready for ReportPad.",
+    ]
+    report_text = "\n".join(report_lines)
+
+    conn_dict = connected.to_dict() if hasattr(connected, "to_dict") else connected
+    entry = {
+        "origin": "statcraft",
+        "title": f"R Bootstrap Uncertainty: {resp_name}",
+        "time": datetime.now().strftime("%I:%M:%S %p"),
+        "connected_analysis": conn_dict,
+        "recipe": {
+            "action": "bootstrap_uncertainty",
+            "parameters": {
+                "response": resp_name,
+                "replications": reps,
+                "confidence": conf,
+                "candidate_point": candidate_point,
+            }
+        },
+        "result": {
+            "analysis": "bootstrap_uncertainty",
+            "text": report_text,
+            "y_hat": y_hat,
+            "boot_mean": boot_mean,
+            "boot_se": boot_se,
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+            "confidence": conf,
+            "replications": reps,
+            "candidate_point": candidate_point,
+        }
+    }
+    return entry

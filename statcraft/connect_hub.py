@@ -374,5 +374,11 @@ class ConnectBridgeWidget(QFrame):
             b_boot.clicked.connect(lambda: self.window.connect_open_r_bootstrap(self.entry))
             btn_bar.addWidget(b_boot)
 
+        b_report = QPushButton("📑 Append to ReportPad")
+        b_report.setStyleSheet(btn_qss)
+        b_report.setToolTip("Generate comprehensive Connected Model report and append to ReportPad")
+        b_report.clicked.connect(lambda: self.window.append_connected_report_to_report_pad(self.entry))
+        btn_bar.addWidget(b_report)
+
         btn_bar.addStretch()
         root.addLayout(btn_bar)

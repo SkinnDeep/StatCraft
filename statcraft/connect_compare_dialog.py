@@ -63,17 +63,41 @@ def run_cross_engine_comparison(
         + "tryCatch({\n"
         + "  m_obj <- if (exists('fit')) fit else if (exists('model')) model else NULL\n"
         + "  if (is.null(m_obj)) stop('No fitted model object found.')\n"
-        + "  m_sum <- summary(m_obj)\n"
-        + "  cf <- coef(m_sum)\n"
-        + "  cat('\\n===STATCRAFT_COMPARE_BEGIN===\\n')\n"
-        + "  for (rn in rownames(cf)) {\n"
-        + "    cat(sprintf('TERM|%s|%.9f|%.9f|%.9f\\n', rn, cf[rn, 1], cf[rn, 2], cf[rn, 4]))\n"
+        + "  if (inherits(m_obj, 'aov')) {\n"
+        + "    m_sum <- summary(m_obj)\n"
+        + "    tab <- m_sum[[1]]\n"
+        + "    cat('\\n===STATCRAFT_COMPARE_BEGIN===\\n')\n"
+        + "    for (rn in rownames(tab)) {\n"
+        + "      rn_clean <- trimws(rn)\n"
+        + "      if (rn_clean != '') {\n"
+        + "        cat(sprintf('ANOVA_ROW|%s|%d|%.9f|%.9f|%.9f|%.9f\\n', rn_clean, tab[rn, 'Df'], tab[rn, 'Sum Sq'], tab[rn, 'Mean Sq'], ifelse(is.na(tab[rn, 'F value']), 0, tab[rn, 'F value']), ifelse(is.na(tab[rn, 'Pr(>F)']), 1, tab[rn, 'Pr(>F)'])))\n"
+        + "      }\n"
+        + "    }\n"
+        + "    f_stat <- tab[1, 'F value']\n"
+        + "    p_val <- tab[1, 'Pr(>F)']\n"
+        + "    ss_factor <- tab[1, 'Sum Sq']\n"
+        + "    ss_total <- sum(tab[, 'Sum Sq'], na.rm=TRUE)\n"
+        + "    r_sq <- ss_factor / ss_total\n"
+        + "    cat(sprintf('STAT|f_stat|%.9f\\n', if (!is.na(f_stat)) f_stat else 0))\n"
+        + "    cat(sprintf('STAT|p_value|%.9f\\n', if (!is.na(p_val)) p_val else 1))\n"
+        + "    cat(sprintf('STAT|r_squared|%.9f\\n', if (!is.na(r_sq)) r_sq else 0))\n"
+        + "    cat(sprintf('STAT|df_factor|%d\\n', as.integer(tab[1, 'Df'])))\n"
+        + "    cat(sprintf('STAT|df_error|%d\\n', as.integer(tab[2, 'Df'])))\n"
+        + "    cat(sprintf('STAT|n|%d\\n', length(m_obj$residuals)))\n"
+        + "    cat('===STATCRAFT_COMPARE_END===\\n')\n"
+        + "  } else {\n"
+        + "    m_sum <- summary(m_obj)\n"
+        + "    cf <- coef(m_sum)\n"
+        + "    cat('\\n===STATCRAFT_COMPARE_BEGIN===\\n')\n"
+        + "    for (rn in rownames(cf)) {\n"
+        + "      cat(sprintf('TERM|%s|%.9f|%.9f|%.9f\\n', rn, cf[rn, 1], cf[rn, 2], cf[rn, 4]))\n"
+        + "    }\n"
+        + "    cat(sprintf('STAT|r_squared|%.9f\\n', if (!is.null(m_sum$r.squared)) m_sum$r.squared else 0))\n"
+        + "    cat(sprintf('STAT|adj_r_squared|%.9f\\n', if (!is.null(m_sum$adj.r.squared)) m_sum$adj.r.squared else 0))\n"
+        + "    cat(sprintf('STAT|sigma|%.9f\\n', if (!is.null(m_sum$sigma)) m_sum$sigma else 0))\n"
+        + "    cat(sprintf('STAT|n|%d\\n', length(m_obj$residuals)))\n"
+        + "    cat('===STATCRAFT_COMPARE_END===\\n')\n"
         + "  }\n"
-        + "  cat(sprintf('STAT|r_squared|%.9f\\n', if (!is.null(m_sum$r.squared)) m_sum$r.squared else 0))\n"
-        + "  cat(sprintf('STAT|adj_r_squared|%.9f\\n', if (!is.null(m_sum$adj.r.squared)) m_sum$adj.r.squared else 0))\n"
-        + "  cat(sprintf('STAT|sigma|%.9f\\n', if (!is.null(m_sum$sigma)) m_sum$sigma else 0))\n"
-        + "  cat(sprintf('STAT|n|%d\\n', length(m_obj$residuals)))\n"
-        + "  cat('===STATCRAFT_COMPARE_END===\\n')\n"
         + "}, error = function(e) {\n"
         + "  cat(sprintf('===STATCRAFT_COMPARE_ERROR|%s===\\n', conditionMessage(e)))\n"
         + "})\n"
@@ -114,7 +138,10 @@ def run_cross_engine_comparison(
                 except ValueError:
                     pass
 
-    comp = compare_implementations(connected, r_coefs, tolerance=tolerance)
+    if connected.analysis_type == "oneway_anova":
+        comp = compare_implementations(connected, r_stats, tolerance=tolerance)
+    else:
+        comp = compare_implementations(connected, r_coefs, tolerance=tolerance)
     return {
         "success": True,
         "comparison": comp,
@@ -139,7 +166,9 @@ class CompareImplementationsDialog(QDialog):
         self.r_stats = comp_result.get("r_stats", {})
 
         self.setWindowTitle("StatCraft Connect — Execution Comparison")
-        self.resize(760, 560)
+        self.resize(780, 580)
+        self.setMinimumSize(680, 480)
+        self.setSizeGripEnabled(True)
         self._init_ui()
 
     def _init_ui(self):
@@ -148,6 +177,7 @@ class CompareImplementationsDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
 
         dark = _is_dark_active(self)
+        is_anova = self.connected.analysis_type == "oneway_anova"
 
         # Header Card
         header_card = QFrame()
@@ -162,8 +192,9 @@ class CompareImplementationsDialog(QDialog):
         v_info.setSpacing(4)
         title_lbl = QLabel(f"<b>Model:</b> {self.connected.title}")
         title_lbl.setStyleSheet("font-size: 11pt; color: #f4f4f5;" if dark else "font-size: 11pt; color: #0f172a;")
+        engine_str = "R <code>base::aov</code>" if is_anova else "R <code>base::lm</code>"
         meta_lbl = QLabel(
-            f"<b>Engines:</b> StatCraft Native ({self.connected.analysis_type}) vs. R <code>base::lm</code> | "
+            f"<b>Engines:</b> StatCraft Native ({self.connected.analysis_type}) vs. {engine_str} | "
             f"<b>N:</b> {len(self.connected.fitted_row_ids)} observations"
         )
         meta_lbl.setStyleSheet("color: #a1a1aa; font-size: 9pt;" if dark else "color: #475569; font-size: 9pt;")
@@ -194,21 +225,31 @@ class CompareImplementationsDialog(QDialog):
         h_layout.addWidget(status_badge, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(header_card)
 
-        # Coefficients Comparison Table
-        table_lbl = QLabel("<b>Parameter Estimates & Tolerances</b>")
+        # Comparison Table
+        table_lbl = QLabel("<b>ANOVA Metrics & Tolerances</b>" if is_anova else "<b>Parameter Estimates & Tolerances</b>")
         table_lbl.setStyleSheet("font-size: 9.5pt; color: #f4f4f5;" if dark else "font-size: 9.5pt; color: #1e293b;")
         layout.addWidget(table_lbl)
 
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "Term",
-            "StatCraft Estimate",
-            "R Estimate",
-            "Absolute Diff",
-            "Tolerance",
-            "Status",
-        ])
+        if is_anova:
+            self.table.setHorizontalHeaderLabels([
+                "Metric / Source",
+                "StatCraft Value",
+                "R aov Value",
+                "Absolute Diff",
+                "Tolerance",
+                "Status",
+            ])
+        else:
+            self.table.setHorizontalHeaderLabels([
+                "Term",
+                "StatCraft Estimate",
+                "R Estimate",
+                "Absolute Diff",
+                "Tolerance",
+                "Status",
+            ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for i in range(1, 6):
             self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
@@ -259,25 +300,47 @@ class CompareImplementationsDialog(QDialog):
 
         diag_layout.addWidget(QLabel("<b>Metric</b>"), 0, 0)
         diag_layout.addWidget(QLabel("<b>StatCraft Native</b>"), 0, 1)
-        diag_layout.addWidget(QLabel("<b>R base::lm</b>"), 0, 2)
+        diag_layout.addWidget(QLabel(f"<b>{engine_str}</b>"), 0, 2)
         diag_layout.addWidget(QLabel("<b>Alignment</b>"), 0, 3)
 
         sc_stats = self.connected.fit_statistics
-        r2_sc = sc_stats.get("r_squared")
-        r2_r = self.r_stats.get("r_squared")
-        adj_sc = sc_stats.get("adjusted_r_squared")
-        adj_r = self.r_stats.get("adj_r_squared")
-        s_sc = sc_stats.get("residual_stdev")
-        s_r = self.r_stats.get("sigma")
         n_sc = len(self.connected.fitted_row_ids)
         n_r = int(self.r_stats.get("n", n_sc))
 
-        metrics = [
-            ("Sample Size (N)", f"{n_sc}", f"{n_r}", "Equal" if n_sc == n_r else "Mismatch"),
-            ("R-Squared", f"{r2_sc:.6f}" if r2_sc is not None else "—", f"{r2_r:.6f}" if r2_r is not None else "—", "Aligned"),
-            ("Adjusted R-Squared", f"{adj_sc:.6f}" if adj_sc is not None else "—", f"{adj_r:.6f}" if adj_r is not None else "—", "Aligned"),
-            ("Residual Std Error (s)", f"{s_sc:.6f}" if s_sc is not None else "—", f"{s_r:.6f}" if s_r is not None else "—", "Aligned"),
-        ]
+        if is_anova:
+            f_sc = sc_stats.get("f_stat")
+            f_r = self.r_stats.get("f_stat")
+            p_sc = sc_stats.get("p_value")
+            p_r = self.r_stats.get("p_value")
+            r2_sc = sc_stats.get("r_squared")
+            r2_r = self.r_stats.get("r_squared")
+            df_f_sc = sc_stats.get("df_factor")
+            df_f_r = self.r_stats.get("df_factor")
+            df_e_sc = sc_stats.get("df_error")
+            df_e_r = self.r_stats.get("df_error")
+
+            metrics = [
+                ("Sample Size (N)", f"{n_sc}", f"{n_r}", "Equal" if n_sc == n_r else "Mismatch"),
+                ("Factor DF", f"{df_f_sc}" if df_f_sc is not None else "—", f"{int(df_f_r)}" if df_f_r is not None else "—", "Equal" if df_f_sc == df_f_r else "Mismatch"),
+                ("Error DF", f"{df_e_sc}" if df_e_sc is not None else "—", f"{int(df_e_r)}" if df_e_r is not None else "—", "Equal" if df_e_sc == df_e_r else "Mismatch"),
+                ("F-Statistic", f"{f_sc:.6f}" if f_sc is not None else "—", f"{f_r:.6f}" if f_r is not None else "—", "Aligned" if (f_sc is not None and f_r is not None and abs(f_sc - f_r) <= 1e-4) else "Discrepancy"),
+                ("P-Value", f"{p_sc:.6f}" if p_sc is not None else "—", f"{p_r:.6f}" if p_r is not None else "—", "Aligned" if (p_sc is not None and p_r is not None and abs(p_sc - p_r) <= 1e-4) else "Discrepancy"),
+                ("R-Squared", f"{r2_sc:.6f}" if r2_sc is not None else "—", f"{r2_r:.6f}" if r2_r is not None else "—", "Aligned" if (r2_sc is not None and r2_r is not None and abs(r2_sc - r2_r) <= 1e-4) else "Discrepancy"),
+            ]
+        else:
+            r2_sc = sc_stats.get("r_squared")
+            r2_r = self.r_stats.get("r_squared")
+            adj_sc = sc_stats.get("adjusted_r_squared")
+            adj_r = self.r_stats.get("adj_r_squared")
+            s_sc = sc_stats.get("residual_stdev")
+            s_r = self.r_stats.get("sigma")
+
+            metrics = [
+                ("Sample Size (N)", f"{n_sc}", f"{n_r}", "Equal" if n_sc == n_r else "Mismatch"),
+                ("R-Squared", f"{r2_sc:.6f}" if r2_sc is not None else "—", f"{r2_r:.6f}" if r2_r is not None else "—", "Aligned" if (r2_sc is not None and r2_r is not None and abs(r2_sc - r2_r) <= 1e-4) else "Discrepancy"),
+                ("Adjusted R-Squared", f"{adj_sc:.6f}" if adj_sc is not None else "—", f"{adj_r:.6f}" if adj_r is not None else "—", "Aligned" if (adj_sc is not None and adj_r is not None and abs(adj_sc - adj_r) <= 1e-4) else "Discrepancy"),
+                ("Residual Std Error (s)", f"{s_sc:.6f}" if s_sc is not None else "—", f"{s_r:.6f}" if s_r is not None else "—", "Aligned" if (s_sc is not None and s_r is not None and abs(s_sc - s_r) <= 1e-4) else "Discrepancy"),
+            ]
 
         for row_i, (m_name, sc_s, r_s, stat_s) in enumerate(metrics, start=1):
             diag_layout.addWidget(QLabel(m_name), row_i, 0)
@@ -291,10 +354,14 @@ class CompareImplementationsDialog(QDialog):
         layout.addWidget(diag_group)
 
         # Settings Verification Note
-        note = QLabel(
-            "<b>Settings Alignment:</b> Ordinary Least Squares (OLS) estimation, complete-case listwise "
-            "missing-value policy, identical 95% confidence intervals."
-        )
+        if is_anova:
+            note_text = "<b>Settings Alignment:</b> Analysis of Variance (aov) model, balanced/unbalanced group factor coding, listwise missing-value policy."
+        else:
+            note_text = "<b>Settings Alignment:</b> Ordinary Least Squares (OLS) estimation, complete-case listwise missing-value policy, identical 95% confidence intervals."
+        note = QLabel(note_text)
+        note.setStyleSheet("color: #64748b; font-size: 8.5pt;")
+        note.setWordWrap(True)
+        layout.addWidget(note)
         note.setStyleSheet("color: #64748b; font-size: 8.5pt;")
         note.setWordWrap(True)
         layout.addWidget(note)

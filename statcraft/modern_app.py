@@ -5615,6 +5615,7 @@ class ModernWindow(QMainWindow):
             connect_menu.addSeparator()
             connect_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda: self.connect_apply_predictions(target_entry))
             connect_menu.addAction("Compare Implementations (StatCraft vs R)...", lambda: self.connect_compare_implementations(target_entry))
+            connect_menu.addAction("Append Connected Report to ReportPad...", lambda: self.append_connected_report_to_report_pad(target_entry))
             connect_menu.addSeparator()
             connect_menu.addAction("Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(target_entry))
 
@@ -5647,6 +5648,7 @@ class ModernWindow(QMainWindow):
         connect_menu.addSeparator()
         self._action(connect_menu, "Compare StatCraft vs R Execution…", lambda: self.connect_compare_implementations(self.selected_entry) if self.selected_entry else None, None, None, True)
         self._action(connect_menu, "Apply Predictions & Residuals to Worksheet…", lambda: self.connect_apply_predictions(self.selected_entry) if self.selected_entry else None, None, None, True)
+        self._action(connect_menu, "Append Connected Report to ReportPad…", lambda: self.append_connected_report_to_report_pad(self.selected_entry) if self.selected_entry else None, None, "report", True)
         connect_menu.addSeparator()
         self._action(connect_menu, "Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(self.selected_entry) if self.selected_entry else None, None, "workflow", True)
         self._action(connect_menu, "Replay Saved Workflow on Another Sheet…", self.replay_saved_workflow_dialog, None, "workflow", True)
@@ -5718,29 +5720,33 @@ class ModernWindow(QMainWindow):
 
     def connect_open_r_bootstrap(self, entry):
         conn_dict = entry.get("connected_analysis")
-        recipe = entry.get("recipe", {})
-        action = recipe.get("action")
-        p = recipe.get("parameters", {})
-        if not conn_dict and action == "analyze_response_surface" and "response_index" in p:
-            from .connect import create_connected_response_surface
-            conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
-            conn_dict = create_connected_response_surface(
-                self.presenter.worksheet, p["response_index"], p["factor_indices"],
-                entry.get("result", {}), conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
-            ).to_dict()
-            entry["connected_analysis"] = conn_dict
+        if not conn_dict:
+            from .connect import create_connected_analysis_from_entry
+            try:
+                conn_obj = create_connected_analysis_from_entry(entry, self.presenter.worksheet)
+                if conn_obj:
+                    conn_dict = conn_obj.to_dict()
+                    entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
 
         if not conn_dict:
+            QMessageBox.information(self, "R Bootstrap", "A connected model (Response Surface, Factorial, or Regression) is required.")
             return
 
         from .connect import ConnectedAnalysis
         from .connect_r import generate_response_surface_bootstrap_script
         conn = ConnectedAnalysis.from_dict(conn_dict)
+
+        cand_pts = self.presenter.worksheet.metadata.get("candidate_points", []) if hasattr(self.presenter.worksheet, "metadata") else []
+        cand_point = cand_pts[-1].get("factors", {}) if cand_pts else None
+
         boot_script = generate_response_surface_bootstrap_script(
             conn,
             self.presenter.worksheet,
             replications=2000,
             confidence=conn.confidence,
+            candidate_point=cand_point,
         )
 
         if self.r_workbench:
@@ -5826,7 +5832,19 @@ class ModernWindow(QMainWindow):
     def connect_compare_implementations(self, entry):
         conn_dict = entry.get("connected_analysis")
         if not conn_dict:
+            from .connect import create_connected_analysis_from_entry
+            try:
+                conn_obj = create_connected_analysis_from_entry(entry, self.presenter.worksheet)
+                if conn_obj:
+                    conn_dict = conn_obj.to_dict()
+                    entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
+
+        if not conn_dict:
+            QMessageBox.information(self, "Compare Implementations", "This result does not have a connected analysis model.")
             return
+
         from .connect import ConnectedAnalysis
         from .connect_compare_dialog import run_cross_engine_comparison, CompareImplementationsDialog
         from .r_bridge import is_r_available
@@ -5843,6 +5861,51 @@ class ModernWindow(QMainWindow):
 
         dlg = CompareImplementationsDialog(conn, res, self)
         dlg.exec()
+
+    def append_connected_report_to_report_pad(self, entry=None):
+        target_entry = entry or self.selected_entry
+        if not target_entry:
+            QMessageBox.information(self, "Append to ReportPad", "Please select a model result first.")
+            return
+
+        conn_dict = target_entry.get("connected_analysis")
+        if not conn_dict:
+            from .connect import create_connected_analysis_from_entry
+            try:
+                conn_obj = create_connected_analysis_from_entry(target_entry, self.presenter.worksheet)
+                if conn_obj:
+                    conn_dict = conn_obj.to_dict()
+                    target_entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
+
+        if not conn_dict:
+            QMessageBox.information(self, "Append to ReportPad", "This result does not have a connected analysis model.")
+            return
+
+        from .connect import ConnectedAnalysis
+        from .connect_report import generate_connected_report
+        conn = ConnectedAnalysis.from_dict(conn_dict)
+        report_text = generate_connected_report(conn, self.presenter.worksheet)
+
+        self.append_to_report_pad(report_text)
+        self.statusBar().showMessage(f"StatCraft Connect: Appended '{conn.title}' report to ReportPad", 6000)
+
+    def append_to_report_pad(self, text_or_entry):
+        if hasattr(self, "_workspace") and self._workspace:
+            if isinstance(text_or_entry, dict):
+                self._workspace.append(text_or_entry)
+            else:
+                from PySide6.QtGui import QTextCursor
+                pad = self._workspace.pad
+                old_text = pad.toPlainText()
+                cursor = pad.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                cursor.beginEditBlock()
+                cursor.insertText(('\n\n' + '─'*80 + '\n\n' if old_text else '') + str(text_or_entry))
+                cursor.endEditBlock()
+                pad.setTextCursor(cursor)
+                self._workspace.show_pad()
 
     def highlight_brushed_selection(self, rows=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])

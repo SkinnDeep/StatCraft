@@ -1190,6 +1190,33 @@ class RWorkbenchWidget(QWidget):
             self.viz_tabs.setCurrentWidget(self.plot_gallery)
         if result["success"]:
             for name, data in result["exported_worksheets"].items():
+                if name == "Bootstrap_Summary" and self._connected_analysis and self.presenter:
+                    try:
+                        metric_map = {}
+                        cols = data.get("columns", [])
+                        if len(cols) >= 2:
+                            for m, v in zip(cols[0]["values"], cols[1]["values"]):
+                                metric_map[str(m)] = v
+                        from .connect import ConnectedAnalysis
+                        from .connect_r import create_bootstrap_result_entry
+                        conn_obj = (
+                            ConnectedAnalysis.from_dict(self._connected_analysis)
+                            if isinstance(self._connected_analysis, dict)
+                            else self._connected_analysis
+                        )
+                        cand_pts = self.presenter.worksheet.metadata.get("candidate_points", []) if hasattr(self.presenter.worksheet, "metadata") else []
+                        cand_point = cand_pts[-1].get("factors", {}) if cand_pts else {}
+                        card_entry = create_bootstrap_result_entry(conn_obj, cand_point, metric_map)
+                        self.presenter.history.append(card_entry)
+                        if self.main_window and hasattr(self.main_window, "show_result"):
+                            self.main_window.show_result(card_entry)
+                        self.console_output.appendPlainText(
+                            f"\n[StatCraft Connect] Created Result Card: 'R Bootstrap Uncertainty: {conn_obj.response_name}'"
+                        )
+                    except Exception as exc:
+                        self.console_output.appendPlainText(f"[StatCraft Connect] Could not construct Bootstrap card: {exc}")
+                    continue
+
                 try:
                     sheet = Worksheet(self._job_view or name, [
                         Column(col["name"], col["kind"], col["values"]) for col in data["columns"]
