@@ -963,6 +963,68 @@ def create_connected_correlation(
     return connected
 
 
+def create_connected_histogram(
+    worksheet: Worksheet,
+    indices: List[int],
+    result: Dict[str, Any],
+    variant: str = "simple",
+    bins: Optional[int] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a Histogram procedure."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    valid_indices = [i for i in indices if 0 <= i < len(worksheet.columns)]
+    if not valid_indices:
+        valid_indices = list(range(min(1, len(worksheet.columns))))
+
+    cols = [worksheet.columns[i] for i in valid_indices]
+    col_ids = [c.metadata.get("id", f"col-{i}") for i, c in zip(valid_indices, cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    fingerprint = compute_data_fingerprint(worksheet, valid_indices)
+
+    names = [c.name for c in cols]
+    resp_name = names[0] if names else "Var1"
+    pred_names = names[1:] if len(names) > 1 else []
+
+    title_suffix = " with Fit" if variant in ("fit", "fit_groups") else ""
+    title = f"Histogram: {', '.join(names)}{title_suffix}"
+
+    from .connect_r import generate_r_histogram_script
+    r_script = generate_r_histogram_script(names, variant=variant, bins=bins)
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="histogram",
+        title=title,
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_ids[0] if col_ids else "",
+        response_name=resp_name,
+        predictor_col_ids=col_ids[1:] if len(col_ids) > 1 else [],
+        predictor_names=pred_names,
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={"variant": variant, "bins": bins},
+        fitted_values=[],
+        residuals=[],
+        r_script=r_script,
+        metadata={
+            "indices": valid_indices,
+            "column_names": names,
+            "variant": variant,
+            "bins": bins,
+        },
+    )
+    return connected
+
+
 def create_connected_descriptives(
     worksheet: Worksheet,
     indices: List[int],
@@ -1555,6 +1617,17 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
             missing=p.get("missing", "Pairwise"),
             confidence=p.get("confidence", 0.95),
         )
+    elif action in ("histogram_graphs", "histogram") or (action == "graph" and p.get("method") == "histogram"):
+        idx_list = p.get("response_indices") or p.get("indices")
+        if idx_list is None and "index" in p:
+            idx_list = [p["index"]]
+        if not idx_list:
+            idx_list = [0]
+        variant = p.get("variant", "fit" if "fit" in str(entry.get("title", "")).lower() else "simple")
+        conn = create_connected_histogram(worksheet, idx_list, res, variant=variant, bins=p.get("bins"))
+    elif res.get("graph") in ("histogram", "histogram_graphs"):
+        idx_list = p.get("response_indices") or p.get("indices") or [0]
+        conn = create_connected_histogram(worksheet, idx_list, res, variant=p.get("variant", "simple"), bins=p.get("bins"))
     elif action in ("describe_columns", "descriptive_statistics", "describe_column"):
         indices = p.get("indices")
         if indices is None and "index" in p:

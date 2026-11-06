@@ -1432,6 +1432,46 @@ def generate_generic_r_script(entry: Dict[str, Any], worksheet: "Worksheet") -> 
     return "\n".join(lines)
 
 
+def generate_r_histogram_script(
+    column_names: List[str],
+    variant: str = "fit",
+    bins: Optional[int] = None,
+) -> str:
+    """Generate Base R script for publication-grade Histogram with Fitted Normal Distribution."""
+    cols_quoted = ", ".join(json.dumps(c) for c in column_names)
+    breaks_arg = f"breaks = {bins}" if bins else 'breaks = "FD"'
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft : Histogram with Fitted Normal Distribution",
+        "# ==============================================================================",
+        f"cols <- c({cols_quoted})",
+        "",
+        "for (cn in cols) {",
+        "  x <- df[[cn]]",
+        "  x_clean <- x[!is.na(x)]",
+        "  n <- length(x_clean)",
+        "  m <- mean(x_clean)",
+        "  s <- sd(x_clean)",
+        "",
+        "  # Histogram with fitted normal curve",
+        f"  h <- hist(x_clean, {breaks_arg}, col = '#38bdf8', border = 'white', prob = TRUE,",
+        "            main = paste('Histogram of', cn, 'with Fitted Normal Distribution'),",
+        "            xlab = cn, ylab = 'Density')",
+        "",
+        "  if (!is.na(s) && s > 0) {",
+        "    x_seq <- seq(min(x_clean) - 0.5 * s, max(x_clean) + 0.5 * s, length.out = 200)",
+        "    lines(x_seq, dnorm(x_seq, mean = m, sd = s), col = '#dc2626', lwd = 2.5)",
+        "    legend('topright',",
+        "           legend = c('Normal Fit', sprintf('Mean = %.4f', m), sprintf('StDev = %.4f', s), sprintf('N = %d', n)),",
+        "           col = c('#dc2626', NA, NA, NA), lty = c(1, NA, NA, NA), lwd = c(2.5, NA, NA, NA),",
+        "           bty = 'n', cex = 0.85, inset = 0.02)",
+        "  }",
+        "  box()",
+        "}",
+    ]
+    return "\n".join(lines)
+
+
 def generate_dataframe_definition(worksheet: "Worksheet") -> str:
     """Generate clean, reproducible Base R code reconstructing the active worksheet as 'df'."""
     col_defs = []
@@ -1450,7 +1490,7 @@ def generate_dataframe_definition(worksheet: "Worksheet") -> str:
         f"# Worksheet: {worksheet.name} ({len(worksheet.columns)} columns, {worksheet.row_count} rows)\n"
         f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         "# ==============================================================================\n\n"
-        f"df <- data.frame(\n{body},\n  stringsAsFactors = FALSE\n)"
+        f"df <- data.frame(\n{body},\n  check.names = FALSE,\n  stringsAsFactors = FALSE\n)"
     )
 
 
@@ -1468,7 +1508,7 @@ def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
     """Generate reproducible Base R script with active worksheet data and smart automated exploratory statistical calculations."""
     df_def = generate_dataframe_definition(worksheet)
     eda_code = (
-        "\n\ncat('Active worksheet loaded into R as \'df\':\\n')\n"
+        '\n\ncat("Active worksheet loaded into R as \'df\':\\n")\n'
         "print(head(df))\n"
         "cat('\\nStructure of df:\\n')\n"
         "str(df)\n\n"
@@ -1502,10 +1542,29 @@ def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
         "      cat('--------------------------------------------------------------------------------\\n')\n"
         "    }\n"
         "  }\n\n"
+        "  # Individual Distribution Histograms with Normal Fit for Each Numeric Variable\n"
+        "  par(mfrow = c(min(2, ceiling(length(numeric_cols) / 2)), min(2, length(numeric_cols))))\n"
+        "  for (cn in numeric_cols) {\n"
+        "    x <- df[[cn]]\n"
+        "    x_clean <- x[!is.na(x)]\n"
+        "    if (length(x_clean) >= 2) {\n"
+        "      m <- mean(x_clean)\n"
+        "      s <- sd(x_clean)\n"
+        "      hist(x_clean, breaks = 'FD', col = '#38bdf8', border = 'white', prob = TRUE,\n"
+        "           main = paste('Histogram of', cn, 'with Normal Fit'), xlab = cn, ylab = 'Density')\n"
+        "      if (!is.na(s) && s > 0) {\n"
+        "        curve(dnorm(x, mean = m, sd = s), col = '#dc2626', lwd = 2, add = TRUE)\n"
+        "        legend('topright', legend = c('Normal Fit', sprintf('Mean = %.2f', m), sprintf('StDev = %.2f', s)),\n"
+        "               col = c('#dc2626', NA, NA), lty = c(1, NA, NA), lwd = c(2, NA, NA), bty = 'n', cex = 0.8)\n"
+        "      }\n"
+        "      box()\n"
+        "    }\n"
+        "  }\n"
+        "  par(mfrow = c(1, 1))\n\n"
         "  if (length(numeric_cols) >= 2) {\n"
         "    cat('\\nPairwise Pearson Correlation Matrix:\\n')\n"
         "    print(round(cor(df[numeric_cols], use = 'pairwise.complete.obs'), 4))\n"
-        "    pairs(df[numeric_cols], col = '#2563eb', pch = 19, main = 'Pairwise Scatterplot Matrix')\n"
+        "    # pairs(df[numeric_cols], col = '#2563eb', pch = 19, main = 'Pairwise Scatterplot Matrix')\n"
         "  }\n"
         "}\n\n"
         "if (length(cat_cols) > 0) {\n"
@@ -1563,7 +1622,7 @@ def generate_vroom_data_import_code(worksheet: "Worksheet") -> str:
         "# Ingestion Option C: Embedded Self-Contained Reproducible Tibble\n"
         "# ------------------------------------------------------------------------------\n"
         f"df <- tibble::tibble(\n{body}\n)\n\n"
-        "cat('Successfully loaded active worksheet data into tibble \'df\':\\n')\n"
+        'cat("Successfully loaded active worksheet data into tibble \'df\':\\n")\n'
         "print(head(df))\n"
     )
 
@@ -1599,7 +1658,46 @@ def generate_r_tidyverse_script(connected: "ConnectedAnalysis", worksheet: "Work
     all_cols = [connected.response_name] + connected.predictor_names if connected.response_name else connected.predictor_names
     col_str_literals = ", ".join(json.dumps(c) for c in all_cols)
 
-    if atype in ("descriptive_statistics", "describe_columns", "describe"):
+    if atype in ("histogram", "histogram_graphs"):
+        target_cols = connected.metadata.get("column_names") or ([connected.response_name] if connected.response_name else [c.name for c in worksheet.columns if c.kind == "number"][:1])
+        target_cols_json = ", ".join(json.dumps(c) for c in target_cols)
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# Modern ggplot2 Publication-Grade Histogram with Fitted Normal Distribution",
+            "# ------------------------------------------------------------------------------",
+            f"target_cols <- c({target_cols_json})",
+            "",
+            "for (cn in target_cols) {",
+            "  sub_df <- df %>% filter(!is.na(.data[[cn]]))",
+            "  m <- mean(sub_df[[cn]], na.rm = TRUE)",
+            "  s <- sd(sub_df[[cn]], na.rm = TRUE)",
+            "  n <- nrow(sub_df)",
+            "",
+            "  p_hist <- ggplot(sub_df, aes(x = .data[[cn]])) +",
+            "    geom_histogram(aes(y = after_stat(density)), bins = 20, fill = '#0284c7', color = 'white', alpha = 0.75) +",
+            "    geom_density(color = '#10b981', linewidth = 1.2, linetype = 'solid') +",
+            "    stat_function(",
+            "      fun = dnorm,",
+            "      args = list(mean = m, sd = s),",
+            "      color = '#dc2626', linewidth = 1.2, linetype = 'dashed'",
+            "    ) +",
+            "    labs(",
+            "      title = paste('Histogram of', cn, 'with Fitted Normal Distribution'),",
+            "      subtitle = sprintf('Mean = %.4f | StDev = %.4f | N = %d', m, s, n),",
+            "      x = cn,",
+            "      y = 'Density'",
+            "    ) +",
+            "    theme_minimal(base_size = 12) +",
+            "    theme(",
+            "      plot.title = element_text(face = 'bold', size = 13, color = '#0f172a'),",
+            "      plot.subtitle = element_text(color = '#475569', size = 10),",
+            "      panel.grid.minor = element_blank()",
+            "    )",
+            "",
+            "  print(p_hist)",
+            "}",
+        ])
+    elif atype in ("descriptive_statistics", "describe_columns", "describe"):
         lines.extend([
             "# ------------------------------------------------------------------------------",
             "# 1. Tidyverse Data Wrangling & Descriptive Summary Pipeline",

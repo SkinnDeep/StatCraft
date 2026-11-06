@@ -11,8 +11,14 @@ except ImportError:
     app = None
 
 from statcraft.model import Worksheet, Column
-from statcraft.connect import ConnectedAnalysis, create_connected_analysis_from_entry
-from statcraft.connect_r import generate_vroom_data_import_code, generate_r_tidyverse_script
+from statcraft.connect import ConnectedAnalysis, create_connected_analysis_from_entry, create_connected_histogram
+from statcraft.connect_r import (
+    generate_vroom_data_import_code,
+    generate_r_tidyverse_script,
+    generate_dataframe_init_code,
+    generate_r_histogram_script,
+    build_self_contained_r_script,
+)
 from statcraft.connect_hub import ViewRCodeDialog, StatCraftAnalysisBar
 from statcraft.modern_app import ModernWindow
 
@@ -31,6 +37,34 @@ class TestTidyverseAndVroom(unittest.TestCase):
         self.assertIn("tibble::tibble", code)
         self.assertIn('"Diameter" = c(10.1, 10.2', code)
         self.assertIn('"Machine" = c("M1", "M1"', code)
+
+    def test_dataframe_definition_check_names(self):
+        code = generate_dataframe_init_code(self.ws)
+        self.assertIn("check.names = FALSE", code)
+        self.assertIn('cat("Active worksheet loaded into R', code)
+        self.assertIn("hist(x_clean", code)
+
+    def test_histogram_connected_analysis(self):
+        entry = {
+            "title": "Histogram of Diameter with Fit",
+            "recipe": {"action": "graph", "parameters": {"method": "histogram", "indices": [0], "bins": 10, "variant": "fit"}},
+            "result": {"graph": "histogram"},
+        }
+        conn = create_connected_analysis_from_entry(entry, self.ws)
+        self.assertIsNotNone(conn)
+        self.assertEqual(conn.analysis_type, "histogram")
+
+        # Test Base R script
+        base_script = build_self_contained_r_script(conn.r_script, self.ws, conn.title)
+        self.assertIn("hist(x_clean", base_script)
+        self.assertIn("dnorm", base_script)
+        self.assertIn("check.names = FALSE", base_script)
+
+        # Test Tidyverse / ggplot2 script
+        tidy_script = generate_r_tidyverse_script(conn, self.ws)
+        self.assertIn("geom_histogram", tidy_script)
+        self.assertIn("stat_function(", tidy_script)
+        self.assertIn("fun = dnorm", tidy_script)
 
     def test_tidyverse_descriptives(self):
         entry = {
