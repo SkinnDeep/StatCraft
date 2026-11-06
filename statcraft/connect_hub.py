@@ -337,8 +337,8 @@ class ConnectBridgeWidget(QFrame):
             jmp_label = "📈 JMP Logistic"
         elif conn_obj.analysis_type in ("normal_capability", "process_capability", "capability"):
             jmp_label = "📈 JMP Capability"
-        elif conn_obj.analysis_type in ("individuals_moving_range", "imr_chart", "imr"):
-            jmp_label = "📈 JMP Control Chart"
+        elif conn_obj.analysis_type in ("individuals_moving_range", "imr_chart", "imr", "xbar_r", "xbar_s", "subgroup_control_chart"):
+            jmp_label = "📈 JMP Control Chart Builder"
         elif conn_obj.analysis_type in ("gage_rr", "gage_rr_crossed", "crossed_gage_rr"):
             jmp_label = "📈 JMP Variability Gauge"
         elif conn_obj.analysis_type == "correlation":

@@ -1373,6 +1373,91 @@ def create_connected_gage_rr(
     return connected
 
 
+def create_connected_subgroup_spc(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_index: Optional[int] = None,
+    subgroup_size: Optional[int] = None,
+    chart_type: str = "xbar_r",
+    result: Optional[Dict[str, Any]] = None,
+    stacked: bool = True,
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a subgroup SPC chart (Xbar-R / Xbar-S)."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+
+    res = result or {}
+    meas_col = worksheet.columns[response_index] if 0 <= response_index < len(worksheet.columns) else Column("Measurement", "number", [])
+    meas_id = meas_col.metadata.get("id", f"col-{response_index}")
+
+    pred_ids = []
+    pred_names = []
+    if factor_index is not None and 0 <= factor_index < len(worksheet.columns):
+        fac_col = worksheet.columns[factor_index]
+        pred_ids.append(fac_col.metadata.get("id", f"col-{factor_index}"))
+        pred_names.append(fac_col.name)
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = [
+        i for i in range(worksheet.row_count)
+        if i < len(meas_col.values) and meas_col.values[i] is not None and not (isinstance(meas_col.values[i], float) and math.isnan(meas_col.values[i]))
+    ]
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+    cols_to_hash = [response_index] if factor_index is None else [response_index, factor_index]
+    fingerprint = compute_data_fingerprint(worksheet, cols_to_hash)
+
+    stats = {
+        "xbar_center": res.get("xbar_center"),
+        "xbar_ucl": res.get("xbar_ucl"),
+        "xbar_lcl": res.get("xbar_lcl"),
+        "disp_center": res.get("disp_center"),
+        "disp_ucl": res.get("disp_ucl"),
+        "disp_lcl": res.get("disp_lcl"),
+        "within_stdev": res.get("within_stdev"),
+        "k_subgroups": res.get("k_subgroups"),
+    }
+
+    c_type = res.get("chart_type") or chart_type or "xbar_r"
+    chart_name = "Xbar-R Chart" if c_type == "xbar_r" else "Xbar-S Chart"
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type=c_type,
+        title=f"{chart_name}: {meas_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=meas_id,
+        response_name=meas_col.name,
+        predictor_col_ids=pred_ids,
+        predictor_names=pred_names,
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "response_index": response_index,
+            "factor_index": factor_index,
+            "subgroup_size": subgroup_size or res.get("subgroup_size"),
+            "chart_type": c_type,
+            "stacked": stacked,
+            "options": options or res.get("options", {}),
+        },
+    )
+
+    from .connect_r import generate_r_subgroup_spc_script
+    connected.r_script = generate_r_subgroup_spc_script(connected, worksheet)
+    return connected
+
+
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
     conn_raw = entry.get("connected_analysis")
@@ -1456,6 +1541,22 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
         conn = create_connected_gage_rr(
             worksheet, p["measurement_index"], p["part_index"], p["operator_index"], res, options=p.get("options")
         )
+    elif action in ("subgroup_control_chart", "xbar_r_chart", "xbar_s_chart", "xbar_r_stacked", "xbar_s_stacked", "xbar_r", "xbar_s"):
+        c_type = p.get("chart_type") or ("xbar_s" if "xbar_s" in action else "xbar_r")
+        resp_idx = p.get("response_index")
+        if resp_idx is None and "index" in p:
+            resp_idx = p["index"]
+        if resp_idx is not None:
+            conn = create_connected_subgroup_spc(
+                worksheet,
+                response_index=resp_idx,
+                factor_index=p.get("factor_index"),
+                subgroup_size=p.get("subgroup_size"),
+                chart_type=c_type,
+                result=res,
+                stacked=p.get("stacked", True),
+                options=p.get("options"),
+            )
 
     if conn is not None:
         entry["connected_analysis"] = conn.to_dict()

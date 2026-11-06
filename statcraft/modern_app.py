@@ -5716,6 +5716,10 @@ class ModernWindow(QMainWindow):
             self.imr_dialog()
         elif action in ("gage_rr", "gage_rr_crossed", "crossed_gage_rr"):
             self.gage_rr()
+        elif action in ("subgroup_control_chart", "xbar_r", "xbar_r_dialog", "xbar_r_stacked"):
+            self.xbar_r_dialog()
+        elif action in ("xbar_s", "xbar_s_dialog", "xbar_s_stacked"):
+            self.xbar_s_dialog()
         elif action == "fit_y_by_x":
             self.multiple_regression()
         elif action in ("describe_columns", "descriptive_statistics", "describe_column"):

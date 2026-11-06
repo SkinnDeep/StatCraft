@@ -1119,3 +1119,90 @@ def generate_r_gage_rr_script(connected: "ConnectedAnalysis", worksheet: "Worksh
         "par(mfrow = c(1, 1))",
     ])
     return "\n".join(lines)
+
+
+
+def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for Subgroup SPC (Xbar-R / Xbar-S) control charts."""
+    meas_col = connected.response_name
+    preds = connected.predictor_names
+    factor_col = preds[0] if preds else None
+    meta = connected.metadata or {}
+    chart_type = meta.get("chart_type", connected.analysis_type or "xbar_r")
+    is_r_chart = (chart_type == "xbar_r")
+    disp_label = "R Chart" if is_r_chart else "S Chart"
+    subgroup_size = meta.get("subgroup_size") or 5
+
+    stats = connected.statistics or {}
+    xb_c = stats.get("xbar_center", 0.0)
+    xb_u = stats.get("xbar_ucl", 0.0)
+    xb_l = stats.get("xbar_lcl", 0.0)
+    dp_c = stats.get("disp_center", 0.0)
+    dp_u = stats.get("disp_ucl", 0.0)
+    dp_l = stats.get("disp_lcl", 0.0)
+
+    lines = [
+        "# ==============================================================================",
+        f"# StatCraft Connect — R Translation (Subgroup SPC: {disp_label})",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Subgroup Aggregation in Base R",
+    ]
+
+    if factor_col:
+        lines.extend([
+            f"groups <- split(df[[{json.dumps(meas_col)}]], df[[{json.dumps(factor_col)}]])",
+            "# Filter out empty subgroups if any",
+            "groups <- groups[sapply(groups, length) > 0]",
+        ])
+    else:
+        lines.extend([
+            f"meas <- df[[{json.dumps(meas_col)}]]",
+            "meas <- meas[!is.na(meas)]",
+            f"sz <- {int(subgroup_size)}",
+            "sg_id <- rep(seq_len(ceiling(length(meas) / sz)), each = sz, length.out = length(meas))",
+            "groups <- split(meas, sg_id)",
+        ])
+
+    lines.extend([
+        "subgroup_means <- sapply(groups, mean, na.rm = TRUE)",
+    ])
+
+    if is_r_chart:
+        lines.append("subgroup_disp <- sapply(groups, function(v) { r <- range(v, na.rm = TRUE); r[2] - r[1] })")
+    else:
+        lines.append("subgroup_disp <- sapply(groups, sd, na.rm = TRUE)")
+
+    lines.extend([
+        "",
+        "# 2. Summary Statistics",
+        "cat('================================================================\n')",
+        f"cat('        StatCraft Connect : {disp_label} Control Chart Summary   \n')",
+        "cat('================================================================\n\n')",
+        f"cat(sprintf('X-bar Center: %.4f | UCL: %.4f | LCL: %.4f\n', {xb_c}, {xb_u}, {xb_l}))",
+        f"cat(sprintf('{disp_label} Center: %.4f | UCL: %.4f | LCL: %.4f\n', {dp_c}, {dp_u}, {dp_l}))",
+        "",
+        "# 3. Two-Panel Control Chart",
+        "par(mfrow = c(2, 1))",
+        "",
+        "# Panel 1: X-bar Chart",
+        f"plot(subgroup_means, type = 'b', pch = 19, col = '#2563eb', main = 'X-bar Chart for {meas_col}', ylab = 'Subgroup Mean', xlab = 'Subgroup')",
+        f"abline(h = {xb_c}, col = '#10b981', lwd = 2)",
+        f"abline(h = {xb_u}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {xb_l}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(subgroup_means), {xb_u}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(subgroup_means), {xb_l}, 'LCL', pos = 4, col = '#ef4444')",
+        "",
+        f"# Panel 2: {disp_label}",
+        f"plot(subgroup_disp, type = 'b', pch = 19, col = '#8b5cf6', main = '{disp_label} for {meas_col}', ylab = '{disp_label}', xlab = 'Subgroup')",
+        f"abline(h = {dp_c}, col = '#10b981', lwd = 2)",
+        f"abline(h = {dp_u}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"abline(h = {dp_l}, col = '#ef4444', lwd = 2, lty = 2)",
+        f"text(length(subgroup_disp), {dp_u}, 'UCL', pos = 4, col = '#ef4444')",
+        f"text(length(subgroup_disp), {dp_l}, 'LCL', pos = 4, col = '#ef4444')",
+        "par(mfrow = c(1, 1))",
+    ])
+    return "\n".join(lines)
