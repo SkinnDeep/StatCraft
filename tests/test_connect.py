@@ -462,6 +462,30 @@ class TestStatCraftConnect(unittest.TestCase):
         is_connect = bool(reg_entry.get("connected_analysis") or reg_entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
         self.assertTrue(is_connect)
 
+    def test_connect_hub_and_sample_dataset(self):
+        from statcraft.app import Presenter
+        from statcraft.connect_hub import create_chemical_process_sample
+        from statcraft.connect import check_analysis_freshness, ConnectedAnalysis, create_connected_regression
+
+        ws = create_chemical_process_sample()
+        self.assertEqual(ws.name, "Chemical_Process")
+        self.assertEqual(len(ws.columns), 4)
+        self.assertEqual(ws.row_count, 25)
+        self.assertIn("id", ws.metadata)
+        self.assertEqual(len(ws.metadata["row_ids"]), 25)
+
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.multiple_regression(0, [1, 2])
+        self.assertIn("r_squared", entry["result"])
+        self.assertGreater(entry["result"]["r_squared"], 0.85)
+
+        conn = create_connected_regression(ws, 0, [1, 2], entry["result"], 0.95)
+        self.assertEqual(conn.response_name, "Yield")
+        self.assertEqual(conn.predictor_names, ["Temperature", "Pressure"])
+        status, msg = check_analysis_freshness(conn, ws)
+        self.assertEqual(status, "current")
+
 
 if __name__ == "__main__":
     unittest.main()

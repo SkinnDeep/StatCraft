@@ -57,7 +57,7 @@ def selector(key, title, multiple=False, minimum=1, maximum=None, kinds=("number
 
 class WelcomeWatermarkWidget(QWidget):
     """Statistical `#e6e6e6` output-pane watermark with centered title, mark, and shortcut table."""
-    def __init__(self, on_open, on_new_project, on_new_worksheet, parent=None):
+    def __init__(self, on_open, on_new_project, on_new_worksheet, on_try_connect=None, on_overview=None, parent=None):
         super().__init__(parent)
         self.setObjectName("welcomeStage")
         outer = QVBoxLayout(self)
@@ -68,10 +68,15 @@ class WelcomeWatermarkWidget(QWidget):
         center.setObjectName("welcomeCard")
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(10)
+        center_layout.setSpacing(8)
 
         logo = WelcomeLogoBanner()
         center_layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        tagline = QLabel("Unified statistical platform bridging Minitab quality procedures, JMP interactive visuals, and R Workbench.")
+        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tagline.setStyleSheet("color: #64748b; font-size: 8.5pt; font-style: italic; padding-bottom: 4px;")
+        center_layout.addWidget(tagline)
 
         shortcuts = QWidget()
         grid = QGridLayout(shortcuts)
@@ -79,7 +84,9 @@ class WelcomeWatermarkWidget(QWidget):
         grid.setHorizontalSpacing(22)
         grid.setVerticalSpacing(6)
         rows = [
-            ("Open", "Ctrl+O", on_open),
+            ("Try StatCraft Connect", "Chemical Yield Sample", on_try_connect),
+            ("What is Connect?", "Architecture Guide", on_overview),
+            ("Open Project", "Ctrl+O", on_open),
             ("New Project", "Ctrl+Shift+N", on_new_project),
             ("New Worksheet", "Ctrl+N", on_new_worksheet),
         ]
@@ -1268,6 +1275,21 @@ class ModernWindow(QMainWindow):
         self._action(multivar, "Cluster &Observations...", self.cluster_observations_dialog, None, None, True)
         self._action(multivar, "Cluster &K-Means...", self.cluster_kmeans_dialog, None, None, True)
         self._action(multivar, "Cluster &Variables...", self.cluster_variables_dialog, None, None, True)
+
+        # 5f. StatCraft Connect Flagship Menu
+        connect_menu = bar.addMenu("&Connect")
+        self._action(connect_menu, "What is StatCraft Connect?…", self.show_connect_overview, None, "connect")
+        self._action(connect_menu, "Try Connect Sample Project (Chemical Yield)…", self.load_connect_sample, None, "new_project")
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Open in Statistical Dialog (Minitab Mode)…", lambda: self.connect_open_dialog(self.selected_entry) if self.selected_entry else None, None, None, True)
+        self._action(connect_menu, "Open in Interactive Explorer (JMP Mode)…", lambda: self.connect_open_explorer(self.selected_entry) if self.selected_entry else self.prediction_profiler(), None, None, True)
+        self._action(connect_menu, "Open in R Workbench (R Mode)…", lambda: self.connect_open_in_r(self.selected_entry) if self.selected_entry else None, None, None, True)
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Compare StatCraft vs R Execution…", lambda: self.connect_compare_implementations(self.selected_entry) if self.selected_entry else None, None, None, True)
+        self._action(connect_menu, "Apply Predictions & Residuals to Worksheet…", lambda: self.connect_apply_predictions(self.selected_entry) if self.selected_entry else None, None, None, True)
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(self.selected_entry) if self.selected_entry else None, None, "workflow", True)
+        self._action(connect_menu, "Replay Saved Workflow on Another Sheet…", self.replay_saved_workflow_dialog, None, "workflow", True)
         multivar.addSeparator()
         self._action(multivar, "&Discriminant Analysis...", self.discriminant_analysis_dialog, None, None, True)
         self._action(multivar, "&Simple Correspondence Analysis...", self.simple_correspondence_dialog, None, None, True)
@@ -4603,7 +4625,7 @@ class ModernWindow(QMainWindow):
         self.result_tabs.tabBar().setVisible(False)
         if hasattr(self, "tab_corner_widget"):
             self.tab_corner_widget.setVisible(False)
-        welcome = WelcomeWatermarkWidget(self.open_document, self.new_document, self.new_worksheet)
+        welcome = WelcomeWatermarkWidget(self.open_document, self.new_document, self.new_worksheet, on_try_connect=self.load_connect_sample, on_overview=self.show_connect_overview)
         self.result_tabs.addTab(welcome, "Session")
         if hasattr(self,"_workspace"):self._workspace.rebuild()
         self.result_title.setText("Session output")
@@ -4750,52 +4772,9 @@ class ModernWindow(QMainWindow):
                 conn_dict = None
 
         if conn_dict:
-            from .connect import ConnectedAnalysis, check_analysis_freshness
-            conn_obj = ConnectedAnalysis.from_dict(conn_dict)
-            status, status_msg = check_analysis_freshness(conn_obj, self.presenter.worksheet)
-
-            # Build a quiet, single-row action strip beside the heading
-            hdr_strip = QHBoxLayout()
-            hdr_strip.setContentsMargins(0, 0, 0, 4)
-            hdr_strip.setSpacing(8)
-
-            if status != "current":
-                warn_badge = QLabel("Data Modified Since Fit" if status == "stale" else "Column Missing")
-                warn_color = "#f59e0b" if status == "stale" else "#ef4444"
-                warn_badge.setStyleSheet(f"color: {warn_color}; font-size: 8.5pt; font-weight: 600; padding: 2px 6px; border: 1px solid {warn_color}; border-radius: 3px;")
-                warn_badge.setToolTip(status_msg)
-                hdr_strip.addWidget(warn_badge)
-
-            hdr_strip.addStretch(1)
-
-            btn_open = QToolButton()
-            btn_open.setText("Open in… ▾")
-            btn_open.setToolTip("Continue analysis in Interactive Explorer (JMP) or R Workbench")
-            is_dark = getattr(self, "_dark_mode", False)
-            btn_open.setStyleSheet(
-                "QToolButton { background: #27272a; color: #38bdf8; border: 1px solid #3f3f46; border-radius: 4px; padding: 3px 10px; font-weight: 600; font-size: 8.5pt; }"
-                "QToolButton:hover { background: #3f3f46; border-color: #0284c7; }"
-                if is_dark else
-                "QToolButton { background: #f8fafc; color: #0284c7; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 10px; font-weight: 600; font-size: 8.5pt; }"
-                "QToolButton:hover { background: #e0f2fe; border-color: #0284c7; }"
-            )
-            btn_open.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            open_menu = QMenu(btn_open)
-            open_menu.addAction("Statistical Dialog (Minitab)", lambda e=entry: self.connect_open_dialog(e))
-            open_menu.addAction("Interactive Explorer (JMP)", lambda e=entry: self.connect_open_explorer(e))
-            if recipe_act in ("multiple_regression", "analyze_response_surface"):
-                open_menu.addAction("Contour Plot (Response Surface)", lambda e=entry: self.connect_open_contour(e))
-                open_menu.addAction("3D Surface Plot", lambda e=entry: self.connect_open_surface(e))
-            open_menu.addAction("R Workbench", lambda e=entry: self.connect_open_in_r(e))
-            if recipe_act == "analyze_response_surface":
-                open_menu.addAction("R Bootstrap Uncertainty Script", lambda e=entry: self.connect_open_r_bootstrap(e))
-            open_menu.addSeparator()
-            open_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda e=entry: self.connect_apply_predictions(e))
-            open_menu.addAction("Compare Implementations (StatCraft vs R)", lambda e=entry: self.connect_compare_implementations(e))
-            btn_open.setMenu(open_menu)
-            hdr_strip.addWidget(btn_open)
-
-            layout.addLayout(hdr_strip)
+            from .connect_hub import ConnectBridgeWidget
+            bridge = ConnectBridgeWidget(self, entry, conn_dict)
+            layout.addWidget(bridge)
         rendered = set()
         if result.get("analysis") == "cross_correlation":
             layout.addWidget(label("Cross Correlations", "sectionHeading"))
@@ -5696,6 +5675,22 @@ class ModernWindow(QMainWindow):
         elif action == "analyze_response_surface":
             self.set_ui_mode("minitab")
             self.analyze_surface_dialog()
+
+    def show_connect_overview(self):
+        from .connect_hub import ConnectOverviewDialog
+        dlg = ConnectOverviewDialog(self)
+        dlg.exec()
+
+    def load_connect_sample(self):
+        from .connect_hub import create_chemical_process_sample
+        ws = create_chemical_process_sample()
+        self.presenter.worksheet = ws
+        self._prepare_blank()
+        self.refresh()
+        entry = self._call(lambda: self.presenter.multiple_regression(0, [1, 2]), result=True)
+        if entry:
+            self.show_result(entry)
+            self.statusBar().showMessage("StatCraft Connect: Chemical Process sample loaded. Model bridge is active!", 8000)
 
     def connect_open_explorer(self, entry):
         from .connect_explorer import open_interactive_explorer
