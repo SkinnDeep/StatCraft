@@ -1587,6 +1587,23 @@ class ModernWindow(QMainWindow):
             self.work_stack.setCurrentIndex(1 if mode == "r" else 0)
             if mode == "r" and hasattr(self, "r_workbench") and self.r_workbench:
                 self.r_workbench.set_dark_mode(is_dark)
+                self.r_workbench.sync_active_worksheet_to_r()
+                target_entry = self.selected_entry or (self.presenter.history[-1] if hasattr(self, "presenter") and getattr(self.presenter, "history", None) else None)
+                if target_entry:
+                    conn_dict = target_entry.get("connected_analysis")
+                    if not conn_dict:
+                        from .connect import create_connected_analysis_from_entry
+                        try:
+                            conn_obj = create_connected_analysis_from_entry(target_entry, self.presenter.worksheet)
+                            if conn_obj:
+                                conn_dict = conn_obj.to_dict()
+                                target_entry["connected_analysis"] = conn_dict
+                        except Exception:
+                            conn_dict = None
+                    if conn_dict and conn_dict.get("r_script"):
+                        self.r_workbench.load_connected_analysis(conn_dict)
+                        if hasattr(self, "statusBar") and self.statusBar():
+                            self.statusBar().showMessage(f"StatCraft Connect: Translated '{conn_dict.get('title', 'Analysis')}' to Base R", 5000)
                 self.r_workbench.refresh_environment()
 
         if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
