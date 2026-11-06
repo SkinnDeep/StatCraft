@@ -1495,10 +1495,12 @@ class ModernWindow(QMainWindow):
 
         self._update_mode_button_styles()
 
+        self.btn_mode_minitab.setVisible(False)
+        self.btn_mode_jmp.setVisible(False)
+        self.btn_mode_r.setVisible(False)
         mode_layout.addWidget(self.btn_mode_minitab)
         mode_layout.addWidget(self.btn_mode_jmp)
         mode_layout.addWidget(self.btn_mode_r)
-        mode_layout.addSpacing(6)
         mode_layout.addWidget(self.btn_theme_toggle)
         toolbar.addWidget(mode_box)
 
