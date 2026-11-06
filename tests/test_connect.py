@@ -437,6 +437,8 @@ class TestStatCraftConnect(unittest.TestCase):
         from statcraft.app import Presenter
         from statcraft.modern_worksheet import WorksheetHeaderView
         from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
 
         ws = Worksheet("FormulaData", [
             Column("X", "number", [1.0, 2.0, 3.0]),

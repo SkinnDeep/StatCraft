@@ -1278,18 +1278,7 @@ class ModernWindow(QMainWindow):
 
         # 5f. StatCraft Connect Flagship Menu
         connect_menu = bar.addMenu("&Connect")
-        self._action(connect_menu, "What is StatCraft Connect?…", self.show_connect_overview, None, "connect")
-        self._action(connect_menu, "Try Connect Sample Project (Chemical Yield)…", self.load_connect_sample, None, "new_project")
-        connect_menu.addSeparator()
-        self._action(connect_menu, "Open in Statistical Dialog (Minitab Mode)…", lambda: self.connect_open_dialog(self.selected_entry) if self.selected_entry else None, None, None, True)
-        self._action(connect_menu, "Open in Interactive Explorer (JMP Mode)…", lambda: self.connect_open_explorer(self.selected_entry) if self.selected_entry else self.prediction_profiler(), None, None, True)
-        self._action(connect_menu, "Open in R Workbench (R Mode)…", lambda: self.connect_open_in_r(self.selected_entry) if self.selected_entry else None, None, None, True)
-        connect_menu.addSeparator()
-        self._action(connect_menu, "Compare StatCraft vs R Execution…", lambda: self.connect_compare_implementations(self.selected_entry) if self.selected_entry else None, None, None, True)
-        self._action(connect_menu, "Apply Predictions & Residuals to Worksheet…", lambda: self.connect_apply_predictions(self.selected_entry) if self.selected_entry else None, None, None, True)
-        connect_menu.addSeparator()
-        self._action(connect_menu, "Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(self.selected_entry) if self.selected_entry else None, None, "workflow", True)
-        self._action(connect_menu, "Replay Saved Workflow on Another Sheet…", self.replay_saved_workflow_dialog, None, "workflow", True)
+        self._populate_connect_menu(connect_menu)
         multivar.addSeparator()
         self._action(multivar, "&Discriminant Analysis...", self.discriminant_analysis_dialog, None, None, True)
         self._action(multivar, "&Simple Correspondence Analysis...", self.simple_correspondence_dialog, None, None, True)
@@ -5662,15 +5651,44 @@ class ModernWindow(QMainWindow):
             menu.addAction('Rerun with Current Data',lambda:self._call(lambda:self.presenter.rerun_result(target_entry),result=True))
         return menu
 
+    def _populate_connect_menu(self, connect_menu):
+        self._action(connect_menu, "What is StatCraft Connect?…", self.show_connect_overview, None, "connect")
+        self._action(connect_menu, "Try Connect Sample Project (Chemical Yield)…", self.load_connect_sample, None, "new_project")
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Open in Statistical Dialog (Minitab Mode)…", lambda: self.connect_open_dialog(self.selected_entry) if self.selected_entry else None, None, None, True)
+        self._action(connect_menu, "Open in Interactive Explorer (JMP Mode)…", lambda: self.connect_open_explorer(self.selected_entry) if self.selected_entry else self.prediction_profiler(), None, None, True)
+        self._action(connect_menu, "Open in R Workbench (R Mode)…", lambda: self.connect_open_in_r(self.selected_entry) if self.selected_entry else None, None, None, True)
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Compare StatCraft vs R Execution…", lambda: self.connect_compare_implementations(self.selected_entry) if self.selected_entry else None, None, None, True)
+        self._action(connect_menu, "Apply Predictions & Residuals to Worksheet…", lambda: self.connect_apply_predictions(self.selected_entry) if self.selected_entry else None, None, None, True)
+        connect_menu.addSeparator()
+        self._action(connect_menu, "Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(self.selected_entry) if self.selected_entry else None, None, "workflow", True)
+        self._action(connect_menu, "Replay Saved Workflow on Another Sheet…", self.replay_saved_workflow_dialog, None, "workflow", True)
+
+    def multiple_regression_dialog(self):
+        return self.multiple_regression()
+
+    def analyze_surface_dialog(self):
+        return self.analyze_response_surface()
+
     def connect_open_dialog(self, entry):
+        if not entry:
+            return
         recipe = entry.get("recipe", {})
         action = recipe.get("action")
+        self.set_ui_mode("minitab")
         if action == "multiple_regression":
-            self.set_ui_mode("minitab")
-            self.multiple_regression_dialog()
+            self.multiple_regression()
         elif action == "analyze_response_surface":
-            self.set_ui_mode("minitab")
-            self.analyze_surface_dialog()
+            self.analyze_response_surface()
+        elif action in ("one_way_anova", "stacked_anova"):
+            self.oneway_anova_dialog()
+        elif action == "fit_y_by_x":
+            self.multiple_regression()
+        elif action == "describe_columns":
+            self.describe()
+        else:
+            self.statusBar().showMessage(f"Switched to Minitab Mode for procedure '{action}'.", 5000)
 
     def show_connect_overview(self):
         from .connect_hub import ConnectOverviewDialog
@@ -5766,6 +5784,10 @@ class ModernWindow(QMainWindow):
             self.set_ui_mode("r")
             self.r_workbench.load_connected_analysis(conn_dict)
             self.statusBar().showMessage("StatCraft Connect: Model transferred to R Workbench", 5000)
+        elif self.r_workbench:
+            self.set_ui_mode("r")
+            self.r_workbench.sync_active_worksheet_to_r()
+            self.statusBar().showMessage("StatCraft Connect: Active worksheet synchronized into R as 'df'", 5000)
 
     def connect_apply_predictions(self, entry):
         conn_dict = entry.get("connected_analysis")

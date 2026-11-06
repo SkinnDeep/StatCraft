@@ -790,6 +790,11 @@ def populate_jmp_menubar(win: ModernWindow, bar: QMenuBar) -> QMenuBar:
     _act(graph_m, "Histogram…", lambda: win.graph("histogram"))
     _act(graph_m, "Time Series Plot…", lambda: win.graph("time_series"))
 
+    # 7b. CONNECT FLAGSHIP MENU
+    if hasattr(win, "_populate_connect_menu"):
+        connect_m = bar.addMenu("&Connect")
+        win._populate_connect_menu(connect_m)
+
     # 8. TOOLS
     tools_m = bar.addMenu("&Tools")
     _act(tools_m, "Calculator…", win.calculator)

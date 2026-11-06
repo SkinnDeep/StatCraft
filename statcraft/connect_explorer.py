@@ -1,6 +1,6 @@
 """StatCraft Connect — Interactive Explorer Adapter.
 
-Connects fitted regression and response surface models directly to JMP-style
+Connects fitted regression, ANOVA, and response surface models directly to JMP-style
 interactive visual platforms (Bivariate / Fit Y by X and Prediction Profiler)
 without refitting or losing variable roles.
 """
@@ -16,21 +16,94 @@ if TYPE_CHECKING:
 
 def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> bool:
     """Open the fitted analysis in the appropriate interactive visual explorer."""
-    connected: Optional["ConnectedAnalysis"] = entry.get("connected_analysis")
+    connected_raw = entry.get("connected_analysis")
     result = entry.get("result", {})
     recipe = entry.get("recipe", {})
 
-    if not connected and not recipe:
+    if not connected_raw and not recipe:
+        window.statusBar().showMessage("Select a statistical result card before opening Interactive Explorer.", 6000)
         return False
 
+    connected: Optional["ConnectedAnalysis"] = None
+    if isinstance(connected_raw, dict):
+        from .connect import ConnectedAnalysis
+        try:
+            connected = ConnectedAnalysis.from_dict(connected_raw)
+        except Exception:
+            connected = None
+    elif hasattr(connected_raw, "response_name"):
+        connected = connected_raw
+
+    ws = window.presenter.worksheet
+
+    # If connected is missing, attempt to construct it from recipe
+    if not connected and recipe:
+        act = recipe.get("action")
+        p = recipe.get("parameters", {})
+        if act == "multiple_regression" and "response_index" in p:
+            from .connect import create_connected_regression
+            try:
+                connected = create_connected_regression(
+                    ws, p["response_index"], p["predictor_indices"],
+                    result, p.get("confidence", 0.95)
+                )
+                entry["connected_analysis"] = connected.to_dict()
+            except Exception:
+                connected = None
+        elif act == "analyze_response_surface" and "response_index" in p:
+            from .connect import create_connected_response_surface
+            conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
+            try:
+                connected = create_connected_response_surface(
+                    ws, p["response_index"], p["factor_indices"],
+                    result, conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
+                )
+                entry["connected_analysis"] = connected.to_dict()
+            except Exception:
+                connected = None
+
+    action = recipe.get("action") or (connected.analysis_type if connected else "")
+    p_params = recipe.get("parameters", {})
+
+    # Route 1: One-Way ANOVA -> JMP Oneway Platform (Fit Y by X)
+    if action == "one_way_anova" and "response_index" in p_params:
+        y_idx = p_params["response_index"]
+        x_idx = p_params.get("factor_index")
+        if x_idx is not None and 0 <= y_idx < len(ws.columns) and 0 <= x_idx < len(ws.columns):
+            window.set_ui_mode("jmp")
+            fit_entry = window._call(
+                lambda: window.presenter.fit_y_by_x(y_index=y_idx, x_index=x_idx),
+                result=True
+            )
+            if fit_entry:
+                window.show_result(fit_entry)
+                window.statusBar().showMessage(
+                    f"StatCraft Connect: Opened JMP Oneway Platform for {ws.columns[y_idx].name} by {ws.columns[x_idx].name}",
+                    6000
+                )
+                return True
+
+    # Route 2: Existing Fit Y by X -> Switch to JMP and display
+    if action == "fit_y_by_x":
+        window.set_ui_mode("jmp")
+        window.show_result(entry)
+        window.statusBar().showMessage("StatCraft Connect: Active JMP Fit Y by X Platform", 5000)
+        return True
+
+    # Resolve Response and Predictor names safely
     resp_name = connected.response_name if connected else result.get("response_name")
     pred_names = connected.predictor_names if connected else (
         result.get("factor_information") or result.get("variables", [])
     )
     if isinstance(pred_names, list) and pred_names and isinstance(pred_names[0], dict):
-        pred_names = [f.get("name") for f in pred_names]
+        pred_names = [f.get("name") for f in pred_names if isinstance(f, dict)]
 
-    ws = window.presenter.worksheet
+    # Fallback to parameters if names are not resolved
+    if not resp_name and "response_index" in p_params and 0 <= p_params["response_index"] < len(ws.columns):
+        resp_name = ws.columns[p_params["response_index"]].name
+    if not pred_names:
+        idx_list = p_params.get("predictor_indices") or p_params.get("factor_indices") or []
+        pred_names = [ws.columns[i].name for i in idx_list if 0 <= i < len(ws.columns)]
 
     # Find current column indices for response and predictors
     resp_idx = None
@@ -43,15 +116,13 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
             pred_indices.append(i)
 
     if resp_idx is None or not pred_indices:
-        window.statusBar().showMessage("Cannot open explorer: one or more model columns not found.", 8000)
+        window.statusBar().showMessage("Cannot open explorer: one or more model columns not found in active worksheet.", 8000)
         return False
 
-    action = recipe.get("action") or (connected.analysis_type if connected else "")
-
-    # Single continuous predictor for simple regression -> Open JMP Fit Y by X Bivariate Platform
+    # Route 3: Single continuous predictor for regression -> Open JMP Fit Y by X Bivariate Platform
     if action == "multiple_regression" and len(pred_indices) == 1:
         x_idx = pred_indices[0]
-        conf = connected.confidence if connected else recipe.get("parameters", {}).get("confidence", 0.95)
+        conf = connected.confidence if connected else p_params.get("confidence", 0.95)
         fit_entry = window._call(
             lambda: window.presenter.fit_y_by_x(y_index=resp_idx, x_index=x_idx, confidence=conf),
             result=True
@@ -62,7 +133,7 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
             window.statusBar().showMessage(f"StatCraft Connect: Opened Bivariate Fit for {resp_name} vs {pred_names[0]}", 6000)
             return True
 
-    # Multiple predictors or Response Surface -> Open JMP-style Interactive Prediction Profiler
+    # Route 4: Multiple predictors or Response Surface -> Open JMP Interactive Prediction Profiler
     model_recipe = copy.deepcopy(recipe)
     if not model_recipe and connected:
         if connected.analysis_type == "analyze_response_surface":
@@ -86,7 +157,10 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
                 }
             }
 
+    window.set_ui_mode("jmp")
     from .prediction_profiler_dialog import PredictionProfilerDialog
     dialog = PredictionProfilerDialog(window, ws, [model_recipe])
+    dialog.setSizeGripEnabled(True)
+    window._active_profiler_dialog = dialog
     dialog.exec()
     return True

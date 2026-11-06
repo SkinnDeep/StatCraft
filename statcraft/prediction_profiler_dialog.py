@@ -78,13 +78,18 @@ class ProfilerCellWidget(QWidget):
 
         rect = self._plot_rect()
 
+        is_dark = getattr(self.dialog, "_is_dark", False) if hasattr(self, "dialog") else False
+        bg_col = QColor("#1f1f23" if is_dark else "#ffffff")
+        border_col = QColor("#27272a" if is_dark else "#e2e8f0")
+        grid_col = QColor("#27272a" if is_dark else "#f1f5f9")
+
         # Background
-        painter.fillRect(rect, QBrush(QColor("#ffffff")))
-        painter.setPen(QPen(QColor("#e2e8f0"), 1))
+        painter.fillRect(rect, QBrush(bg_col))
+        painter.setPen(QPen(border_col, 1))
         painter.drawRect(rect)
 
         # Subtle grid lines
-        painter.setPen(QPen(QColor("#f1f5f9"), 1, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(grid_col, 1, Qt.PenStyle.DashLine))
         y_mid = (self.y_min + self.y_max) / 2.0
         p_mid_l = self._val_to_pixel(self.factor.min_val, y_mid, rect)
         p_mid_r = self._val_to_pixel(self.factor.max_val, y_mid, rect)
@@ -196,6 +201,8 @@ class PredictionProfilerDialog(QDialog):
 
         self.setWindowTitle("StatCraft Interactive Prediction Profiler (JMP Compatibility Suite)")
         self.resize(880, 580)
+        self.setSizeGripEnabled(True)
+        self._is_dark = getattr(parent, "_dark_mode", False) if parent else False
 
         # Extract factors & responses
         self.factors, self.responses = extract_profiler_specs(self.worksheet, self.model_recipes)
@@ -210,38 +217,72 @@ class PredictionProfilerDialog(QDialog):
         self.refresh_profiler()
 
     def _build_ui(self):
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #f8fafc;
-                color: #0f172a;
-            }
-            QLabel {
-                color: #0f172a;
-            }
-            QWidget#profilerContainer {
-                background-color: #ffffff;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-            }
-            QDoubleSpinBox, QComboBox {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 4px;
-                padding: 3px 6px;
-            }
-            QPushButton {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 4px;
-                padding: 4px 10px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #f1f5f9;
-            }
-        """)
+        if self._is_dark:
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #18181b;
+                    color: #f4f4f5;
+                }
+                QLabel {
+                    color: #f4f4f5;
+                }
+                QWidget#profilerContainer {
+                    background-color: #1f1f23;
+                    border: 1px solid #27272a;
+                    border-radius: 6px;
+                }
+                QDoubleSpinBox, QComboBox {
+                    background-color: #27272a;
+                    color: #f4f4f5;
+                    border: 1px solid #3f3f46;
+                    border-radius: 4px;
+                    padding: 3px 6px;
+                }
+                QPushButton {
+                    background-color: #27272a;
+                    color: #f4f4f5;
+                    border: 1px solid #3f3f46;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #3f3f46;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #f8fafc;
+                    color: #0f172a;
+                }
+                QLabel {
+                    color: #0f172a;
+                }
+                QWidget#profilerContainer {
+                    background-color: #ffffff;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                }
+                QDoubleSpinBox, QComboBox {
+                    background-color: #ffffff;
+                    color: #0f172a;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 4px;
+                    padding: 3px 6px;
+                }
+                QPushButton {
+                    background-color: #ffffff;
+                    color: #0f172a;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #f1f5f9;
+                }
+            """)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)

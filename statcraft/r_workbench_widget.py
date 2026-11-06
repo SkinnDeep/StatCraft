@@ -674,6 +674,11 @@ class RWorkbenchWidget(QWidget):
         self.btn_view_df.clicked.connect(self.open_data_viewer_tab)
         hdr_layout.addWidget(self.btn_view_df)
 
+        self.btn_sync_df = QPushButton("📥 Sync Data (df)")
+        self.btn_sync_df.setToolTip("Export current StatCraft worksheet into R session as 'df' and 'worksheet'")
+        self.btn_sync_df.clicked.connect(lambda: self.sync_active_worksheet_to_r())
+        hdr_layout.addWidget(self.btn_sync_df)
+
         self.btn_templates = QPushButton("Examples ▾")
         self.btn_templates.clicked.connect(self._show_templates_menu)
         hdr_layout.addWidget(self.btn_templates)
@@ -1062,6 +1067,18 @@ class RWorkbenchWidget(QWidget):
             self._history_idx -= 1
         self.repl_input.setText(self._history[self._history_idx])
 
+    def sync_active_worksheet_to_r(self, silent: bool = False) -> None:
+        """Actively export and bind the current worksheet into the running R session as 'df' and 'worksheet'."""
+        ws = getattr(self.presenter, "worksheet", None) if self.presenter else None
+        if not ws:
+            return
+        self._source = None
+        self._execute_r(
+            f"# [StatCraft Connect: Active worksheet '{ws.name}' ({ws.row_count} rows, {len(ws.columns)} cols) synchronized]\n"
+            f"cat('[StatCraft Connect] df ready: ', nrow(df), ' observations, ', ncol(df), ' variables.\n')",
+            is_repl=True
+        )
+
     def load_connected_analysis(self, connected) -> None:
         """Load a StatCraft Connect model into the editor and display connection banner."""
         self._connected_analysis = connected
@@ -1088,6 +1105,7 @@ class RWorkbenchWidget(QWidget):
             "-----------------------------------------------------------------------------------\n"
         )
         self.console_output.ensureCursorVisible()
+        self.sync_active_worksheet_to_r()
 
     def apply_connected_predictions(self) -> None:
         """Extract predictions from active session or model and apply to worksheet."""
