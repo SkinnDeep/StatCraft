@@ -339,6 +339,8 @@ class ConnectBridgeWidget(QFrame):
             jmp_label = "📈 JMP Capability"
         elif conn_obj.analysis_type in ("individuals_moving_range", "imr_chart", "imr"):
             jmp_label = "📈 JMP Control Chart"
+        elif conn_obj.analysis_type in ("gage_rr", "gage_rr_crossed", "crossed_gage_rr"):
+            jmp_label = "📈 JMP Variability Gauge"
         elif conn_obj.analysis_type == "correlation":
             jmp_label = "📈 JMP Multivariate" if len(conn_obj.predictor_names) > 1 else "📈 JMP Bivariate"
         elif conn_obj.analysis_type in ("descriptive_statistics", "describe_columns"):

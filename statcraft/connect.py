@@ -1302,6 +1302,77 @@ def create_connected_imr(
     return connected
 
 
+def create_connected_gage_rr(
+    worksheet: Worksheet,
+    measurement_index: int,
+    part_index: int,
+    operator_index: int,
+    result: Dict[str, Any],
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a crossed Gage R&R study."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+
+    meas_col = worksheet.columns[measurement_index] if 0 <= measurement_index < len(worksheet.columns) else Column("Measurement", "number", [])
+    part_col = worksheet.columns[part_index] if 0 <= part_index < len(worksheet.columns) else Column("Part", "text", [])
+    oper_col = worksheet.columns[operator_index] if 0 <= operator_index < len(worksheet.columns) else Column("Operator", "text", [])
+
+    meas_id = meas_col.metadata.get("id", f"col-{measurement_index}")
+    part_id = part_col.metadata.get("id", f"col-{part_index}")
+    oper_id = oper_col.metadata.get("id", f"col-{operator_index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = [
+        i for i in range(worksheet.row_count)
+        if (i < len(meas_col.values) and meas_col.values[i] is not None and not (isinstance(meas_col.values[i], float) and math.isnan(meas_col.values[i])))
+        and (i < len(part_col.values) and part_col.values[i] is not None)
+        and (i < len(oper_col.values) and oper_col.values[i] is not None)
+    ]
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+    fingerprint = compute_data_fingerprint(worksheet, [measurement_index, part_index, operator_index])
+
+    stats = {
+        "variance_components": result.get("variance_components"),
+        "study_variation": result.get("study_variation"),
+        "ndc": result.get("ndc"),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="gage_rr",
+        title=f"Gage R&R Study (Crossed): {meas_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=meas_id,
+        response_name=meas_col.name,
+        predictor_col_ids=[part_id, oper_id],
+        predictor_names=[part_col.name, oper_col.name],
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "part_index": part_index,
+            "operator_index": operator_index,
+            "measurement_index": measurement_index,
+            "options": options or result.get("options", {}),
+        },
+    )
+
+    from .connect_r import generate_r_gage_rr_script
+    connected.r_script = generate_r_gage_rr_script(connected, worksheet)
+    return connected
+
+
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
     conn_raw = entry.get("connected_analysis")
@@ -1381,6 +1452,10 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
     elif action in ("individuals_moving_range", "imr_chart", "imr"):
         idx_imr = p.get("index") or p.get("variable_index", 0)
         conn = create_connected_imr(worksheet, idx_imr, res)
+    elif action in ("gage_rr", "gage_rr_crossed", "crossed_gage_rr") and "measurement_index" in p and "part_index" in p and "operator_index" in p:
+        conn = create_connected_gage_rr(
+            worksheet, p["measurement_index"], p["part_index"], p["operator_index"], res, options=p.get("options")
+        )
 
     if conn is not None:
         entry["connected_analysis"] = conn.to_dict()

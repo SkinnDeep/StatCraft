@@ -1059,3 +1059,63 @@ def generate_r_imr_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "par(mfrow = c(1, 1))",
     ]
     return "\n".join(lines)
+
+
+
+def generate_r_gage_rr_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean Base R script for crossed Gage R&R study."""
+    meas_col = connected.response_name
+    preds = connected.predictor_names
+    part_col = preds[0] if preds else "Part"
+    oper_col = preds[1] if len(preds) > 1 else "Operator"
+    stats = connected.statistics or {}
+    var_comps = stats.get("variance_components") or []
+    ndc = stats.get("ndc")
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation (Gage R&R Crossed MSA)",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name}",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Ensure Factors are Categorical",
+        f"df[[{json.dumps(part_col)}]] <- as.factor(df[[{json.dumps(part_col)}]])",
+        f"df[[{json.dumps(oper_col)}]] <- as.factor(df[[{json.dumps(oper_col)}]])",
+        "",
+        "# 2. Two-Way ANOVA with Interaction",
+        f"fit <- aov(df[[{json.dumps(meas_col)}]] ~ df[[{json.dumps(part_col)}]] * df[[{json.dumps(oper_col)}]])",
+        "cat('================================================================\n')",
+        "cat('             StatCraft Connect : Gage R&R ANOVA Table           \n')",
+        "cat('================================================================\n\n')",
+        "print(summary(fit))",
+        "",
+        "# 3. Variance Components & Gage Evaluation",
+        "cat('\n--- Gage R&R Variance Components ---\n')",
+    ]
+
+    if var_comps:
+        lines.append("cat(sprintf('%-22s %10s %14s %12s\n', 'Source', 'VarComp', '%Contribution', '%Study Var'))")
+        lines.append("cat(paste(rep('-', 62), collapse = ''), '\n')")
+        for vc in var_comps:
+            src = vc.get("source", "")
+            var = vc.get("variance", 0.0) or 0.0
+            pct_c = vc.get("percent_contribution", 0.0) or 0.0
+            pct_sv = vc.get("percent_study_variation", 0.0) or 0.0
+            lines.append(f"cat(sprintf('%-22s %10.5f %14.2f %12.2f\n', {json.dumps(src)}, {var:.5f}, {pct_c:.2f}, {pct_sv:.2f}))")
+        if ndc is not None:
+            lines.append(f"cat(sprintf('\nNumber of Distinct Categories (ndc): %d\n', {int(ndc)}))")
+
+    lines.extend([
+        "",
+        "# 4. 4-Panel Gage R&R Diagnostic Graphics",
+        "par(mfrow = c(2, 2))",
+        f"interaction.plot(df[[{json.dumps(part_col)}]], df[[{json.dumps(oper_col)}]], df[[{json.dumps(meas_col)}]], col = c('#2563eb', '#10b981', '#f59e0b', '#ef4444'), lwd = 2, main = 'Operator * Part Interaction', xlab = {json.dumps(part_col)}, ylab = {json.dumps(meas_col)}, trace.label = {json.dumps(oper_col)})",
+        f"boxplot(df[[{json.dumps(meas_col)}]] ~ df[[{json.dumps(part_col)}]], col = '#93c5fd', main = {json.dumps(meas_col + ' by ' + part_col)}, xlab = {json.dumps(part_col)}, ylab = {json.dumps(meas_col)})",
+        f"boxplot(df[[{json.dumps(meas_col)}]] ~ df[[{json.dumps(oper_col)}]], col = '#86efac', main = {json.dumps(meas_col + ' by ' + oper_col)}, xlab = {json.dumps(oper_col)}, ylab = {json.dumps(meas_col)})",
+        f"plot(df[[{json.dumps(meas_col)}]], pch = 19, col = '#6366f1', main = 'Run Chart of Measurements', xlab = 'Index', ylab = {json.dumps(meas_col)})",
+        "grid(col = '#cbd5e1', lty = 'dotted')",
+        "par(mfrow = c(1, 1))",
+    ])
+    return "\n".join(lines)
