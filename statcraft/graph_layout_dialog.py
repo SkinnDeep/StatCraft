@@ -9,6 +9,7 @@ from .graph_layouts import _identity, build_layout, layout_eligible
 
 class GraphLayoutDialog(QDialog):
     def __init__(self, entries, parent=None, layout=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Graph Layout')
         self.setMinimumSize(720, 460)

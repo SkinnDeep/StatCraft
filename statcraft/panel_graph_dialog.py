@@ -10,6 +10,7 @@ from .variable_dialogs import format_variable_reference
 
 class PanelGraphDialog(QDialog):
     def __init__(self, worksheet, source_entry, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Panel Graph — By Variables')
         self.setMinimumWidth(430)

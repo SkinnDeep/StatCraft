@@ -8,16 +8,18 @@ import math
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,
     QTableWidget,QTableWidgetItem,QComboBox,QPushButton,QHeaderView,QSpinBox,
-    QLineEdit,QCheckBox,QDialogButtonBox)
+    QLineEdit,QCheckBox,QDialogButtonBox,QScrollArea,QWidget)
 from .variable_dialogs import format_variable_reference
 from .mixture_exploration_dialogs import _finite
 
 
 class MixtureMultiOptimizerDialog(QDialog):
     def __init__(self,worksheet,entries,parent=None):
-        super().__init__(parent);self.setWindowTitle('Mixture Response Optimizer — Multiple Responses');self.resize(1160,790)
+        super().__init__(parent);self.setWindowTitle('Mixture Response Optimizer — Multiple Responses');self.resize(960,640);self.setMinimumSize(640,480);self.setSizeGripEnabled(True)
         self.worksheet=worksheet;self.entries=list(entries);self.parameters=None;self._changing=False
-        outer=QVBoxLayout(self)
+        root_layout=QVBoxLayout(self)
+        scroll=QScrollArea();scroll.setWidgetResizable(True);scroll_content=QWidget();scroll.setWidget(scroll_content)
+        outer=QVBoxLayout(scroll_content)
         self.note=QLabel('Choose two to eight fitted responses with the same component columns, order and total. Weight changes each desirability curve; importance changes its contribution to the composite desirability.');self.note.setWordWrap(True);outer.addWidget(self.note)
         self.response_table=QTableWidget(0,7);self.response_table.setHorizontalHeaderLabels(['Fitted response','Goal','Lower','Target','Upper','Weight','Importance'])
         self.response_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
@@ -37,7 +39,8 @@ class MixtureMultiOptimizerDialog(QDialog):
         self.use_start_values.toggled.connect(self._start_changed)
         self.error=QLabel();self.error.setWordWrap(True);self.error.setObjectName('error');outer.addWidget(self.error)
         limitation=QLabel('The search balances fitted response means under the fixed mixture total. Nonlinear global optimality and native optimizer equivalence are unverified.');limitation.setWordWrap(True);outer.addWidget(limitation)
-        self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);outer.addWidget(self.buttons)
+        root_layout.addWidget(scroll)
+        self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);root_layout.addWidget(self.buttons)
         # Prefer newest distinct response models while preserving a useful row order.
         chosen=[];seen=set()
         for index in reversed(range(len(self.entries))):

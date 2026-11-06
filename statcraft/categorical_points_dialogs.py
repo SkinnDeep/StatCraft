@@ -27,6 +27,7 @@ def point_icon(mode,plot_type):
 
 class CategoricalTypeDialog(QDialog):
     def __init__(self,plot_type,parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle(plot_name(plot_type)+'s');self.mode='one';self.buttons=QButtonGroup(self);self.mode_buttons={};outer=QVBoxLayout(self)
         for heading,keys in (('One Y',('one','one_groups')),('Multiple Y’s',('multiple','multiple_groups'))):
             group=QGroupBox(heading);row=QHBoxLayout(group)
@@ -41,6 +42,7 @@ class CategoricalTypeDialog(QDialog):
 
 class IntervalOptionsDialog(QDialog):
     def __init__(self,options,parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('Interval Options');options=validate_interval(options);outer=QVBoxLayout(self);form=QFormLayout()
         self.method=QComboBox();self.method.addItem('Confidence interval','confidence');self.method.addItem('Standard error','standard_error');self.method.setCurrentIndex(self.method.findData(options['method']));form.addRow('Type of interval:',self.method)
         self.confidence=QDoubleSpinBox();self.confidence.setDecimals(3);self.confidence.setRange(.1,99.999);self.confidence.setValue(options['confidence']*100);self.confidence.setSuffix('%');form.addRow('Confidence level:',self.confidence)

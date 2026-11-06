@@ -49,6 +49,7 @@ def histogram_icon(mode):
 
 class HistogramTypeDialog(QDialog):
     def __init__(self, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Histograms')
         self.mode = 'simple'
@@ -82,6 +83,7 @@ class HistogramTypeDialog(QDialog):
 class HistogramScaleDialog(QDialog):
     """Functional subset of histogram scales, with shared existing validation."""
     def __init__(self, settings, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Histogram: Scale')
         self.initial = validate_histogram_settings(settings)
@@ -121,6 +123,7 @@ class HistogramScaleDialog(QDialog):
 class HistogramDialog(QDialog):
     def __init__(self, parent, worksheet, mode='simple', initial_columns=None,
                  parameters=None, lock_variables=False):
+        self.setSizeGripEnabled(True)
         parameters = deepcopy(parameters) if isinstance(parameters, dict) else {}
         mode = parameters.get('variant', mode)
         if mode not in MODES:

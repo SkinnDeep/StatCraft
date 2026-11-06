@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 class TwoWayAnovaDialog(QDialog):
     def __init__(self, worksheet, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.worksheet = worksheet
         self.setWindowTitle("Two-Way Analysis of Variance")

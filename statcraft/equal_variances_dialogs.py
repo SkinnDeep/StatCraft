@@ -25,6 +25,7 @@ class TestEqualVariancesOptionsDialog(QDialog):
     """Subdialog matching VARTESTOPTIONS.MDF."""
 
     def __init__(self, current_options, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle("Test for Equal Variances: Options")
         self.setMinimumWidth(380)
@@ -64,6 +65,7 @@ class TestEqualVariancesGraphsDialog(QDialog):
     """Subdialog matching VARTESTGRAPHS.MDF."""
 
     def __init__(self, current_graphs, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle("Test for Equal Variances: Graphs")
         self.setMinimumWidth(340)
@@ -100,6 +102,7 @@ class TestEqualVariancesResultsDialog(QDialog):
     """Subdialog matching VARTESTRESULTS.MDF."""
 
     def __init__(self, current_results, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle("Test for Equal Variances: Results")
         self.setMinimumWidth(340)
@@ -136,6 +139,7 @@ class TestEqualVariancesStorageDialog(QDialog):
     """Subdialog matching VARTESTSTORAGE.MDF."""
 
     def __init__(self, current_storage, use_normal=False, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle("Test for Equal Variances: Storage")
         self.setMinimumWidth(380)
@@ -181,6 +185,7 @@ class TestEqualVariancesDialog(QDialog):
     """Main dialog matching VARTEST.MDF."""
 
     def __init__(self, worksheet, parent=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.worksheet = worksheet
         self.setWindowTitle("Test for Equal Variances")

@@ -2,7 +2,11 @@
 import copy
 import math
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QLabel,QComboBox,QLineEdit,QSpinBox,QDoubleSpinBox,QCheckBox,QTableWidget,QTableWidgetItem,QHeaderView,QDialogButtonBox
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QFormLayout, QLabel, QComboBox, QLineEdit,
+    QSpinBox, QDoubleSpinBox, QCheckBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QDialogButtonBox, QScrollArea, QWidget
+)
 from .variable_dialogs import format_variable_reference
 from .mixture_exploration_dialogs import _finite
 from .mixture_condition import _validated,_values
@@ -12,8 +16,11 @@ from .mixture_exploration import _project,_vertices
 
 class MixtureJointOptimizerDialog(QDialog):
     def __init__(self,worksheet,entries,parent=None):
-        super().__init__(parent);self.worksheet=worksheet;self.entries=list(entries);self.parameters=None;self.setWindowTitle('Joint Mixture and Process Response Optimizer');self.resize(900,850)
-        self.outer=QVBoxLayout(self);form=QFormLayout();self.model=QComboBox()
+        super().__init__(parent);self.worksheet=worksheet;self.entries=list(entries);self.parameters=None;self.setWindowTitle('Joint Mixture and Process Response Optimizer')
+        self.resize(860,640);self.setMinimumSize(640,480);self.setSizeGripEnabled(True)
+        root_layout=QVBoxLayout(self)
+        scroll=QScrollArea();scroll.setWidgetResizable(True);scroll_content=QWidget();scroll.setWidget(scroll_content)
+        self.outer=QVBoxLayout(scroll_content);form=QFormLayout();self.model=QComboBox()
         for entry in self.entries:self.model.addItem(entry['title']+' — '+entry.get('time',''))
         if self.entries:self.model.setCurrentIndex(len(self.entries)-1)
         form.addRow('Fitted mixture/process model:',self.model);self.goal=QComboBox();self.goal.addItems(['Maximize','Minimize','Target']);self.target=QLineEdit();self.target.setEnabled(False);self.goal.currentIndexChanged.connect(lambda i:self.target.setEnabled(i==2));form.addRow('Goal:',self.goal);form.addRow('Target:',self.target);self.outer.addLayout(form)
@@ -22,7 +29,9 @@ class MixtureJointOptimizerDialog(QDialog):
         self.outer.addWidget(QLabel('Hold covariates and block:'));self.hold_table=QTableWidget(0,2);self.hold_table.setHorizontalHeaderLabels(['Variable','Held value']);self.hold_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch);self.hold_table.setMaximumHeight(140);self.outer.addWidget(self.hold_table)
         self.use_start_values=QCheckBox('Use starting values from the tables');self.outer.addWidget(self.use_start_values)
         options=QFormLayout();self.starts=QSpinBox();self.starts.setRange(1,64);self.starts.setValue(20);self.max_iterations=QSpinBox();self.max_iterations.setRange(10,2000);self.max_iterations.setValue(300);self.confidence=QDoubleSpinBox();self.confidence.setRange(1.,99.99);self.confidence.setValue(95.);self.title=QLineEdit();options.addRow('Search starts:',self.starts);options.addRow('Maximum iterations:',self.max_iterations);options.addRow('Confidence level (%):',self.confidence);options.addRow('Title:',self.title);self.outer.addLayout(options)
-        self.error=QLabel();self.error.setWordWrap(True);self.error.setObjectName('error');self.outer.addWidget(self.error);self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);self.outer.addWidget(self.buttons)
+        self.error=QLabel();self.error.setWordWrap(True);self.error.setObjectName('error');self.outer.addWidget(self.error)
+        root_layout.addWidget(scroll)
+        self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);root_layout.addWidget(self.buttons)
         self.model.currentIndexChanged.connect(self._model_changed);self._model_changed()
     def _table(self,label):
         self.outer.addWidget(QLabel(label));table=QTableWidget(0,4);table.setHorizontalHeaderLabels(['Variable','Lower','Upper','Start']);table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)

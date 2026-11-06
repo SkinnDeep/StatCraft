@@ -14,6 +14,7 @@ from .logistic import settings
 
 class LogisticSettingsDialog(QDialog):
     def __init__(self, parent, section, options):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Binary Logistic Regression: '+section)
         self.setMinimumWidth(460)

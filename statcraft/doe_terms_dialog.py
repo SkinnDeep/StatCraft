@@ -16,6 +16,7 @@ from .variable_dialogs import resolve_variables
 class FactorialTermsDialog(QDialog):
     def __init__(self, parent, worksheet, factor_indices, max_order=2,
                  selected_terms=None, include_blocks=None):
+        self.setSizeGripEnabled(True)
         super().__init__(parent)
         self.setWindowTitle('Analyze Factorial Design: Terms')
         self.setMinimumSize(680, 460)

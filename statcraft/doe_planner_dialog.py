@@ -29,7 +29,7 @@ def _finite(text,label):
 
 class DOEPlannerDialog(QDialog):
     def __init__(self,parent=None,export_callback=None):
-        super().__init__(parent);self.setWindowTitle('Design of Experiments Planner');self.resize(1120,800)
+        super().__init__(parent);self.setWindowTitle('Design of Experiments Planner');self.resize(1000,640);self.setMinimumSize(780,480);self.setSizeGripEnabled(True)
         self.parameters=None;self.preview_sheet=None;self.export_callback=export_callback;self._updating=False;self._family_state={};self._last_kind=None
         self.preview_timer=QTimer(self);self.preview_timer.setSingleShot(True);self.preview_timer.setInterval(300);self.preview_timer.timeout.connect(self.refresh_preview)
         layout=QVBoxLayout(self);top=QHBoxLayout();top.addWidget(QLabel('Goal:'))
@@ -72,7 +72,7 @@ class DOEPlannerDialog(QDialog):
         config_layout.addWidget(settings,2);splitter.addWidget(config)
         preview=QWidget();preview_layout=QVBoxLayout(preview);self.summary=QLabel('Preparing design preview…');self.summary.setWordWrap(True);preview_layout.addWidget(self.summary)
         self.guidance=QLabel();self.guidance.setWordWrap(True);self.guidance.setObjectName('secondary');preview_layout.addWidget(self.guidance)
-        self.preview_table=QTableWidget();self.preview_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents);preview_layout.addWidget(self.preview_table);splitter.addWidget(preview);splitter.setSizes([335,335]);layout.addWidget(splitter)
+        self.preview_table=QTableWidget();self.preview_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents);preview_layout.addWidget(self.preview_table);splitter.addWidget(preview);splitter.setSizes([260,240]);layout.addWidget(splitter)
         self.error=QLabel();self.error.setObjectName('error');self.error.setWordWrap(True);layout.addWidget(self.error)
         buttons=QHBoxLayout();self.export_button=QPushButton('Export to Excel…');self.export_button.setAutoDefault(False);self.export_button.clicked.connect(self.export_excel);buttons.addWidget(self.export_button);buttons.addStretch()
         self.create_button=QPushButton('Create Worksheet');self.create_button.setDefault(True);self.create_button.clicked.connect(self.create);self.cancel_button=QPushButton('Cancel');self.cancel_button.setAutoDefault(False);self.cancel_button.clicked.connect(self.reject);buttons.addWidget(self.create_button);buttons.addWidget(self.cancel_button);layout.addLayout(buttons)
