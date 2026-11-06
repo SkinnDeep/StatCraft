@@ -10,8 +10,8 @@ from .glm import settings,validate_terms
 
 class ModelTermsDialog(QDialog):
     def __init__(self,parent,names,terms):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('General Linear Model: Model');self.resize(690,430)
+        self.setSizeGripEnabled(True)
         self.names=names;self.terms=None;layout=QVBoxLayout(self);body=QHBoxLayout()
         self.available=QListWidget();self.selected=QListWidget()
         for label,widget in [('Predictors and interactions',self.available),('Terms in the model (in order)',self.selected)]:
@@ -60,8 +60,8 @@ class ModelTermsDialog(QDialog):
 
 class ModelSettingsDialog(QDialog):
     def __init__(self,parent,section,options):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('General Linear Model: '+section);self.options=None;self.section=section;self.initial=dict(options);self.controls={}
+        self.setSizeGripEnabled(True)
         self.setMinimumWidth(460);layout=QVBoxLayout(self);form=QFormLayout();layout.addLayout(form)
         def combo(key,label,choices,values):
             c=QComboBox();c.addItems(choices);c.setCurrentIndex(values.index(options[key]));self.controls[key]=(c,values);form.addRow(label,c)

@@ -26,8 +26,8 @@ def dot_icon(mode):
 
 class DotplotTypeDialog(QDialog):
     def __init__(self,parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('Dotplots');self.mode='one';self.mode_buttons={};self.buttons=QButtonGroup(self);outer=QVBoxLayout(self)
+        self.setSizeGripEnabled(True)
         for title,keys in (('One Y',VARIANTS[:3]),('Multiple Y’s',VARIANTS[3:])):
             group=QGroupBox(title);row=QHBoxLayout(group)
             for key in keys:

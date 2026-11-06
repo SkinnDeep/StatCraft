@@ -236,8 +236,8 @@ def _role_index(parameters,role):
 class SimilarGraphDialog(QDialog):
     """Native-evidenced replacement grid; optional setup extension is original."""
     def __init__(self,parent,worksheet,entry):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.source_recipe=_source_recipe(entry,worksheet)
         self.source_entry=copy.deepcopy(entry);self.worksheet=worksheet
         self._options_recipe=copy.deepcopy(self.source_recipe)

@@ -21,8 +21,8 @@ _GROUPS = (('Symbols', ('marker', 'marker_size', 'color')),
 
 class GraphObjectDialog(QDialog):
     def __init__(self, objects, styles, selected=None, parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.setWindowTitle('Edit Graph Object')
         self.setMinimumWidth(370)
         self._draft = validate_styles(styles)

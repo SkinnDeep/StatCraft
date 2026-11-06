@@ -12,8 +12,8 @@ class MainEffectsPlotDialog(QDialog):
     """Dialog for Stat > ANOVA > Main Effects Plot..."""
 
     def __init__(self, worksheet, parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.worksheet = worksheet
         self.setWindowTitle("Main Effects Plot")
         self.setMinimumSize(460, 420)
@@ -99,8 +99,8 @@ class InteractionsPlotDialog(QDialog):
     """Dialog for Stat > ANOVA > Interactions Plot..."""
 
     def __init__(self, worksheet, parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.worksheet = worksheet
         self.setWindowTitle("Interaction Plot")
         self.setMinimumSize(440, 360)

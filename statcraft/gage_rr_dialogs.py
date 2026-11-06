@@ -7,8 +7,8 @@ from .gage_rr import settings
 
 class GageRROptionsDialog(QDialog):
     def __init__(self, parent, options):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.setWindowTitle('Gage R&R Study (Crossed): ANOVA Options')
         self.setMinimumWidth(470)
         self.initial = settings(options)

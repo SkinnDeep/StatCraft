@@ -9,8 +9,8 @@ from .histogram_options import build_histogram_panel, validate_histogram_setting
 
 class HistogramOptionsDialog(QDialog):
     def __init__(self, entry, parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.setWindowTitle('Histogram Options')
         self.setMinimumWidth(440)
         self.entry = entry if isinstance(entry, dict) else {}

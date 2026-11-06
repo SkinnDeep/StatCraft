@@ -25,8 +25,8 @@ def box_icon(mode):
 
 class BoxplotTypeDialog(QDialog):
     def __init__(self,parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('Boxplots');self.mode='one'
+        self.setSizeGripEnabled(True)
         outer=QVBoxLayout(self);self.mode_buttons={};self.buttons=QButtonGroup(self)
         for heading,keys in (('One Y',('one','one_groups')),('Multiple Y’s',('multiple','multiple_groups'))):
             group=QGroupBox(heading);row=QHBoxLayout(group)

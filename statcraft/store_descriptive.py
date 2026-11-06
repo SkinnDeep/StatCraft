@@ -208,8 +208,8 @@ class StoreDescriptiveDialog(QDialog):
     """Dialog for Stat > Basic Statistics > Store Descriptive Statistics..."""
 
     def __init__(self, worksheet: Worksheet, parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.worksheet = worksheet
         self.setWindowTitle("Store Descriptive Statistics")
         self.setMinimumSize(520, 520)

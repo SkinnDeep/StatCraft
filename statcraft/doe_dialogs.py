@@ -20,8 +20,8 @@ def buttons(dialog,layout,callback=None):
 
 class CreateFactorialDialog(QDialog):
     def __init__(self,parent):
-        self.setSizeGripEnabled(True)
         super().__init__(parent); self.setWindowTitle('Create Factorial Design'); self.setMinimumWidth(680)
+        self.setSizeGripEnabled(True)
         self.parameters=None; self.replicates=2; self.centers=0; self.blocks=1; self.randomize=True; self.seed=1; self.summary=True
         self.generators={}; self.design_types=[]
         self.factors=[{'name':chr(65+i),'low':-1.,'high':1.} for i in range(8)]
@@ -188,8 +188,8 @@ class CreateFactorialDialog(QDialog):
 
 class AnalyzeFactorialDialog(QDialog):
     def __init__(self,parent,worksheet):
-        self.setSizeGripEnabled(True)
         super().__init__(parent); self.setWindowTitle('Analyze Factorial Design'); self.setMinimumWidth(760)
+        self.setSizeGripEnabled(True)
         self.worksheet=worksheet; self.parameters=None; self.max_order=2; self.confidence=.95
         self.selected_terms=None; self.include_blocks=None
         if worksheet.metadata.get('doe',{}).get('schema')=='statcraft-regular-fractional-v1':self.max_order=1

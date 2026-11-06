@@ -382,9 +382,8 @@ class ProcedureDialog(QDialog):
 
 class ScatterTypeDialog(QDialog):
     def __init__(self,parent):
-        self.setSizeGripEnabled(True)
         from .scatter import MODES
-        super().__init__(parent); self.setWindowTitle('Scatterplots'); self.mode='simple'
+        super().__init__(parent); self.setSizeGripEnabled(True); self.setWindowTitle('Scatterplots'); self.mode='simple'
         layout=QVBoxLayout(self); grid=QGridLayout(); self.buttons=QButtonGroup(self); self.mode_buttons={}
         for index,(mode,title) in enumerate(MODES.items()):
             button=QToolButton(); button.setText(title.replace(' and ',' and\n'))
@@ -417,10 +416,9 @@ class RoleTable(QTableWidget):
 
 class ScatterDialog(QDialog):
     def __init__(self,parent,worksheet,mode='simple'):
-        self.setSizeGripEnabled(True)
         from .scatter import MODES
         if mode not in MODES: raise ValueError('Unsupported scatterplot type.')
-        super().__init__(parent); self.setWindowTitle('Scatterplot: '+MODES[mode]); self.resize(800,540)
+        super().__init__(parent); self.setSizeGripEnabled(True); self.setWindowTitle('Scatterplot: '+MODES[mode]); self.resize(800,540)
         self.mode=mode; self.grouped=mode in ('groups','regression_groups','connect_groups')
         self.active='pairs'; self.labels={'title':'','x_label':'','y_label':''}
         self.settings=None

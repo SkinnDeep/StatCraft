@@ -27,8 +27,8 @@ def _matching(spec,kind,count,fraction=1,blocks=1):
 
 class CreateSurfaceDialog(QDialog):
     def __init__(self,window):
-        self.setSizeGripEnabled(True)
         super().__init__(window);self.window=window;self.setWindowTitle('Create Response Surface Design');self.setMinimumWidth(700)
+        self.setSizeGripEnabled(True)
         self.factors=[dict(name=chr(65+i),low=-1.,high=1.) for i in range(10)]
         self.centers=6;self.replicates=1;self.alpha_mode='rotatable';self.alpha=2**.5;self.randomize=True;self.seed=1;self.levels_define='cube';self.display='summary';self.target=None;self.entry=None
         self.fraction=1;self.blocks=1;self.center_cube=None;self.center_axial=None;self.block_replicates=False;self._configuring=False
@@ -107,8 +107,8 @@ class CreateSurfaceDialog(QDialog):
 
 class CreateSurfaceSettings(QDialog):
     def __init__(self,parent,section):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.owner=parent;self.section=section;self.changes={};self.controls={};self.setWindowTitle('Create Response Surface Design: '+section);self.setMinimumWidth(500)
+        self.setSizeGripEnabled(True)
         self.body_layout=layout=QVBoxLayout(self);form=QFormLayout();layout.addLayout(form);p=parent
         if section=='Display Available Designs':self._build_catalog(layout)
         elif section=='Designs':self._build_designs(layout)
@@ -266,8 +266,8 @@ class SurfaceTermsDialog(ModelTermsDialog):
 
 class SurfaceCodingDialog(QDialog):
     def __init__(self,parent,names,coding):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('Analyze Response Surface Design: Low/High');self.coding=None;layout=QVBoxLayout(self)
+        self.setSizeGripEnabled(True)
         layout.addWidget(QLabel('Low and high settings define coded −1 and +1.'))
         self.table=QTableWidget(len(names),3);self.table.setHorizontalHeaderLabels(['Factor','Low','High'])
         for r,(name,c) in enumerate(zip(names,coding)):

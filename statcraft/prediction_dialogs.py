@@ -24,8 +24,8 @@ def footer(dialog, layout, callback):
 
 class PredictOptionsDialog(QDialog):
     def __init__(self, parent, options):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.setWindowTitle('Predict: Options')
         self.options = None
         self.initial = settings(options)
@@ -59,8 +59,8 @@ class PredictOptionsDialog(QDialog):
 
 class PredictResultsDialog(QDialog):
     def __init__(self, parent, options):
-        self.setSizeGripEnabled(True)
         super().__init__(parent)
+        self.setSizeGripEnabled(True)
         self.setWindowTitle('Predict: Results')
         self.initial = settings(options); self.options = None
         layout = QVBoxLayout(self)
@@ -84,8 +84,8 @@ class PredictDialog(QDialog):
                 'factorial': ('analyze_factorial', 'analyze_factorial_terms')}
 
     def __init__(self, window, family=None):
-        self.setSizeGripEnabled(True)
         super().__init__(window)
+        self.setSizeGripEnabled(True)
         self.window = window; self.worksheet = window.presenter.worksheet
         self.family = family; self.entry = None; self.model_recipe = None; self.spec = None
         self.options = settings(); self.models = []; self.active_column = 0; self._building = False

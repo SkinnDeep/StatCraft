@@ -51,8 +51,8 @@ class RoleList(ColumnList):
 
 class GraphBuilderDialog(QDialog):
     def __init__(self,parent,worksheet,parameters=None,lock_variables=False):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.worksheet=worksheet;self.lock_variables=lock_variables;self.setWindowTitle('Graph Builder');self.resize(1180,740)
+        self.setSizeGripEnabled(True)
         p=copy.deepcopy(parameters or {});self.graph_type=p.get('graph_type','histogram');self.mapping={key:list(p.get(key,[])) for key in ('response_indices','group_indices')};self.mapping['x_index']=[] if p.get('x_index') is None else [p['x_index']]
         self.active_role='response_indices';self.parameters=None;self.preview_entry=None;self.preview_chart=None;self.preview_frame=None;self._loading=True
         outer=QVBoxLayout(self);split=QSplitter();outer.addWidget(split,1)

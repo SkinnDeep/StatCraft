@@ -12,8 +12,8 @@ PALETTES={
 
 class NativeGraphAppearanceDialog(QDialog):
     def __init__(self,view,has_surface=False,parent=None):
-        self.setSizeGripEnabled(True)
         super().__init__(parent);self.setWindowTitle('Graph Appearance');self.setMinimumWidth(420)
+        self.setSizeGripEnabled(True)
         self.view=validate_view(view);self.settings=None;layout=QVBoxLayout(self);form=QFormLayout();layout.addLayout(form)
         self.palette=QComboBox();self.palette.addItems(list(PALETTES)+['Custom']);self.colors=QLineEdit()
         form.addRow('Color palette:',self.palette);form.addRow('Palette colors:',self.colors)
