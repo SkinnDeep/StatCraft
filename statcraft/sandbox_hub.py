@@ -36,9 +36,9 @@ def get_git_status_info(repo_root: Path | None = None) -> Dict[str, str]:
         repo_root = Path(__file__).resolve().parents[1]
 
     info = {
-        "branch": "main",
-        "commit": "unknown",
-        "message": "Local development source",
+        "branch": "local-dev",
+        "commit": "source",
+        "message": "Local development working tree",
     }
     try:
         flags = 0x08000000 if sys.platform == "win32" else 0
@@ -82,8 +82,8 @@ class StatCraftSandboxHub(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🧪 StatCraft Live Testing Sandbox Hub")
-        self.resize(680, 480)
-        self.setMinimumSize(540, 380)
+        self.resize(700, 480)
+        self.setMinimumSize(560, 380)
         self.setSizeGripEnabled(True)
 
         self.repo_root = Path(__file__).resolve().parents[1]
@@ -160,11 +160,17 @@ class StatCraftSandboxHub(QDialog):
         sec_bar = QHBoxLayout()
         sec_bar.setSpacing(8)
 
-        btn_diag = QPushButton("📋 Copy Diagnostic Details")
+        btn_diag = QPushButton("📋 Copy Diagnostics")
         btn_diag.setStyleSheet("padding: 6px 12px; font-size: 8.5pt;")
         btn_diag.setToolTip("Copy system, git, and python diagnostics to clipboard for quick feedback.")
         btn_diag.clicked.connect(self.copy_diagnostics)
         sec_bar.addWidget(btn_diag)
+
+        btn_scratch = QPushButton("🧪 Open Scratch Folder")
+        btn_scratch.setStyleSheet("padding: 6px 12px; font-size: 8.5pt;")
+        btn_scratch.setToolTip("Open the isolated sandbox scratch workspace directory.")
+        btn_scratch.clicked.connect(self.open_scratch_dir)
+        sec_bar.addWidget(btn_scratch)
 
         btn_src = QPushButton("📂 Open Source Folder")
         btn_src.setStyleSheet("padding: 6px 12px; font-size: 8.5pt;")
@@ -184,26 +190,34 @@ class StatCraftSandboxHub(QDialog):
         deps_dir = self.repo_root.parent / "statcraft-build-deps"
 
         env = os.environ.copy()
+        paths = []
         if deps_dir.is_dir():
-            env["PYTHONPATH"] = f"{deps_dir};{self.repo_root}"
-        else:
-            env["PYTHONPATH"] = str(self.repo_root)
+            paths.append(str(deps_dir))
+        paths.append(str(self.repo_root))
+        if env.get("PYTHONPATH"):
+            paths.append(env["PYTHONPATH"])
+        env["PYTHONPATH"] = os.pathsep.join(paths)
 
         cmd = [sys.executable, str(entry_script), "--sandbox"]
-        flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW for launcher
+
+        kwargs: Dict[str, Any] = {
+            "cwd": str(self.repo_root),
+            "env": env,
+        }
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW for launcher
+        else:
+            kwargs["start_new_session"] = True
 
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(self.repo_root),
-                env=env,
-                creationflags=flags,
-            )
+            proc = subprocess.Popen(cmd, **kwargs)
             self.status_msg.setText(f"✓ Launched live sandbox process (PID: {proc.pid})")
             self.status_msg.setStyleSheet("font-size: 8.5pt; color: #0284c7; font-weight: 600;")
+            return proc
         except Exception as exc:
             self.status_msg.setText(f"⚠ Failed to launch: {exc}")
             self.status_msg.setStyleSheet("font-size: 8.5pt; color: #dc2626; font-weight: 600;")
+            return None
 
     def copy_diagnostics(self):
         """Copy diagnostic details to clipboard for easy feedback reporting."""
@@ -217,9 +231,20 @@ class StatCraftSandboxHub(QDialog):
             f"Python: {sys.executable} ({platform.python_version()})\n"
             f"OS: {platform.platform()}\n"
         )
-        QApplication.clipboard().setText(diag)
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(diag)
         self.status_msg.setText("✓ Diagnostic details copied to clipboard!")
         self.status_msg.setStyleSheet("font-size: 8.5pt; color: #059669; font-weight: 600;")
+
+    def open_scratch_dir(self):
+        """Open the isolated sandbox scratch workspace in File Explorer."""
+        scratch_dir = self.repo_root / ".sandbox_workspace"
+        scratch_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(str(scratch_dir))
+        else:
+            subprocess.run(["xdg-open", str(scratch_dir)])
 
     def open_source_dir(self):
         """Open the working source directory in File Explorer."""

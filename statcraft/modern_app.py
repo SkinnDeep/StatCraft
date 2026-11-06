@@ -591,6 +591,9 @@ class ModernWindow(QMainWindow):
     def __init__(self, presenter=None, sandbox_mode: bool = False):
         super().__init__()
         self.sandbox_mode = sandbox_mode
+        if self.sandbox_mode:
+            self.sandbox_workspace = Path(__file__).resolve().parents[1] / ".sandbox_workspace"
+            self.sandbox_workspace.mkdir(parents=True, exist_ok=True)
         app = QApplication.instance()
         self._dark_mode = QSettings("StatCraft", "StatCraft").value("dark_mode", False, type=bool)
         apply_theme_palette(app, self._dark_mode)
@@ -647,34 +650,43 @@ class ModernWindow(QMainWindow):
     def _create_sandbox_banner(self, layout):
         self.sandbox_banner = QFrame()
         self.sandbox_banner.setObjectName("sandboxBanner")
-        self.sandbox_banner.setStyleSheet(
-            "QFrame#sandboxBanner { background-color: #78350f; border-bottom: 2px solid #f59e0b; padding: 4px 10px; }"
-            if self._dark_mode else
-            "QFrame#sandboxBanner { background-color: #fef3c7; border-bottom: 2px solid #d97706; padding: 4px 10px; }"
-        )
         b_lay = QHBoxLayout(self.sandbox_banner)
         b_lay.setContentsMargins(10, 4, 10, 4)
         b_lay.setSpacing(10)
 
-        badge = QLabel("<b>🧪 LIVE SANDBOX · v111.0.0-dev</b>")
-        badge.setStyleSheet("color: #fbbf24; font-size: 9pt;" if self._dark_mode else "color: #b45309; font-size: 9pt;")
-        b_lay.addWidget(badge)
+        self.sandbox_badge = QLabel("<b>🧪 LIVE SANDBOX · v111.0.0-dev</b>")
+        b_lay.addWidget(self.sandbox_badge)
 
-        msg = QLabel("Running directly from local repository source. Code edits apply immediately upon restart.")
-        msg.setStyleSheet("color: #fef3c7; font-size: 8.5pt;" if self._dark_mode else "color: #92400e; font-size: 8.5pt;")
-        b_lay.addWidget(msg, 1)
+        self.sandbox_msg = QLabel("Running directly from local repository source. Code edits apply immediately upon restart.")
+        b_lay.addWidget(self.sandbox_msg, 1)
 
         btn_diag = QPushButton("📋 Copy Diagnostics")
         btn_diag.setStyleSheet("font-size: 8pt; padding: 2px 8px;")
         btn_diag.clicked.connect(self._copy_sandbox_diagnostics)
         b_lay.addWidget(btn_diag)
 
+        self._style_sandbox_banner(self._dark_mode)
         layout.addWidget(self.sandbox_banner)
+
+    def _style_sandbox_banner(self, is_dark: bool):
+        if not hasattr(self, "sandbox_banner") or not self.sandbox_banner:
+            return
+        self.sandbox_banner.setStyleSheet(
+            "QFrame#sandboxBanner { background-color: #78350f; border-bottom: 2px solid #f59e0b; padding: 4px 10px; }"
+            if is_dark else
+            "QFrame#sandboxBanner { background-color: #fef3c7; border-bottom: 2px solid #d97706; padding: 4px 10px; }"
+        )
+        if hasattr(self, "sandbox_badge") and self.sandbox_badge:
+            self.sandbox_badge.setStyleSheet("color: #fbbf24; font-size: 9pt;" if is_dark else "color: #b45309; font-size: 9pt;")
+        if hasattr(self, "sandbox_msg") and self.sandbox_msg:
+            self.sandbox_msg.setStyleSheet("color: #fef3c7; font-size: 8.5pt;" if is_dark else "color: #92400e; font-size: 8.5pt;")
 
     def _copy_sandbox_diagnostics(self):
         import platform
         text = f"StatCraft Live Sandbox v111.0.0-dev\nPlatform: {platform.platform()}\nPython: {sys.executable}\nSource: {Path(__file__).resolve().parent}"
-        QApplication.clipboard().setText(text)
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(text)
         if self.statusBar():
             self.statusBar().showMessage("✓ Copied sandbox diagnostics to clipboard", 4000)
 
@@ -1667,6 +1679,7 @@ class ModernWindow(QMainWindow):
 
     def set_dark_mode(self, is_dark: bool):
         self._dark_mode = is_dark
+        self._style_sandbox_banner(is_dark)
         QSettings("StatCraft", "StatCraft").setValue("dark_mode", is_dark)
         apply_theme_palette(QApplication.instance(), is_dark)
         self.setStyleSheet(get_theme_stylesheet(is_dark))
@@ -6936,7 +6949,7 @@ class ModernWindow(QMainWindow):
 
     def _check_startup_updates(self):
         import os
-        if os.environ.get("STATCRAFT_TESTING") or "unittest" in sys.modules or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        if getattr(self, "sandbox_mode", False) or os.environ.get("STATCRAFT_TESTING") or "unittest" in sys.modules or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
             return
         try:
             from .updater_dialog import UpdateCheckWorker
