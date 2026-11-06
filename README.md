@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, interactive CAD 3D response surfaces, and enterprise-grade reliability.**
 
-[![Version](https://img.shields.io/badge/version-110.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-111.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v110.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v110.0.0) •
+[Download Release (v111.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v111.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
