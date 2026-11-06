@@ -73,9 +73,9 @@ class WelcomeWatermarkWidget(QWidget):
         logo = WelcomeLogoBanner()
         center_layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        tagline = QLabel("Unified statistical platform bridging Minitab quality procedures, JMP interactive visuals, and R Workbench.")
+        tagline = QLabel("Modern Statistical Analysis & Quality Engineering Software")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tagline.setStyleSheet("color: #64748b; font-size: 8.5pt; font-style: italic; padding-bottom: 4px;")
+        tagline.setStyleSheet("color: #64748b; font-size: 9pt; font-style: italic; padding-bottom: 4px;")
         center_layout.addWidget(tagline)
 
         shortcuts = QWidget()
@@ -84,11 +84,10 @@ class WelcomeWatermarkWidget(QWidget):
         grid.setHorizontalSpacing(22)
         grid.setVerticalSpacing(6)
         rows = [
-            ("Try StatCraft Connect", "Chemical Yield Sample", on_try_connect),
-            ("What is Connect?", "Architecture Guide", on_overview),
             ("Open Project", "Ctrl+O", on_open),
             ("New Project", "Ctrl+Shift+N", on_new_project),
             ("New Worksheet", "Ctrl+N", on_new_worksheet),
+            ("Sample Data (Chemical Process)", "Dataset", on_try_connect),
         ]
         for row_idx, (action_label, accel, callback) in enumerate(rows):
             btn = QPushButton(action_label)
@@ -761,6 +760,16 @@ class ModernWindow(QMainWindow):
         self.result_tabs.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(self.result_tabs.mapToGlobal(pos)))
         self.tab_corner_widget = QWidget()
         corner_row = QHBoxLayout(self.tab_corner_widget); corner_row.setContentsMargins(0, 0, 6, 0); corner_row.setSpacing(2)
+        self.tab_copy_r_btn = QToolButton()
+        self.tab_copy_r_btn.setText("📋 Copy R")
+        self.tab_copy_r_btn.setToolTip("Copy reproducible Base R script for current output (Ctrl+Alt+R)")
+        self.tab_copy_r_btn.setStyleSheet(
+            "QToolButton { font-size: 8pt; font-weight: 600; padding: 2px 7px; border: 1px solid #0284c7; border-radius: 3px; background: #0284c7; color: white; }"
+            "QToolButton:hover { background: #0369a1; }"
+        )
+        self.tab_copy_r_btn.clicked.connect(self.copy_active_r_script)
+        corner_row.addWidget(self.tab_copy_r_btn)
+
         self.tab_dropdown_btn = QToolButton(); self.tab_dropdown_btn.setObjectName("outputDropdownBtn")
         self.tab_dropdown_btn.setText("▾"); self.tab_dropdown_btn.setToolTip("Output Menu")
         self.tab_dropdown_btn.clicked.connect(lambda: self._show_output_context_menu(self.tab_dropdown_btn.mapToGlobal(self.tab_dropdown_btn.rect().bottomLeft())))
@@ -1025,6 +1034,9 @@ class ModernWindow(QMainWindow):
         self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
         self._action(file, "Save Project As…", lambda: self.save_document(True), QKeySequence.StandardKey.SaveAs, "save_copy")
         self._action(file, "Save Current Worksheet As…", self.export_data, None, "export")
+        self._action(file, "Export Output to Base &R Script (.R)…", self.export_active_r_file, None, "save")
+        self._action(file, "Export Worksheet to &R Data Frame (.R)…", self.export_worksheet_r_dataframe, None, "save")
+        file.addSeparator()
         excel=file.addMenu('Export to Excel')
         self._action(excel,'All Project Worksheets…',lambda:self.export_excel(True),None,'export')
         self._action(excel,'Current Worksheet…',lambda:self.export_excel(False))
@@ -1049,6 +1061,7 @@ class ModernWindow(QMainWindow):
         self.delete_action = self._action(edit, "Delete Cells", self.delete_selected_rows, None, "delete")
         self.cut_action = self._action(edit, "Cut Cells", self.cut_cells, QKeySequence.StandardKey.Cut, "cut")
         self.copy_action = self._action(edit, "Copy Cells", self.copy_cells, QKeySequence.StandardKey.Copy, "copy")
+        self._action(edit, "Copy &R Script for Active Output\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
         self.paste_action = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
         edit.addSeparator()
         self._action(edit, "Select All Cells in Worksheet", self.table.selectAll, QKeySequence.StandardKey.SelectAll)
@@ -1366,15 +1379,15 @@ class ModernWindow(QMainWindow):
         self._action(tables_menu, "Chi-Square Test for &Association...", self.chi_square_association_dialog, None, None, True)
         self._action(tables_menu, "&Tally Individual Variables...", self.tally_dialog, None, None, True)
 
-        # 5i. R Integration menu
+        # 5i. R Translator menu
         stat.addSeparator()
-        r_menu = stat.addMenu("&R Integration")
-        self._action(r_menu, "Open &R Workbench Mode...", lambda: self.set_ui_mode("r"), None, None, True)
+        r_menu = stat.addMenu("&R Translator")
+        self._action(r_menu, "Copy &R Script for Active Output\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
+        self._action(r_menu, "View &R Code for Active Output...", self.view_active_r_code, None, "code_view")
+        self._action(r_menu, "Export Output as Standalone &R Script (.R)...", self.export_active_r_file, None, "save")
+        self._action(r_menu, "Export Worksheet to &R Data Frame (.R)...", self.export_worksheet_r_dataframe, None, "save")
+        r_menu.addSeparator()
         self._action(r_menu, "Run &R Script...", self.run_r_script_dialog, None, None, True)
-
-        # 6. StatCraft Connect Flagship Menu
-        connect_menu = bar.addMenu("&Connect")
-        self._populate_connect_menu(connect_menu)
 
         # 7. Graph menu
         graph = bar.addMenu("&Graph")
@@ -1392,12 +1405,7 @@ class ModernWindow(QMainWindow):
         self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
         view.addAction(self.dark_mode_action)
         view.addSeparator()
-        mode_menu = view.addMenu("Workspace Mode")
-        self._action(mode_menu, "Minitab Mode (Quality & SPC)", lambda: self.set_ui_mode("minitab"))
-        self._action(mode_menu, "JMP Mode (Visual Platforms)", lambda: self.set_ui_mode("jmp"))
-        self._action(mode_menu, "R Mode (Data Science Workbench)", lambda: self.set_ui_mode("r"))
-        view.addSeparator()
-        self.view_nav_action = QAction("Navigator / Table Panel", self, checkable=True, checked=True)
+        self.view_nav_action = QAction("Navigator", self, checkable=True, checked=True)
         self.view_nav_action.triggered.connect(self.toggle_navigator)
         view.addAction(self.view_nav_action)
         self.view_cmd_action = QAction("Command Line/History", self, checkable=True, checked=False)
@@ -1511,17 +1519,45 @@ class ModernWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.clear_action)
 
-        # Right-aligned Mode Switcher & Dark Mode Toggle
+        # Right-aligned R Code Translator Buttons & Dark Mode Toggle
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
+
+        # Prominent R Code Translator Action Buttons on Main Toolbar
+        r_box = QWidget()
+        r_box.setObjectName("rTranslatorBox")
+        r_layout = QHBoxLayout(r_box)
+        r_layout.setContentsMargins(4, 0, 4, 0)
+        r_layout.setSpacing(6)
+
+        self.btn_tb_copy_r = QPushButton("📋 Copy R Script")
+        self.btn_tb_copy_r.setObjectName("btnCopyR")
+        self.btn_tb_copy_r.setToolTip("Copy reproducible Base R script for active analysis to clipboard (Ctrl+Alt+R)")
+        self.btn_tb_copy_r.setStyleSheet(
+            "QPushButton#btnCopyR { background-color: #0284c7; color: white; font-weight: 700; font-size: 8.5pt; padding: 4px 12px; border-radius: 4px; border: 1px solid #0369a1; }"
+            "QPushButton#btnCopyR:hover { background-color: #0369a1; }"
+        )
+        self.btn_tb_copy_r.clicked.connect(self.copy_active_r_script)
+        r_layout.addWidget(self.btn_tb_copy_r)
+
+        self.btn_tb_view_r = QPushButton("👁️ View R Code")
+        self.btn_tb_view_r.setObjectName("btnViewR")
+        self.btn_tb_view_r.setToolTip("View and export reproducible Base R script for active analysis")
+        self.btn_tb_view_r.setStyleSheet(
+            "QPushButton#btnViewR { background-color: #ffffff; color: #0f172a; font-weight: 600; font-size: 8.5pt; padding: 4px 10px; border-radius: 4px; border: 1px solid #cbd5e1; }"
+            "QPushButton#btnViewR:hover { background-color: #f1f5f9; }"
+        )
+        self.btn_tb_view_r.clicked.connect(self.view_active_r_code)
+        r_layout.addWidget(self.btn_tb_view_r)
+
+        toolbar.addWidget(r_box)
 
         mode_box = QWidget()
         mode_box.setObjectName("modeToggleBox")
         mode_layout = QHBoxLayout(mode_box)
         mode_layout.setContentsMargins(4, 0, 4, 0)
-        mode_layout.setSpacing(2)
-
+        
         self.btn_mode_minitab = QToolButton()
         self.btn_mode_minitab.setText("Minitab")
         self.btn_mode_minitab.setToolTip("Minitab Mode: Quality, Engineering & SPC (Ctrl+Alt+J)")
@@ -2098,13 +2134,10 @@ class ModernWindow(QMainWindow):
                     parent_node.setExpanded(True)
                     sheet_nodes[sname] = parent_node
                 stale = self.presenter.result_stale(entry, cache)
-                is_connect = bool(entry.get("connected_analysis") or entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
-                connect_badge = "  [Connect]" if is_connect else ""
-                title = entry.get("title", "Result") + connect_badge + ("  *" if stale is True else "")
+                title = entry.get("title", "Result") + ("  *" if stale is True else "")
                 node = QTreeWidgetItem(parent_node, [title])
                 node.setFont(0, normal_font)
-                tip_conn = "\n• StatCraft Connect: Right-click for Dialog, JMP Explorer, R Workbench" if is_connect else ""
-                node.setToolTip(0, entry.get("time", "") + tip_conn)
+                node.setToolTip(0, entry.get("time", "") + "\nRight-click to copy R script")
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
@@ -2141,13 +2174,10 @@ class ModernWindow(QMainWindow):
         else:
             for entry in entries:
                 stale = self.presenter.result_stale(entry, cache)
-                is_connect = bool(entry.get("connected_analysis") or entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"))
-                connect_badge = "  [Connect]" if is_connect else ""
-                title = entry.get("title", "Result") + connect_badge + ("  *" if stale is True else "")
+                title = entry.get("title", "Result") + ("  *" if stale is True else "")
                 node = QTreeWidgetItem(self.navigator, [title])
                 node.setFont(0, normal_font)
-                tip_conn = "\n• StatCraft Connect: Right-click for Dialog, JMP Explorer, R Workbench" if is_connect else ""
-                node.setToolTip(0, (entry.get("worksheet_name") or sheet.name) + " · " + entry.get("time", "") + tip_conn)
+                node.setToolTip(0, (entry.get("worksheet_name") or sheet.name) + " · " + entry.get("time", "") + "\nRight-click to copy R script")
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
@@ -5345,6 +5375,10 @@ class ModernWindow(QMainWindow):
                     graph_frame.header.addWidget(reoptimize);graph_frame.export_hidden.append(reoptimize)
                 graph_frame.header.addWidget(self.graph_dropdown_button)
                 graph_frame.export_hidden.append(self.graph_dropdown_button)
+                if conn_dict:
+                    from .connect_hub import StatCraftAnalysisBar
+                    graph_r_bar = StatCraftAnalysisBar(self, entry, conn_dict)
+                    graph_card_layout.addWidget(graph_r_bar)
                 graph_card_layout.addWidget(graph_frame, 1)
                 self._active_graph_frame=graph_frame
                 graph_stage_layout.addWidget(graph_card, 1)
@@ -5679,25 +5713,12 @@ class ModernWindow(QMainWindow):
             menu.addSeparator()
             menu.addAction("Rename...", lambda: self.rename_output_dialog(target_entry))
             menu.addSeparator()
-        # StatCraft Connect submenu
-        if target_entry.get("connected_analysis") or target_entry.get("recipe", {}).get("action") in ("multiple_regression", "analyze_response_surface"):
-            menu.addSeparator()
-            connect_menu = menu.addMenu("StatCraft Connect")
-            connect_menu.addAction("Statistical Dialog (Minitab Mode)...", lambda: self.connect_open_dialog(target_entry))
-            connect_menu.addAction("Interactive Explorer (JMP Mode)...", lambda: self.connect_open_explorer(target_entry))
-            act_name = target_entry.get("recipe", {}).get("action")
-            if act_name in ("multiple_regression", "analyze_response_surface"):
-                connect_menu.addAction("Contour Plot (Response Surface)...", lambda: self.connect_open_contour(target_entry))
-                connect_menu.addAction("3D Surface Plot...", lambda: self.connect_open_surface(target_entry))
-            connect_menu.addAction("R Workbench (R Mode)...", lambda: self.connect_open_in_r(target_entry))
-            if act_name == "analyze_response_surface":
-                connect_menu.addAction("R Bootstrap Uncertainty Script...", lambda: self.connect_open_r_bootstrap(target_entry))
-            connect_menu.addSeparator()
-            connect_menu.addAction("Apply Predictions & Residuals to Worksheet", lambda: self.connect_apply_predictions(target_entry))
-            connect_menu.addAction("Compare Implementations (StatCraft vs R)...", lambda: self.connect_compare_implementations(target_entry))
-            connect_menu.addAction("Append Connected Report to ReportPad...", lambda: self.append_connected_report_to_report_pad(target_entry))
-            connect_menu.addSeparator()
-            connect_menu.addAction("Save as Reusable Workflow Recipe…", lambda: self.save_connected_workflow(target_entry))
+        # R Script Export Actions
+        menu.addSeparator()
+        menu.addAction("📋 Copy R Script\tCtrl+Alt+R", lambda: self.copy_entry_r_script(target_entry))
+        menu.addAction("👁️ View R Code...", lambda: self.view_entry_r_code(target_entry))
+        menu.addAction("💾 Export to R Script (.R)...", lambda: self.export_entry_r_file(target_entry))
+        menu.addAction("📑 Append to ReportPad", lambda: self.append_connected_report_to_report_pad(target_entry))
 
         if is_graph and getattr(self, "_brushed_rows", None):
             menu.addSeparator()
@@ -7004,6 +7025,99 @@ class ModernWindow(QMainWindow):
             "Co-developed with Antigravity (Google DeepMind) and Codex (OpenAI)."
         )
 
+
+
+
+    def _get_entry_r_script(self, entry=None) -> tuple[str, str]:
+        target = entry or self.selected_entry
+        if target is None and self.presenter.history:
+            target = self.presenter.history[-1]
+        if target is not None:
+            conn_dict = target.get("connected_analysis")
+            if not conn_dict:
+                from .connect import create_connected_analysis_from_entry
+                try:
+                    conn_obj = create_connected_analysis_from_entry(target, self.presenter.worksheet)
+                    if conn_obj:
+                        conn_dict = conn_obj.to_dict()
+                        target["connected_analysis"] = conn_dict
+                except Exception:
+                    conn_dict = None
+            if conn_dict and conn_dict.get("r_script"):
+                return conn_dict.get("r_script", ""), conn_dict.get("title", target.get("title", "Analysis"))
+        from .connect_r import generate_dataframe_init_code
+        ws = self.presenter.worksheet
+        code = generate_dataframe_init_code(ws)
+        return code, f"Worksheet: {ws.name}"
+
+    def copy_active_r_script(self):
+        script, title = self._get_entry_r_script()
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage(f"✓ Copied reproducible Base R script for '{title}' to clipboard!", 5000)
+
+    def view_active_r_code(self):
+        script, title = self._get_entry_r_script()
+        from .connect_hub import ViewRCodeDialog
+        dlg = ViewRCodeDialog(self, script, title=f"R Code: {title}")
+        dlg.exec()
+
+    def export_active_r_file(self):
+        script, title = self._get_entry_r_script()
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export R Script", f"{clean}_script.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
+
+    def copy_entry_r_script(self, entry):
+        script, title = self._get_entry_r_script(entry)
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage(f"✓ Copied reproducible Base R script for '{title}' to clipboard!", 5000)
+
+    def view_entry_r_code(self, entry):
+        script, title = self._get_entry_r_script(entry)
+        from .connect_hub import ViewRCodeDialog
+        dlg = ViewRCodeDialog(self, script, title=f"R Code: {title}")
+        dlg.exec()
+
+    def export_entry_r_file(self, entry):
+        script, title = self._get_entry_r_script(entry)
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export R Script", f"{clean}_script.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
+
+    def export_worksheet_r_dataframe(self):
+        from .connect_r import generate_dataframe_init_code
+        ws = self.presenter.worksheet
+        script = generate_dataframe_init_code(ws)
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws.name).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Worksheet to R Data Frame", f"{clean}_dataframe.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"✓ Saved worksheet R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
 def main():
     sandbox_mode = "--sandbox" in sys.argv

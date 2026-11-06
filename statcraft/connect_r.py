@@ -1314,3 +1314,28 @@ def generate_generic_r_script(entry: Dict[str, Any], worksheet: "Worksheet") -> 
         ])
 
     return "\n".join(lines)
+
+
+def generate_dataframe_init_code(worksheet: "Worksheet") -> str:
+    """Generate a clean, reproducible Base R script reconstructing the active worksheet as 'df'."""
+    col_defs = []
+    for col in worksheet.columns:
+        safe_name = col.name.replace('"', '\"')
+        if col.kind == "number":
+            vals = [str(v) if v is not None and not (isinstance(v, float) and math.isnan(v)) else "NA" for v in col.values]
+            col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
+        else:
+            vals = [f'"{str(v)}"' if v is not None else "NA" for v in col.values]
+            col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
+    body = ",\n".join(col_defs)
+    return (
+        "# ==============================================================================\n"
+        f"# StatCraft — Active Worksheet R Data Frame Export\n"
+        f"# Worksheet: {worksheet.name} ({len(worksheet.columns)} columns, {worksheet.row_count} rows)\n"
+        "# ==============================================================================\n\n"
+        f"df <- data.frame(\n{body},\n  stringsAsFactors = FALSE\n)\n\n"
+        "cat('Active worksheet loaded into R as \'df\':\\n')\n"
+        "print(head(df))\n"
+        "cat('\\nStructure of df:\\n')\n"
+        "str(df)\n"
+    )

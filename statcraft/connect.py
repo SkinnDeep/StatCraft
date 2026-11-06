@@ -1499,7 +1499,7 @@ def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> Con
 
 def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
     """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
-    if not entry or entry.get("origin") == "native" or "recipe" not in entry:
+    if not entry or entry.get("origin") == "native" or entry.get("result", {}).get("analysis") == "native_saved_output":
         return None
     conn_raw = entry.get("connected_analysis")
     if isinstance(conn_raw, dict):

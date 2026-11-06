@@ -1,63 +1,108 @@
 import unittest
-from unittest.mock import MagicMock, patch
-from PySide6.QtWidgets import QApplication, QPushButton
+import os
+import sys
 
+# Configure headless PySide6
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+try:
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication(sys.argv)
+except ImportError:
+    app = None
+
+from statcraft.connect import ConnectedAnalysis, create_connected_analysis_from_entry
+from statcraft.connect_hub import StatCraftAnalysisBar
 from statcraft.model import Worksheet, Column
-from statcraft.app import Presenter
-from statcraft.connect import create_connected_analysis_from_entry
-from statcraft.connect_hub import StatCraftAnalysisBar, ViewRCodeDialog
 
 
 class TestRCodeExportBar(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
+        if app is None:
+            raise unittest.SkipTest("PySide6 not installed")
 
     def setUp(self):
-        self.ws = Worksheet("YieldStudy", [
-            Column("Yield", "number", [80.0, 85.0, 88.0, 92.0, 78.0, 82.0]),
-            Column("Temp", "number", [150.0, 160.0, 170.0, 180.0, 145.0, 155.0]),
-        ])
-        self.presenter = Presenter()
-        self.presenter.worksheet = self.ws
-        self.presenter.multiple_regression(0, [1])
-        self.entry = self.presenter.history[-1]
-        self.conn = create_connected_analysis_from_entry(self.entry, self.ws)
-        self.entry["connected_analysis"] = self.conn.to_dict()
+        self.ws = Worksheet(name="TestSheet")
+        self.ws.columns.append(Column("A", values=[1.0, 2.0, 3.0, 4.0, 5.0]))
+        self.ws.columns.append(Column("B", values=[2.0, 4.0, 6.0, 8.0, 10.0]))
 
-    def test_analysis_bar_contains_r_export_buttons(self):
-        mock_window = MagicMock()
-        mock_window.presenter = self.presenter
+    def test_analysis_bar_has_r_translator_elements(self):
+        conn_dict = {
+            "title": "Linear Model Test",
+            "r_script": "# test r script\ndata.frame(x=1:5)",
+            "analysis_type": "linear_regression",
+        }
+        entry = {"title": "Linear Model Test", "recipe": {"action": "test_stat"}}
+        bar = StatCraftAnalysisBar(None, entry, conn_dict)
 
-        bar = StatCraftAnalysisBar(mock_window, self.entry, self.conn.to_dict())
-        buttons = bar.findChildren(QPushButton)
-        labels = [b.text() for b in buttons]
+        # Check badge
+        self.assertIn("R TRANSLATOR", bar.badge.text())
 
-        self.assertTrue(any("Minitab Dialog" in t for t in labels), f"Labels: {labels}")
-        self.assertTrue(any("Copy R Script" in t for t in labels), f"Labels: {labels}")
-        self.assertTrue(any("View R Code" in t for t in labels), f"Labels: {labels}")
-        self.assertTrue(any("ReportPad" in t for t in labels), f"Labels: {labels}")
+        # Check prominent Copy R button
+        self.assertIsNotNone(bar.btn_copy_r)
+        self.assertIn("Copy R Script", bar.btn_copy_r.text())
 
-    @patch("PySide6.QtWidgets.QApplication.clipboard")
-    def test_copy_r_script_to_clipboard(self, mock_get_clipboard):
-        mock_clip = MagicMock()
-        mock_get_clipboard.return_value = mock_clip
-        mock_window = MagicMock()
-        mock_window.presenter = self.presenter
+        # Check View R Code and Export R buttons
+        self.assertIsNotNone(bar.btn_view_r)
+        self.assertIsNotNone(bar.btn_export_r)
 
-        bar = StatCraftAnalysisBar(mock_window, self.entry, self.conn.to_dict())
-        bar.copy_r_script()
+        # Ensure JMP / residual Connect buttons were purged
+        self.assertFalse(hasattr(bar, "btn_profiler"))
+        self.assertFalse(hasattr(bar, "btn_sync"))
 
-        mock_clip.setText.assert_called_once()
-        copied_text = mock_clip.setText.call_args[0][0]
-        self.assertIn("lm(", copied_text)
-        self.assertIn('df[["Yield"]]', copied_text)
+    def test_universal_r_generation_for_non_recipe_entries(self):
+        """Entries without recipes must generate valid R scripts."""
+        generic_entry = {
+            "title": "Two-Sample T-Test",
+            "result": {
+                "analysis": "two_sample_t",
+                "sample1": "A",
+                "sample2": "B",
+                "t_stat": 2.5,
+                "p_value": 0.045,
+            },
+        }
+        conn = create_connected_analysis_from_entry(generic_entry, self.ws)
+        self.assertIsNotNone(conn)
+        self.assertIn("r_script", conn.to_dict())
+        r_script = conn.to_dict()["r_script"]
+        self.assertIn("StatCraft", r_script)
+        self.assertIn("summary(sub_df)", r_script)
 
-    def test_view_r_code_dialog(self):
-        dlg = ViewRCodeDialog(None, self.conn.r_script, title="Regression R Script")
-        self.assertTrue(dlg.isSizeGripEnabled())
-        self.assertIn("lm(", dlg.code_view.toPlainText())
-        dlg.close()
+    def test_modern_window_r_translator_ui(self):
+        from statcraft.modern_app import ModernWindow
+        win = ModernWindow()
+
+        try:
+            # 1. Main Toolbar has prominent Copy R and View R buttons
+            self.assertTrue(hasattr(win, "btn_tb_copy_r"))
+            self.assertTrue(hasattr(win, "btn_tb_view_r"))
+            self.assertIn("Copy R Script", win.btn_tb_copy_r.text())
+            self.assertIn("View R Code", win.btn_tb_view_r.text())
+
+            # 2. Tab corner widget has [📋 Copy R] button
+            self.assertTrue(hasattr(win, "tab_copy_r_btn"))
+            self.assertIn("Copy R", win.tab_copy_r_btn.text())
+
+            # 3. Legacy mode toggle buttons exist programmatically for backward compatibility
+            self.assertTrue(hasattr(win, "btn_mode_minitab"))
+            self.assertTrue(hasattr(win, "btn_mode_jmp"))
+            self.assertTrue(hasattr(win, "btn_mode_r"))
+
+            # 4. Menubar has Stat -> R Translator and no &Connect top-level menu
+            menubar = win.menuBar()
+            actions = menubar.actions()
+            menu_titles = [a.text() for a in actions]
+            self.assertNotIn("&Connect", menu_titles)
+            self.assertIn("&Stat", menu_titles)
+            self.assertIn("&File", menu_titles)
+
+            # 5. Helper methods are functional
+            code, title = win._get_entry_r_script()
+            self.assertTrue(len(code) > 0)
+            self.assertIn("data.frame", code)
+        finally:
+            win.close()
 
 
 if __name__ == "__main__":

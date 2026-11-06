@@ -356,7 +356,7 @@ class StatCraftAnalysisBar(QFrame):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(8)
 
-        badge = QLabel("<b>📊 STATCRAFT ANALYSIS</b>")
+        badge = QLabel("<b>📊 R TRANSLATOR</b>")
         badge.setStyleSheet("color: #0284c7; font-size: 9pt;" if not dark else "color: #38bdf8; font-size: 9pt;")
         top_bar.addWidget(badge)
 
@@ -389,6 +389,11 @@ class StatCraftAnalysisBar(QFrame):
         btn_bar = QHBoxLayout()
         btn_bar.setSpacing(6)
 
+        btn_primary_qss = (
+            "QPushButton { background: #0284c7; color: #ffffff; border: 1px solid #0369a1; border-radius: 4px; padding: 4px 12px; font-size: 8.5pt; font-weight: 700; }"
+            "QPushButton:hover { background: #0369a1; }"
+        )
+
         btn_qss = (
             "QPushButton { background: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 4px; padding: 4px 10px; font-size: 8.5pt; font-weight: 500; }"
             "QPushButton:hover { background: #3f3f46; border-color: #0284c7; color: #38bdf8; }"
@@ -397,56 +402,44 @@ class StatCraftAnalysisBar(QFrame):
             "QPushButton:hover { background: #e0f2fe; border-color: #0284c7; color: #005a9e; }"
         )
 
-        b_dialog = QPushButton("📊 Edit Minitab Dialog...")
-        b_dialog.setStyleSheet(btn_qss)
-        b_dialog.setToolTip("Edit variables, options, and parameters in the classic procedure dialog (restoring previous selections)")
-        b_dialog.clicked.connect(lambda: self.window.connect_open_dialog(self.entry))
-        btn_bar.addWidget(b_dialog)
-
-        sep1 = QLabel("|")
-        sep1.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
-        btn_bar.addWidget(sep1)
+        self.badge = badge
 
         b_copy_r = QPushButton("📋 Copy R Script")
-        b_copy_r.setStyleSheet(btn_qss)
+        b_copy_r.setStyleSheet(btn_primary_qss)
         b_copy_r.setToolTip("Copy 100% pure Base R script for this analysis to the system clipboard (zero external packages)")
         b_copy_r.clicked.connect(self.copy_r_script)
         btn_bar.addWidget(b_copy_r)
+        self.btn_copy_r = b_copy_r
 
         b_view_r = QPushButton("👁️ View R Code")
         b_view_r.setStyleSheet(btn_qss)
         b_view_r.setToolTip("Inspect generated Base R code in a syntax-highlighted code viewer")
         b_view_r.clicked.connect(self.view_r_code)
         btn_bar.addWidget(b_view_r)
+        self.btn_view_r = b_view_r
 
-        b_export_r = QPushButton("💾 Export .R")
+        b_export_r = QPushButton("💾 Export .R...")
+        self.btn_export_r = b_export_r
         b_export_r.setStyleSheet(btn_qss)
         b_export_r.setToolTip("Save standalone Base R script to a file")
         b_export_r.clicked.connect(self.export_r_file)
         btn_bar.addWidget(b_export_r)
 
-        sep2 = QLabel("|")
-        sep2.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
-        btn_bar.addWidget(sep2)
+        sep1 = QLabel("|")
+        sep1.setStyleSheet("color: #cbd5e1;" if not dark else "color: #3f3f46;")
+        btn_bar.addWidget(sep1)
+
+        b_dialog = QPushButton("🔙 Recall Minitab Dialog...")
+        b_dialog.setStyleSheet(btn_qss)
+        b_dialog.setToolTip("Edit variables, options, and parameters in the classic procedure dialog (restoring previous selections)")
+        b_dialog.clicked.connect(lambda: self.window.connect_open_dialog(self.entry) if hasattr(self.window, "connect_open_dialog") else None)
+        btn_bar.addWidget(b_dialog)
 
         b_report = QPushButton("📑 Add to ReportPad")
         b_report.setStyleSheet(btn_qss)
         b_report.setToolTip("Append this analysis report to the active StatCraft ReportPad")
         b_report.clicked.connect(lambda: self.window.append_connected_report_to_report_pad(self.entry) if hasattr(self.window, "append_connected_report_to_report_pad") else None)
         btn_bar.addWidget(b_report)
-
-        if self.conn_obj.predictor_names:
-            b_prof = QPushButton("📈 Interactive Profiler")
-            b_prof.setStyleSheet(btn_qss)
-            b_prof.setToolTip("Open interactive prediction profiler with crosshairs for model exploration")
-            b_prof.clicked.connect(lambda: self.window.connect_open_explorer(self.entry))
-            btn_bar.addWidget(b_prof)
-
-        b_sync = QPushButton("📥 Sync to Sheet")
-        b_sync.setStyleSheet(btn_qss)
-        b_sync.setToolTip("Append model predictions & residuals back into active worksheet matched by row IDs")
-        b_sync.clicked.connect(lambda: self.window.connect_apply_predictions(self.entry))
-        btn_bar.addWidget(b_sync)
 
         btn_bar.addStretch()
         root.addLayout(btn_bar)
