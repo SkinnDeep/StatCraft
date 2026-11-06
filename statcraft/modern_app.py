@@ -4731,23 +4731,13 @@ class ModernWindow(QMainWindow):
 
         # --- Clean StatCraft Connect Header Action ---
         conn_dict = entry.get("connected_analysis")
-        recipe_act = entry.get("recipe", {}).get("action")
-        p_params = entry.get("recipe", {}).get("parameters", {})
-        if not conn_dict and recipe_act == "multiple_regression" and "response_index" in p_params:
-            from .connect import create_connected_regression
+        if not conn_dict:
+            from .connect import create_connected_analysis_from_entry
             try:
-                conn_obj = create_connected_regression(self.presenter.worksheet, p_params["response_index"], p_params["predictor_indices"], result, p_params.get("confidence", 0.95))
-                conn_dict = conn_obj.to_dict()
-                entry["connected_analysis"] = conn_dict
-            except Exception:
-                conn_dict = None
-        elif not conn_dict and recipe_act == "analyze_response_surface" and "response_index" in p_params:
-            from .connect import create_connected_response_surface
-            try:
-                conf = p_params.get("options", {}).get("confidence", 0.95) if isinstance(p_params.get("options"), dict) else 0.95
-                conn_obj = create_connected_response_surface(self.presenter.worksheet, p_params["response_index"], p_params["factor_indices"], result, conf, coding=p_params.get("coding"), terms=p_params.get("terms"), options=p_params.get("options"))
-                conn_dict = conn_obj.to_dict()
-                entry["connected_analysis"] = conn_dict
+                conn_obj = create_connected_analysis_from_entry(entry, self.presenter.worksheet)
+                if conn_obj:
+                    conn_dict = conn_obj.to_dict()
+                    entry["connected_analysis"] = conn_dict
             except Exception:
                 conn_dict = None
 
@@ -5675,10 +5665,18 @@ class ModernWindow(QMainWindow):
         self.set_ui_mode("minitab")
         if action == "multiple_regression":
             self.multiple_regression()
-        elif action == "analyze_response_surface":
+        elif action in ("analyze_response_surface", "response_surface"):
             self.analyze_response_surface()
-        elif action in ("one_way_anova", "stacked_anova"):
+        elif action in ("oneway_anova", "one_way_anova", "stacked_anova"):
             self.oneway_anova_dialog()
+        elif action in ("analyze_factorial", "analyze_factorial_terms", "factorial_regression"):
+            self.analyze_factorial()
+        elif action in ("general_linear_model", "glm"):
+            self.general_linear_model()
+        elif action in ("two_sample_t", "2_sample_t"):
+            self.inference_dialog("two_sample_t")
+        elif action in ("one_sample_t", "1_sample_t"):
+            self.inference_dialog("one_sample_t")
         elif action == "fit_y_by_x":
             self.multiple_regression()
         elif action == "describe_columns":
@@ -5756,25 +5754,15 @@ class ModernWindow(QMainWindow):
 
     def connect_open_in_r(self, entry):
         conn_dict = entry.get("connected_analysis")
-        recipe = entry.get("recipe", {})
-        action = recipe.get("action")
-        p = recipe.get("parameters", {})
         if not conn_dict:
-            if action == "multiple_regression" and "response_index" in p:
-                from .connect import create_connected_regression
-                conn_dict = create_connected_regression(
-                    self.presenter.worksheet, p["response_index"], p["predictor_indices"],
-                    entry.get("result", {}), p.get("confidence", 0.95)
-                ).to_dict()
-                entry["connected_analysis"] = conn_dict
-            elif action == "analyze_response_surface" and "response_index" in p:
-                from .connect import create_connected_response_surface
-                conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
-                conn_dict = create_connected_response_surface(
-                    self.presenter.worksheet, p["response_index"], p["factor_indices"],
-                    entry.get("result", {}), conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
-                ).to_dict()
-                entry["connected_analysis"] = conn_dict
+            from .connect import create_connected_analysis_from_entry
+            try:
+                conn_obj = create_connected_analysis_from_entry(entry, self.presenter.worksheet)
+                if conn_obj:
+                    conn_dict = conn_obj.to_dict()
+                    entry["connected_analysis"] = conn_dict
+            except Exception:
+                conn_dict = None
 
         if conn_dict and self.r_workbench:
             self.set_ui_mode("r")

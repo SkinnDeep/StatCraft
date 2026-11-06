@@ -24,52 +24,25 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
         window.statusBar().showMessage("Select a statistical result card before opening Interactive Explorer.", 6000)
         return False
 
-    connected: Optional["ConnectedAnalysis"] = None
-    if isinstance(connected_raw, dict):
-        from .connect import ConnectedAnalysis
-        try:
-            connected = ConnectedAnalysis.from_dict(connected_raw)
-        except Exception:
-            connected = None
-    elif hasattr(connected_raw, "response_name"):
-        connected = connected_raw
-
     ws = window.presenter.worksheet
 
-    # If connected is missing, attempt to construct it from recipe
-    if not connected and recipe:
-        act = recipe.get("action")
-        p = recipe.get("parameters", {})
-        if act == "multiple_regression" and "response_index" in p:
-            from .connect import create_connected_regression
-            try:
-                connected = create_connected_regression(
-                    ws, p["response_index"], p["predictor_indices"],
-                    result, p.get("confidence", 0.95)
-                )
-                entry["connected_analysis"] = connected.to_dict()
-            except Exception:
-                connected = None
-        elif act == "analyze_response_surface" and "response_index" in p:
-            from .connect import create_connected_response_surface
-            conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
-            try:
-                connected = create_connected_response_surface(
-                    ws, p["response_index"], p["factor_indices"],
-                    result, conf, coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
-                )
-                entry["connected_analysis"] = connected.to_dict()
-            except Exception:
-                connected = None
+    from .connect import create_connected_analysis_from_entry, ConnectedAnalysis
+    connected = create_connected_analysis_from_entry(entry, ws)
 
     action = recipe.get("action") or (connected.analysis_type if connected else "")
     p_params = recipe.get("parameters", {})
 
     # Route 1: One-Way ANOVA -> JMP Oneway Platform (Fit Y by X)
-    if action == "one_way_anova" and "response_index" in p_params:
-        y_idx = p_params["response_index"]
+    if action in ("oneway_anova", "one_way_anova"):
+        y_idx = p_params.get("response_index")
         x_idx = p_params.get("factor_index")
-        if x_idx is not None and 0 <= y_idx < len(ws.columns) and 0 <= x_idx < len(ws.columns):
+        if y_idx is None and connected:
+            for idx, col in enumerate(ws.columns):
+                if col.name == connected.response_name:
+                    y_idx = idx
+                elif col.name in connected.predictor_names:
+                    x_idx = idx
+        if y_idx is not None and x_idx is not None and 0 <= y_idx < len(ws.columns) and 0 <= x_idx < len(ws.columns):
             window.set_ui_mode("jmp")
             fit_entry = window._call(
                 lambda: window.presenter.fit_y_by_x(y_index=y_idx, x_index=x_idx),
@@ -133,16 +106,38 @@ def open_interactive_explorer(window: "ModernWindow", entry: Dict[str, Any]) -> 
             window.statusBar().showMessage(f"StatCraft Connect: Opened Bivariate Fit for {resp_name} vs {pred_names[0]}", 6000)
             return True
 
-    # Route 4: Multiple predictors or Response Surface -> Open JMP Interactive Prediction Profiler
+    # Route 4: Multiple predictors, Factorial, GLM, or Response Surface -> Open JMP Interactive Prediction Profiler
     model_recipe = copy.deepcopy(recipe)
     if not model_recipe and connected:
-        if connected.analysis_type == "analyze_response_surface":
+        if connected.analysis_type in ("analyze_response_surface", "response_surface"):
             model_recipe = {
                 "action": "analyze_response_surface",
                 "parameters": {
                     "response_index": resp_idx,
                     "factor_indices": pred_indices,
                     "coding": connected.metadata.get("coding"),
+                    "terms": connected.metadata.get("terms"),
+                    "options": connected.metadata.get("options", {"confidence": connected.confidence})
+                }
+            }
+        elif connected.analysis_type in ("analyze_factorial", "analyze_factorial_terms", "factorial_regression"):
+            model_recipe = {
+                "action": "analyze_factorial",
+                "parameters": {
+                    "response_index": resp_idx,
+                    "factor_indices": pred_indices,
+                    "confidence": connected.confidence,
+                    "selected_terms": connected.metadata.get("selected_terms"),
+                    "max_order": connected.metadata.get("max_order", 2),
+                }
+            }
+        elif connected.analysis_type in ("general_linear_model", "glm"):
+            model_recipe = {
+                "action": "general_linear_model",
+                "parameters": {
+                    "response_index": resp_idx,
+                    "factor_indices": pred_indices,
+                    "covariate_indices": [],
                     "terms": connected.metadata.get("terms"),
                     "options": connected.metadata.get("options", {"confidence": connected.confidence})
                 }

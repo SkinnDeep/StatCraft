@@ -105,10 +105,20 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
     return "\n".join(lines)
 
 
-def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+def generate_r_rsm_script(
+    connected: "ConnectedAnalysis",
+    worksheet: "Worksheet",
+    replications: int = 1000,
+    confidence: Optional[float] = None,
+    candidate_point: Optional[Dict[str, float]] = None,
+) -> str:
     """Generate clean, standalone R code for Response Surface Methodology and Bootstrap."""
     resp_sym = format_r_symbol(connected.response_name)
     fact_syms = [format_r_symbol(p) for p in connected.predictor_names]
+    conf_val = confidence if confidence is not None else connected.confidence
+    alpha = (1.0 - conf_val) / 2.0
+    alpha_low_pct = f"{alpha * 100:.3g}"
+    alpha_high_pct = f"{(1.0 - alpha) * 100:.3g}"
 
     # Linear & 2-factor interactions + quadratic terms
     formula_terms = [f"({ ' + '.join(fact_syms) })^2"] + [f"I({f}^2)" for f in fact_syms]
@@ -116,14 +126,17 @@ def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
 
     candidate_lines = []
     for f_orig, f_sym in zip(connected.predictor_names, fact_syms):
-        candidate_lines.append(f"  {f_sym} = mean(df${f_sym}, na.rm = TRUE)")
+        if candidate_point and f_orig in candidate_point:
+            candidate_lines.append(f"  {f_sym} = {candidate_point[f_orig]}")
+        else:
+            candidate_lines.append(f"  {f_sym} = mean(df${f_sym}, na.rm = TRUE)")
     candidate_def = ",\n".join(candidate_lines)
 
     lines = [
         "# ==============================================================================",
         "# StatCraft Connect — R Translation (Response Surface & Bootstrap)",
         f"# Model: {connected.title}",
-        f"# Worksheet: {connected.worksheet_name} (Confidence: {connected.confidence * 100:g}%)",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {conf_val * 100:g}%)",
         f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "# ==============================================================================",
         "",
@@ -161,15 +174,15 @@ def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         ])
 
     lines.extend([
-        "# 4. Bootstrap Prediction Uncertainty at Operating Point",
-        "# (Fixed-X Non-Parametric Residual Resampling with 1,000 replications)",
+        f"# 4. Bootstrap Prediction Uncertainty at Operating Point",
+        f"# (Fixed-X Non-Parametric Residual Resampling with {replications:,} replications)",
         "candidate_point <- data.frame(",
         candidate_def,
         ")",
         "y_hat <- predict(fit, newdata = candidate_point)",
         "",
         "set.seed(42)",
-        "B <- 1000",
+        f"B <- {replications}",
         "resids <- residuals(fit)",
         "boot_preds <- numeric(B)",
         "for (b in seq_len(B)) {",
@@ -178,10 +191,10 @@ def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "  b_fit <- lm(formula_obj, data = df_boot)",
         "  boot_preds[b] <- predict(b_fit, newdata = candidate_point)",
         "}",
-        "ci_lower <- quantile(boot_preds, 0.025)",
-        "ci_upper <- quantile(boot_preds, 0.975)",
+        f"ci_lower <- quantile(boot_preds, {alpha})",
+        f"ci_upper <- quantile(boot_preds, {1.0 - alpha})",
         "cat(sprintf('\\n[StatCraft Connect] Candidate Operating Point Prediction: %.4f\\n', y_hat))",
-        "cat(sprintf('[StatCraft Connect] 95%% Bootstrap Uncertainty Interval: [%.4f, %.4f]\\n\\n', ci_lower, ci_upper))",
+        f"cat(sprintf('[StatCraft Connect] {conf_val * 100:g}%% Bootstrap Uncertainty Interval: [%.4f, %.4f]\\n\\n', ci_lower, ci_upper))",
         "",
         "# 5. Export Diagnostics back to StatCraft Worksheet",
         "fit_preds <- predict(fit, newdata = df)",
@@ -195,6 +208,180 @@ def generate_r_rsm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "cat('[StatCraft Connect] RSM Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
     ])
 
+    return "\n".join(lines)
+
+
+def generate_response_surface_bootstrap_script(
+    connected: "ConnectedAnalysis",
+    worksheet: "Worksheet",
+    replications: int = 2000,
+    confidence: Optional[float] = None,
+    candidate_point: Optional[Dict[str, float]] = None,
+) -> str:
+    """Generate standalone R script for response surface bootstrap uncertainty."""
+    return generate_r_rsm_script(connected, worksheet, replications=replications, confidence=confidence, candidate_point=candidate_point)
+
+
+def generate_r_oneway_anova_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean, standalone R code for One-Way Analysis of Variance."""
+    resp_name = connected.response_name
+    fact_name = connected.predictor_names[0] if connected.predictor_names else "Factor"
+    resp_sym = format_r_symbol(resp_name)
+    fact_sym = format_r_symbol(fact_name)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation (One-Way ANOVA)",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {connected.confidence * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Ensure Factor is treated as Categorical",
+        f"df[[{repr(fact_name)}]] <- as.factor(df[[{repr(fact_name)}]])",
+        f"formula_obj <- {resp_sym} ~ {fact_sym}",
+        "fit <- aov(formula_obj, data = df)",
+        "",
+        "# 2. Summary & ANOVA Table",
+        "cat('================================================================\\n')",
+        "cat('              StatCraft Connect : One-Way ANOVA Summary         \\n')",
+        "cat('================================================================\\n\\n')",
+        "print(summary(fit))",
+        "",
+        "# 3. Tukey Honestly Significant Differences (HSD)",
+        "cat('\\n--- Tukey Multiple Comparisons (95% Family-wise CI) ---\\n')",
+        "tukey_out <- TukeyHSD(fit)",
+        "print(tukey_out)",
+        "",
+        "# 4. Group Boxplot and Tukey Interval Plot",
+        "par(mfrow = c(1, 2))",
+        f"boxplot({resp_sym} ~ {fact_sym}, data = df, col = '#e0f2fe', border = '#0284c7',",
+        f"        main = 'Response by Factor Level', xlab = '{fact_name}', ylab = '{resp_name}')",
+        "plot(tukey_out, las = 1, col = '#0284c7')",
+        "par(mfrow = c(1, 1))",
+        "",
+        "# 5. Export Diagnostics back to StatCraft Worksheet",
+        "fit_preds <- predict(fit, newdata = df)",
+        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        "diagnostics <- data.frame(",
+        "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
+        "  Fitted = fit_preds,",
+        "  Residuals = fit_resids",
+        ")",
+        "statcraft_export(diagnostics, 'ANOVA_Diagnostics')",
+        "cat('\\n[StatCraft Connect] ANOVA Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_factorial_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean, standalone R code for Factorial Design of Experiments."""
+    resp_name = connected.response_name
+    fact_names = connected.predictor_names
+    resp_sym = format_r_symbol(resp_name)
+    fact_syms = [format_r_symbol(f) for f in fact_names]
+
+    formula_rhs = " * ".join(fact_syms) if len(fact_syms) <= 4 else f"({ ' + '.join(fact_syms) })^2"
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation (Factorial DOE)",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {connected.confidence * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Model Formula with Interaction Terms",
+        f"formula_obj <- {resp_sym} ~ {formula_rhs}",
+        "fit <- lm(formula_obj, data = df)",
+        "",
+        "# 2. Model Summary & ANOVA",
+        "cat('================================================================\\n')",
+        "cat('              StatCraft Connect : Factorial DOE Summary          \\n')",
+        "cat('================================================================\\n\\n')",
+        "print(summary(fit))",
+        "cat('\\n--- Analysis of Variance Table ---\\n')",
+        "print(anova(fit))",
+        "",
+        "# 3. Diagnostic Plots",
+        "par(mfrow = c(1, 2))",
+        "plot(fitted(fit), residuals(fit), pch = 19, col = '#0284c7',",
+        "     main = 'Residuals vs Fitted', xlab = 'Fitted Values', ylab = 'Residuals')",
+        "abline(h = 0, col = '#ef4444', lty = 'dashed', lwd = 2)",
+        "grid(col = '#cbd5e1', lty = 'dotted')",
+        "qqnorm(residuals(fit), pch = 19, col = '#059669', main = 'Normal Q-Q Plot')",
+        "qqline(residuals(fit), col = '#ef4444', lwd = 2)",
+        "par(mfrow = c(1, 1))",
+        "",
+        "# 4. Export Diagnostics back to StatCraft Worksheet",
+        "fit_preds <- predict(fit, newdata = df)",
+        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        "diagnostics <- data.frame(",
+        "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
+        "  Fitted = fit_preds,",
+        "  Residuals = fit_resids",
+        ")",
+        "statcraft_export(diagnostics, 'Factorial_Diagnostics')",
+        "cat('\\n[StatCraft Connect] Factorial Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
+    ]
+    return "\n".join(lines)
+
+
+def generate_r_glm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate clean, standalone R code for General Linear Model."""
+    resp_name = connected.response_name
+    fact_names = connected.metadata.get("factor_names", [])
+    resp_sym = format_r_symbol(resp_name)
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation (General Linear Model)",
+        f"# Model: {connected.title}",
+        f"# Worksheet: {connected.worksheet_name} (Confidence: {connected.confidence * 100:g}%)",
+        f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "# ==============================================================================",
+        "",
+        "# 1. Ensure Factors are treated as Categorical",
+    ]
+    for fn in fact_names:
+        lines.append(f"df[[{repr(fn)}]] <- as.factor(df[[{repr(fn)}]])")
+
+    all_terms = [format_r_symbol(p) for p in connected.predictor_names]
+    formula_rhs = " + ".join(all_terms) if all_terms else "1"
+
+    lines.extend([
+        f"formula_obj <- {resp_sym} ~ {formula_rhs}",
+        "fit <- lm(formula_obj, data = df)",
+        "",
+        "# 2. Summary & ANOVA Table",
+        "cat('================================================================\\n')",
+        "cat('              StatCraft Connect : General Linear Model Summary   \\n')",
+        "cat('================================================================\\n\\n')",
+        "print(summary(fit))",
+        "cat('\\n--- Analysis of Variance Table ---\\n')",
+        "print(anova(fit))",
+        "",
+        "# 3. Diagnostic Plots",
+        "par(mfrow = c(1, 2))",
+        "plot(fitted(fit), residuals(fit), pch = 19, col = '#0284c7',",
+        "     main = 'Residuals vs Fitted', xlab = 'Fitted Values', ylab = 'Residuals')",
+        "abline(h = 0, col = '#ef4444', lty = 'dashed', lwd = 2)",
+        "grid(col = '#cbd5e1', lty = 'dotted')",
+        "qqnorm(residuals(fit), pch = 19, col = '#059669', main = 'Normal Q-Q Plot')",
+        "qqline(residuals(fit), col = '#ef4444', lwd = 2)",
+        "par(mfrow = c(1, 1))",
+        "",
+        "# 4. Export Diagnostics",
+        "fit_preds <- predict(fit, newdata = df)",
+        f"fit_resids <- ifelse(is.na(df[[{repr(resp_name)}]]), NA, df[[{repr(resp_name)}]] - fit_preds)",
+        "diagnostics <- data.frame(",
+        "  Row_ID = if ('.statcraft_row_id' %in% names(df)) df$.statcraft_row_id else seq_len(nrow(df)),",
+        "  Fitted = fit_preds,",
+        "  Residuals = fit_resids",
+        ")",
+        "statcraft_export(diagnostics, 'GLM_Diagnostics')",
+        "cat('\\n[StatCraft Connect] GLM Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
+    ])
     return "\n".join(lines)
 
 
@@ -212,7 +399,14 @@ def import_r_predictions_to_worksheet(
     from .model import Column
 
     # 1. Locate exported table
-    table_data = export_dict.get(table_name) or export_dict.get("RSM_Diagnostics") or export_dict.get("Regression_Diagnostics")
+    table_data = (
+        export_dict.get(table_name)
+        or export_dict.get("Regression_Diagnostics")
+        or export_dict.get("RSM_Diagnostics")
+        or export_dict.get("ANOVA_Diagnostics")
+        or export_dict.get("Factorial_Diagnostics")
+        or export_dict.get("GLM_Diagnostics")
+    )
     if not table_data and len(export_dict) == 1:
         # Fall back to single exported table if name differs
         table_data = next(iter(export_dict.values()))

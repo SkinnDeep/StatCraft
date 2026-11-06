@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -421,3 +422,266 @@ def create_connected_response_surface(
     from .connect_r import generate_r_rsm_script
     connected.r_script = generate_r_rsm_script(connected, worksheet)
     return connected
+
+
+def create_connected_oneway_anova(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_index: int,
+    result: Dict[str, Any],
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a fitted oneway_anova result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-resp-{response_index}")
+    fact_col = worksheet.columns[factor_index]
+    fact_id = fact_col.metadata.get("id", f"col-fact-{factor_index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        r_val = resp_col.values[i] if i < len(resp_col.values) else None
+        f_val = fact_col.values[i] if i < len(fact_col.values) else None
+        if r_val is not None and f_val is not None and not (isinstance(r_val, float) and math.isnan(r_val)):
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    fingerprint = compute_data_fingerprint(worksheet, [response_index, factor_index])
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "f_stat": result.get("f_stat", 0.0),
+        "p_value": result.get("p_value", 1.0),
+        "df_factor": result.get("df_factor", 0),
+        "df_error": result.get("df_error", 0),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="oneway_anova",
+        title=f"One-Way ANOVA: {resp_col.name} by {fact_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=[fact_id],
+        predictor_names=[fact_col.name],
+        confidence=float((options or {}).get("confidence", 0.95)),
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=[],
+        statistics=stats,
+        fitted_values=result.get("fitted", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "factor_name": fact_col.name,
+            "response_name": resp_col.name,
+            "options": options or {},
+            "group_summary": result.get("group_summary", []),
+        }
+    )
+    from .connect_r import generate_r_oneway_anova_script
+    connected.r_script = generate_r_oneway_anova_script(connected, worksheet)
+    return connected
+
+
+def create_connected_factorial(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_indices: List[int],
+    result: Dict[str, Any],
+    confidence: float = 0.95,
+    selected_terms: Optional[List[Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a fitted analyze_factorial result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-resp-{response_index}")
+    fact_cols = [worksheet.columns[i] for i in factor_indices]
+    fact_ids = [col.metadata.get("id", f"col-fact-{i}") for i, col in zip(factor_indices, fact_cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        r_val = resp_col.values[i] if i < len(resp_col.values) else None
+        valid = r_val is not None and not (isinstance(r_val, float) and math.isnan(r_val))
+        if valid:
+            for fc in fact_cols:
+                fv = fc.values[i] if i < len(fc.values) else None
+                if fv is None or (isinstance(fv, float) and math.isnan(fv)):
+                    valid = False
+                    break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    fingerprint = compute_data_fingerprint(worksheet, [response_index] + list(factor_indices))
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "adjusted_r_squared": result.get("adjusted_r_squared", 0.0),
+        "residual_stdev": result.get("residual_stdev", 0.0),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="analyze_factorial",
+        title=f"Factorial Fit: {resp_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=fact_ids,
+        predictor_names=[c.name for c in fact_cols],
+        confidence=confidence,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=result.get("coefficients", []),
+        statistics=stats,
+        fitted_values=result.get("fitted", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "effects": result.get("effects", []),
+            "selected_terms": selected_terms,
+            "max_order": result.get("max_order", 2),
+        }
+    )
+    from .connect_r import generate_r_factorial_script
+    connected.r_script = generate_r_factorial_script(connected, worksheet)
+    return connected
+
+
+def create_connected_glm(
+    worksheet: Worksheet,
+    response_index: int,
+    factor_indices: List[int],
+    covariate_indices: List[int],
+    result: Dict[str, Any],
+    terms: Optional[List[Any]] = None,
+    options: Optional[Dict[str, Any]] = None,
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a fitted general_linear_model result."""
+    ensure_worksheet_identities(worksheet)
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-resp-{response_index}")
+    all_pred_indices = list(factor_indices) + list(covariate_indices)
+    pred_cols = [worksheet.columns[i] for i in all_pred_indices]
+    pred_ids = [col.metadata.get("id", f"col-pred-{i}") for i, col in zip(all_pred_indices, pred_cols)]
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = []
+    for i in range(worksheet.row_count):
+        r_val = resp_col.values[i] if i < len(resp_col.values) else None
+        valid = r_val is not None and not (isinstance(r_val, float) and math.isnan(r_val))
+        if valid:
+            for pc in pred_cols:
+                pv = pc.values[i] if i < len(pc.values) else None
+                if pv is None or (isinstance(pv, float) and math.isnan(pv)):
+                    valid = False
+                    break
+        if valid:
+            complete_indices.append(i)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if i < len(all_row_ids)]
+    omitted_row_ids = [rid for i, rid in enumerate(all_row_ids) if i not in complete_indices]
+
+    fingerprint = compute_data_fingerprint(worksheet, [response_index] + all_pred_indices)
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "adjusted_r_squared": result.get("adjusted_r_squared", 0.0),
+        "residual_stdev": result.get("residual_stdev", 0.0),
+    }
+
+    connected = ConnectedAnalysis(
+        analysis_id=str(uuid.uuid4()),
+        analysis_type="general_linear_model",
+        title=f"General Linear Model: {resp_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=pred_ids,
+        predictor_names=[c.name for c in pred_cols],
+        confidence=float((options or {}).get("confidence", 0.95)),
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=result.get("coefficients", []),
+        statistics=stats,
+        fitted_values=result.get("fitted", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "factor_names": [worksheet.columns[i].name for i in factor_indices],
+            "covariate_names": [worksheet.columns[i].name for i in covariate_indices],
+            "terms": terms,
+            "options": options or {},
+        }
+    )
+    from .connect_r import generate_r_glm_script
+    connected.r_script = generate_r_glm_script(connected, worksheet)
+    return connected
+
+
+def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Worksheet) -> Optional[ConnectedAnalysis]:
+    """Universal factory to create or restore a ConnectedAnalysis contract from any history entry."""
+    conn_raw = entry.get("connected_analysis")
+    if isinstance(conn_raw, dict):
+        try:
+            return ConnectedAnalysis.from_dict(conn_raw)
+        except Exception:
+            pass
+    elif hasattr(conn_raw, "response_name"):
+        return conn_raw
+
+    recipe = entry.get("recipe", {})
+    action = recipe.get("action")
+    p = recipe.get("parameters", {})
+    res = entry.get("result", {})
+
+    conn: Optional[ConnectedAnalysis] = None
+    if action == "multiple_regression" and "response_index" in p:
+        conn = create_connected_regression(worksheet, p["response_index"], p["predictor_indices"], res, p.get("confidence", 0.95))
+    elif action in ("analyze_response_surface", "response_surface") and "response_index" in p:
+        conf = p.get("options", {}).get("confidence", 0.95) if isinstance(p.get("options"), dict) else 0.95
+        conn = create_connected_response_surface(
+            worksheet, p["response_index"], p["factor_indices"], res, conf,
+            coding=p.get("coding"), terms=p.get("terms"), options=p.get("options")
+        )
+    elif action in ("oneway_anova", "one_way_anova") and "response_index" in p and "factor_index" in p:
+        conn = create_connected_oneway_anova(
+            worksheet, p["response_index"], p["factor_index"], res, p.get("options")
+        )
+    elif action in ("analyze_factorial", "analyze_factorial_terms", "factorial_regression") and "response_index" in p and "factor_indices" in p:
+        conn = create_connected_factorial(
+            worksheet, p["response_index"], p["factor_indices"], res,
+            confidence=p.get("confidence", 0.95), selected_terms=p.get("selected_terms")
+        )
+    elif action in ("general_linear_model", "glm") and "response_index" in p and "factor_indices" in p:
+        conn = create_connected_glm(
+            worksheet, p["response_index"], p.get("factor_indices", []),
+            p.get("covariate_indices", []), res, terms=p.get("terms"), options=p.get("options")
+        )
+
+    if conn is not None:
+        entry["connected_analysis"] = conn.to_dict()
+    return conn

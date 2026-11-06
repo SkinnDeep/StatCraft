@@ -488,6 +488,74 @@ class TestStatCraftConnect(unittest.TestCase):
         status, msg = check_analysis_freshness(conn, ws)
         self.assertEqual(status, "current")
 
+    def test_connected_oneway_anova_and_r_translation(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_analysis_from_entry, check_analysis_freshness
+
+        ws = Worksheet("Plant_Growth", [
+            Column("Yield", "number", [12.1, 14.3, 13.5, 18.2, 19.1, 17.8, 22.4, 21.9, 23.1]),
+            Column("Treatment", "text", ["Control", "Control", "Control", "Fertilizer_A", "Fertilizer_A", "Fertilizer_A", "Fertilizer_B", "Fertilizer_B", "Fertilizer_B"]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.oneway_anova(0, 1)
+
+        conn = create_connected_analysis_from_entry(entry, ws)
+        self.assertIsNotNone(conn)
+        self.assertEqual(conn.analysis_type, "oneway_anova")
+        self.assertEqual(conn.response_name, "Yield")
+        self.assertEqual(conn.predictor_names, ["Treatment"])
+        self.assertIn("aov(", conn.r_script)
+        self.assertIn("TukeyHSD(fit)", conn.r_script)
+        self.assertIn("ANOVA_Diagnostics", conn.r_script)
+
+        status, msg = check_analysis_freshness(conn, ws)
+        self.assertEqual(status, "current")
+
+    def test_connected_factorial_and_r_translation(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_analysis_from_entry, check_analysis_freshness
+
+        ws = Worksheet("Chemical_DOE", [
+            Column("Strength", "number", [20.5, 24.1, 28.3, 35.2, 21.0, 25.0, 27.9, 36.1]),
+            Column("Temp", "number", [-1, 1, -1, 1, -1, 1, -1, 1]),
+            Column("Catalyst", "number", [-1, -1, 1, 1, -1, -1, 1, 1]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.analyze_factorial(0, [1, 2])
+
+        conn = create_connected_analysis_from_entry(entry, ws)
+        self.assertIsNotNone(conn)
+        self.assertEqual(conn.analysis_type, "analyze_factorial")
+        self.assertEqual(conn.response_name, "Strength")
+        self.assertEqual(conn.predictor_names, ["Temp", "Catalyst"])
+        self.assertIn("formula_obj <- Strength ~", conn.r_script)
+        self.assertIn("Factorial_Diagnostics", conn.r_script)
+
+        status, msg = check_analysis_freshness(conn, ws)
+        self.assertEqual(status, "current")
+
+    def test_connected_glm_and_r_translation(self):
+        from statcraft.app import Presenter
+        from statcraft.connect import create_connected_analysis_from_entry
+
+        ws = Worksheet("Process_GLM", [
+            Column("Output", "number", [10.2, 11.5, 14.1, 16.8, 12.0, 13.5, 15.2, 18.0]),
+            Column("Operator", "text", ["Op1", "Op1", "Op2", "Op2", "Op1", "Op1", "Op2", "Op2"]),
+            Column("Pressure", "number", [50.0, 55.0, 60.0, 65.0, 52.0, 56.0, 61.0, 66.0]),
+        ])
+        p = Presenter()
+        p.worksheet = ws
+        entry = p.general_linear_model(0, [1], [2])
+
+        conn = create_connected_analysis_from_entry(entry, ws)
+        self.assertIsNotNone(conn)
+        self.assertEqual(conn.analysis_type, "general_linear_model")
+        self.assertEqual(conn.response_name, "Output")
+        self.assertIn("GLM_Diagnostics", conn.r_script)
+        self.assertIn("as.factor", conn.r_script)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -326,9 +326,17 @@ class ConnectBridgeWidget(QFrame):
         arrow1.setStyleSheet("color: #94a3b8; font-weight: bold;")
         btn_bar.addWidget(arrow1)
 
-        b_jmp = QPushButton("📈 JMP Profiler")
+        # Contextual label for JMP button based on model type
+        if conn_obj.analysis_type in ("oneway_anova", "one_way_anova"):
+            jmp_label = "📈 JMP Oneway"
+        elif len(conn_obj.predictor_names) == 1 and conn_obj.analysis_type == "multiple_regression":
+            jmp_label = "📈 JMP Bivariate"
+        else:
+            jmp_label = "📈 JMP Profiler"
+
+        b_jmp = QPushButton(jmp_label)
         b_jmp.setStyleSheet(btn_qss)
-        b_jmp.setToolTip("Open the interactive visual Prediction Profiler with draggable factor crosshairs (JMP Platform)")
+        b_jmp.setToolTip("Open in JMP interactive visual analysis platform (draggable crosshairs / Oneway / Bivariate)")
         b_jmp.clicked.connect(lambda: self.window.connect_open_explorer(self.entry))
         btn_bar.addWidget(b_jmp)
 
@@ -358,8 +366,8 @@ class ConnectBridgeWidget(QFrame):
         b_sync.clicked.connect(lambda: self.window.connect_apply_predictions(self.entry))
         btn_bar.addWidget(b_sync)
 
-        act = self.entry.get("recipe", {}).get("action")
-        if act == "analyze_response_surface":
+        act = self.entry.get("recipe", {}).get("action") or conn_obj.analysis_type
+        if act in ("analyze_response_surface", "response_surface", "analyze_factorial", "analyze_factorial_terms", "factorial_regression"):
             b_boot = QPushButton("🔬 R Bootstrap")
             b_boot.setStyleSheet(btn_qss)
             b_boot.setToolTip("Generate and execute 2,000-replication non-parametric residual bootstrap uncertainty script in R")
