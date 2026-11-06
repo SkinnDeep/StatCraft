@@ -84,6 +84,12 @@ class Presenter:
         self._reset_edits()
 
     @property
+    def worksheets(self):
+        if self.native_project is not None and getattr(self.native_project, 'worksheets', None):
+            return self.native_project.worksheets
+        return [self.worksheet]
+
+    @property
     def dirty(self):
         return self._document_dirty or self._results_dirty
 

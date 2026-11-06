@@ -5663,6 +5663,7 @@ class ModernWindow(QMainWindow):
 
     def _populate_connect_menu(self, connect_menu):
         self._action(connect_menu, "What is StatCraft Connect?…", self.show_connect_overview, None, "connect")
+        self._action(connect_menu, "StatCraft Connect Tri-Engine Tour (Multi-Sheet) ...", self.load_connect_sample_project, None, "new_project")
         self._action(connect_menu, "Try Connect Sample Project (Chemical Yield)…", self.load_connect_sample, None, "new_project")
         connect_menu.addSeparator()
         self._action(connect_menu, "Open in Statistical Dialog (Minitab Mode)…", lambda: self.connect_open_dialog(self.selected_entry) if self.selected_entry else None, None, None, True)
@@ -5731,6 +5732,55 @@ class ModernWindow(QMainWindow):
         from .connect_hub import ConnectOverviewDialog
         dlg = ConnectOverviewDialog(self)
         dlg.exec()
+
+    def load_connect_sample_project(self):
+        from .model import Worksheet, Column
+        from .connect import create_connected_analysis_from_entry
+
+        self.presenter.new()
+        self.page = 0
+        self.selected_entry = None
+
+        # Sheet 1: DOE_Battery
+        ws1 = Worksheet("DOE_Battery", [
+            Column("Temperature", "number", [-15, -15, 20, 20, 50, 50] * 2),
+            Column("Material", "text", ["M1"] * 6 + ["M2"] * 6),
+            Column("Life", "number", [130, 155, 34, 40, 20, 70, 150, 188, 136, 122, 25, 70]),
+        ])
+
+        # Sheet 2: GageRR_Gasket
+        ws2 = Worksheet("GageRR_Gasket", [
+            Column("Measurement", "number", [10.2, 10.3, 12.1, 12.0, 15.4, 15.6, 10.1, 10.4, 12.3, 12.1, 15.2, 15.5]),
+            Column("Part", "text", ["P1", "P1", "P2", "P2", "P3", "P3"] * 2),
+            Column("Operator", "text", ["A"] * 6 + ["B"] * 6),
+        ])
+
+        # Sheet 3: SPC_PistonRings
+        ws3 = Worksheet("SPC_PistonRings", [
+            Column("Diameter", "number", [74.010, 74.001, 74.008, 74.003, 74.002, 74.005, 73.998, 74.002, 74.004, 74.000, 74.008, 74.002, 74.005, 74.001, 74.004, 74.002, 74.004, 74.003, 73.999, 74.007]),
+            Column("Sample", "text", ["S1"] * 5 + ["S2"] * 5 + ["S3"] * 5 + ["S4"] * 5),
+        ])
+
+        project = self.presenter._owned_project()
+        project.worksheets = [ws1, ws2, ws3]
+
+        self.presenter.worksheet = ws1
+        e1 = self.presenter.twoway_anova(2, 0, 1, fit_interaction=True)
+        create_connected_analysis_from_entry(e1, ws1)
+
+        self.presenter.worksheet = ws2
+        e2 = self.presenter.gage_rr(0, 1, 2)
+        create_connected_analysis_from_entry(e2, ws2)
+
+        self.presenter.worksheet = ws3
+        e3 = self.presenter.subgroup_control_chart(chart_type="xbar_r", stacked=True, response_index=0, factor_index=1)
+        create_connected_analysis_from_entry(e3, ws3)
+
+        self.presenter.worksheet = ws1
+        self._prepare_blank()
+        self.refresh()
+        self.show_result(e1)
+        self.statusBar().showMessage("StatCraft Connect: Tri-Engine Tour Project loaded with 3 benchmark analyses!", 8000)
 
     def load_connect_sample(self):
         from .connect_hub import create_chemical_process_sample
