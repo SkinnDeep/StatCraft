@@ -1695,7 +1695,7 @@ class ModernWindow(QMainWindow):
                     if conn_dict and conn_dict.get("r_script"):
                         self.r_workbench.load_connected_analysis(conn_dict)
                         if hasattr(self, "statusBar") and self.statusBar():
-                            self.statusBar().showMessage(f"StatCraft Connect: Translated '{conn_dict.get('title', 'Analysis')}' to Base R", 5000)
+                            self.statusBar().showMessage(f"R Translator: Translated '{conn_dict.get('title', 'Analysis')}' to Base R", 5000)
                 self.r_workbench.refresh_environment()
 
         if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
@@ -1705,10 +1705,9 @@ class ModernWindow(QMainWindow):
         settings = QSettings("StatCraft", "StatCraft")
         settings.setValue("ui_mode", mode)
 
-        mode_label = "R Mode (Data Science)" if mode == "r" else ("JMP Mode (Visual Platforms)" if mode == "jmp" else "Minitab Mode (Quality & SPC)")
         if hasattr(self, "status_sheet_label"):
             ws_name = getattr(self.presenter.worksheet, "name", "Worksheet 1")
-            self.status_sheet_label.setText(f"{ws_name}   |   Mode: {mode_label}")
+            self.status_sheet_label.setText(ws_name + ("  (Modified)" if getattr(self.presenter, "dirty", False) else ""))
 
     def toggle_dark_mode(self):
         self.set_dark_mode(not getattr(self, "_dark_mode", False))
@@ -5804,7 +5803,7 @@ class ModernWindow(QMainWindow):
         elif action in ("describe_columns", "descriptive_statistics", "describe_column"):
             self.describe()
         else:
-            self.statusBar().showMessage(f"Switched to Minitab Mode for procedure '{action}'.", 5000)
+            self.statusBar().showMessage(f"Recalled dialog for procedure '{action}'.", 5000)
 
     def show_connect_overview(self):
         from .connect_hub import ConnectOverviewDialog
