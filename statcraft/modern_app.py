@@ -2051,8 +2051,11 @@ class ModernWindow(QMainWindow):
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
-                graphs = entry.get("result", {}).get("graphs", [])
+                graphs_raw = entry.get("result", {}).get("graphs", [])
+                graphs = [g for g in graphs_raw if isinstance(g, dict)] if isinstance(graphs_raw, (list, tuple)) else []
                 tables = entry.get("result", {}).get("tables", [])
+                if not isinstance(tables, list):
+                    tables = []
                 has_subitems = len(graphs) > 1 or len(tables) > 1 or (bool(tables) and bool(graphs))
                 if has_subitems:
                     has_text = bool(entry.get("result", {}).get("text", "").strip()) or bool(tables)
@@ -2091,8 +2094,11 @@ class ModernWindow(QMainWindow):
                 node.setData(0, Qt.ItemDataRole.UserRole, {"kind": "result", "entry": entry})
                 if entry is self.selected_entry and getattr(self, '_selected_graph_index', None) is None and getattr(self, '_selected_nav_kind', None) is None:
                     selected_tree_item = node
-                graphs = entry.get("result", {}).get("graphs", [])
+                graphs_raw = entry.get("result", {}).get("graphs", [])
+                graphs = [g for g in graphs_raw if isinstance(g, dict)] if isinstance(graphs_raw, (list, tuple)) else []
                 tables = entry.get("result", {}).get("tables", [])
+                if not isinstance(tables, list):
+                    tables = []
                 has_subitems = len(graphs) > 1 or len(tables) > 1 or (bool(tables) and bool(graphs))
                 if has_subitems:
                     has_text = bool(entry.get("result", {}).get("text", "").strip()) or bool(tables)

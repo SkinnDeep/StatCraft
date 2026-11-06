@@ -329,6 +329,12 @@ class ConnectBridgeWidget(QFrame):
         # Contextual label for JMP button based on model type
         if conn_obj.analysis_type in ("oneway_anova", "one_way_anova"):
             jmp_label = "📈 JMP Oneway"
+        elif conn_obj.analysis_type == "two_sample_t":
+            jmp_label = "📈 JMP Oneway"
+        elif conn_obj.analysis_type == "correlation":
+            jmp_label = "📈 JMP Multivariate" if len(conn_obj.predictor_names) > 1 else "📈 JMP Bivariate"
+        elif conn_obj.analysis_type in ("descriptive_statistics", "describe_columns"):
+            jmp_label = "📈 JMP Distribution"
         elif len(conn_obj.predictor_names) == 1 and conn_obj.analysis_type == "multiple_regression":
             jmp_label = "📈 JMP Bivariate"
         else:
