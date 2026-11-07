@@ -30,6 +30,7 @@ def supported(entry):
     r = entry.get("result", entry) if isinstance(entry, dict) else {}
     if isinstance(r, dict) and r.get("analysis") in (
         "graphical_summary", "run_chart", "multivari", "outlier_test", "cross_correlation",
+        "fitted_line_plot",
         "jmp_distribution", "control_chart_builder", "process_screening",
     ):
         return True

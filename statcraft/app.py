@@ -927,6 +927,42 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def fitted_line_plot(self, response_index, predictor_index, model_type="linear", confidence=0.95, options=None):
+        from .fitted_line_plot import fit_fitted_line_plot
+        if response_index == predictor_index:
+            raise ValueError("Response and predictor must be different columns.")
+        response = self.worksheet.columns[response_index]
+        predictor = self.worksheet.columns[predictor_index]
+        if response.kind != "number" or predictor.kind != "number":
+            raise ValueError("Fitted Line Plot requires numeric response and predictor columns.")
+        result = fit_fitted_line_plot(
+            predictor.values,
+            response.values,
+            model_type=model_type,
+            confidence=confidence,
+            x_name=predictor.name,
+            y_name=response.name,
+            options=options,
+        )
+        from .connect import create_connected_fitted_line_plot
+        connected = create_connected_fitted_line_plot(self.worksheet, response_index, predictor_index, result, confidence, model_type=model_type)
+        entry = self._record(
+            f"Fitted Line Plot: {response.name} versus {predictor.name}",
+            result,
+            recipe={
+                "action": "fitted_line_plot",
+                "parameters": {
+                    "response_index": response_index,
+                    "predictor_index": predictor_index,
+                    "model_type": model_type,
+                    "confidence": confidence,
+                    "options": options or {},
+                }
+            }
+        )
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
+
     def individuals_moving_range(self, index):
         from .quality import individuals_moving_range
         col = self.worksheet.columns[index]
@@ -5575,6 +5611,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get('analysis') == 'graphical_summary':
         from .graphical_summary_report import format_graphical_summary_report
         return title + format_graphical_summary_report(result)
+    if isinstance(result, dict) and result.get('analysis') == 'fitted_line_plot':
+        from .fitted_line_plot_report import format_fitted_line_plot_report
+        return title + format_fitted_line_plot_report(result)
     if isinstance(result, dict) and result.get('analysis') == 'run_chart':
         from .run_chart_report import format_run_chart_report
         return title + format_run_chart_report(result)

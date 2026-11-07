@@ -1175,6 +1175,7 @@ class ModernWindow(QMainWindow):
         self.surface_plot_actions['general_linear_model']=self._action(glm_menu,'Surface Plot…',lambda:self.model_surface_plot('glm'),None,None,True)
         self.optimizer_actions['general_linear_model']=self._action(glm_menu,'Response Optimizer…',lambda:self.optimize_responses('glm'),None,None,True)
         regression_root = stat.addMenu("Regression")
+        self.fitted_line_plot_action = self._action(regression_root, "Fitted Line Plot…", self.fitted_line_plot_dialog, None, "regression", True)
         self._action(regression_root, "Simple regression…", lambda: self.inference_dialog("linear_regression"), None, "regression", True)
         regression=regression_root.addMenu('Regression')
         self._action(regression, "Fit regression model…", self.multiple_regression, None, "regression", True)
@@ -3524,6 +3525,21 @@ class ModernWindow(QMainWindow):
         from .glm_dialogs import GeneralLinearModelDialog
         self._commit_editor();GeneralLinearModelDialog(self).exec()
 
+    def fitted_line_plot_dialog(self):
+        from .fitted_line_plot_dialog import FittedLinePlotDialog
+        self._commit_editor()
+        self._last_dialog_action = self.fitted_line_plot_dialog
+        dlg = FittedLinePlotDialog(self)
+        try:
+            if dlg.exec():
+                if getattr(dlg, 'entry', None) is not None:
+                    self.show_result(dlg.entry)
+        finally:
+            dlg.setParent(None)
+            dlg.close()
+            dlg.deleteLater()
+            self.refresh()
+
     def multiple_regression(self):
         from .regression_dialog import FitRegressionModelDialog
         self._commit_editor()
@@ -5341,6 +5357,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
                     from .tables_chart import TablesChartWidget
                     chart = TablesChartWidget(entry)
+                elif result.get('analysis') == 'fitted_line_plot':
+                    from .fitted_line_plot_chart import FittedLinePlotChartWidget
+                    chart = FittedLinePlotChartWidget(entry)
                 elif result.get('analysis') == 'multiple_regression':
                     from .regression_residual_chart import RegressionResidualChartWidget
                     chart = RegressionResidualChartWidget(entry)

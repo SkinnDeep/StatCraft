@@ -36,7 +36,17 @@ def format_r_symbol(name: str) -> str:
 def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean, standalone R code reproducing the fitted OLS regression."""
     resp_sym = format_r_symbol(connected.response_name)
-    pred_syms = " + ".join(format_r_symbol(p) for p in connected.predictor_names)
+    deg = connected.metadata.get("degree", 1) if connected.metadata else 1
+    if connected.analysis_type == "fitted_line_plot":
+        p0 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "X"
+        if deg == 2:
+            pred_syms = f"{p0} + I({p0}^2)"
+        elif deg == 3:
+            pred_syms = f"{p0} + I({p0}^2) + I({p0}^3)"
+        else:
+            pred_syms = p0
+    else:
+        pred_syms = " + ".join(format_r_symbol(p) for p in connected.predictor_names)
 
     lines = [
         "# ==============================================================================",
@@ -101,7 +111,29 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
         "} else {",
         "  cat('No unusual observations detected.\\n\\n')",
         "}",
-        "",
+    ])
+    if connected.analysis_type == "fitted_line_plot":
+        p0 = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else "X"
+        lines.extend([
+            "cat('Generating Fitted Line Plot...\\n')",
+            f"x_vals <- df[[{json.dumps(connected.predictor_names[0])}]]",
+            f"y_vals <- df[[{json.dumps(connected.response_name)}]]",
+            "plot(x_vals, y_vals, pch = 19, col = '#2563eb',",
+            f"     xlab = {json.dumps(connected.predictor_names[0])}, ylab = {json.dumps(connected.response_name)}, main = 'Fitted Line Plot')",
+            "new_x <- seq(min(x_vals, na.rm = TRUE), max(x_vals, na.rm = TRUE), length.out = 120)",
+            f"nd <- data.frame({p0} = new_x)",
+            f"ci_band <- predict(fit, newdata = nd, interval = 'confidence', level = {connected.confidence})",
+            f"pi_band <- predict(fit, newdata = nd, interval = 'prediction', level = {connected.confidence})",
+            "lines(new_x, ci_band[, 'fit'], col = '#dc2626', lwd = 2)",
+            "lines(new_x, ci_band[, 'lwr'], col = '#0284c7', lty = 2, lwd = 1.5)",
+            "lines(new_x, ci_band[, 'upr'], col = '#0284c7', lty = 2, lwd = 1.5)",
+            "lines(new_x, pi_band[, 'lwr'], col = '#7c3aed', lty = 2, lwd = 1.5)",
+            "lines(new_x, pi_band[, 'upr'], col = '#7c3aed', lty = 2, lwd = 1.5)",
+            f"legend('topright', legend = c('Fit', sprintf('%.0f%% CI', {connected.confidence * 100}), sprintf('%.0f%% PI', {connected.confidence * 100})),",
+            "       col = c('#dc2626', '#0284c7', '#7c3aed'), lty = c(1, 2, 2), lwd = c(2, 1.5, 1.5), bty = 'n')",
+            "",
+        ])
+    lines.extend([
         "# 5. Minitab-Parity 4-in-1 Residual Diagnostic Plots",
         "cat('Generating 4-in-1 Residual Diagnostic Plots...\\n')",
         "par(mfrow = c(2, 2))",
@@ -1794,7 +1826,7 @@ def generate_r_tidyverse_script(connected: "ConnectedAnalysis", worksheet: "Work
             "  labs(title = 'Boxplots with Observed Jitter & Mean Diamond (Red)', y = 'Value')",
             "print(p_box)",
         ])
-    elif atype in ("multiple_regression", "linear_regression", "regression"):
+    elif atype in ("multiple_regression", "linear_regression", "regression", "fitted_line_plot"):
         resp = format_r_symbol(connected.response_name)
         preds = " + ".join(format_r_symbol(p) for p in connected.predictor_names)
         first_p = format_r_symbol(connected.predictor_names[0]) if connected.predictor_names else resp

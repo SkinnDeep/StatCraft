@@ -293,6 +293,76 @@ def create_connected_regression(
     return connected
 
 
+def create_connected_fitted_line_plot(
+    worksheet: Worksheet,
+    response_index: int,
+    predictor_index: int,
+    result: Dict[str, Any],
+    confidence: float = 0.95,
+    model_type: str = "linear",
+) -> ConnectedAnalysis:
+    """Create a ConnectedAnalysis record from a fitted_line_plot result."""
+    ensure_worksheet_identities(worksheet)
+
+    ws_id = worksheet.metadata.get("id", "ws-default")
+    resp_col = worksheet.columns[response_index]
+    resp_id = resp_col.metadata.get("id", f"col-resp-{response_index}")
+    pred_col = worksheet.columns[predictor_index]
+    pred_id = pred_col.metadata.get("id", f"col-pred-{predictor_index}")
+
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+    complete_indices = result.get("points", {}).get("row_indices", [])
+    complete_set = set(complete_indices)
+
+    fitted_row_ids = [all_row_ids[i] for i in complete_indices if 0 <= i < len(all_row_ids)]
+    omitted_row_ids = [all_row_ids[i] for i in range(len(all_row_ids)) if i not in complete_set]
+
+    stats = {
+        "r_squared": result.get("r_squared", 0.0),
+        "adjusted_r_squared": result.get("r_squared_adj", 0.0),
+        "predicted_r_squared": result.get("r_squared_pred", 0.0),
+        "s": result.get("s", 0.0),
+        "equation": result.get("equation", ""),
+        "model_type": model_type,
+        "n": result.get("n", 0),
+    }
+
+    fingerprint = compute_data_fingerprint(worksheet, [response_index, predictor_index])
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-{uuid.uuid4().hex[:12]}",
+        analysis_type="fitted_line_plot",
+        title=f"Fitted Line Plot — {resp_col.name} versus {pred_col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=ws_id,
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=[pred_id],
+        predictor_names=[pred_col.name],
+        confidence=confidence,
+        row_ids=all_row_ids,
+        fitted_row_ids=fitted_row_ids,
+        omitted_row_ids=omitted_row_ids,
+        coefficients=result.get("coefficients", []),
+        statistics=stats,
+        fitted_values=result.get("fits", []),
+        residuals=result.get("residuals", []),
+        metadata={
+            "model_type": model_type,
+            "degree": result.get("degree", 1),
+            "equation": result.get("equation", ""),
+            "options": result.get("options", {}),
+        }
+    )
+
+    from .connect_r import generate_r_regression_script
+    connected.r_script = generate_r_regression_script(connected, worksheet)
+    return connected
+
+
 def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet) -> Tuple[str, str]:
     """Evaluate whether connected analysis is current, stale, or requires repair.
     

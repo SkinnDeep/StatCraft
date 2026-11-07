@@ -63,6 +63,7 @@ FIELDS = {
     'describe_columns': {'indices'}, 'describe_column': {'index'},
     'inference': {'method', 'indices', 'mu', 'confidence'},
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
+    'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'individuals_moving_range': {'index'},
     'xbar_r_rows': {'indices'},
     'xbar_r_stacked': {'response_index', 'factor_index'},
