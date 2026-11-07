@@ -1067,6 +1067,56 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def johnson_transformation(
+        self,
+        column_index: int,
+        store_column_name=None,
+        p_threshold: float = 0.10,
+    ):
+        from .johnson import calculate_johnson_transformation
+        from .johnson_report import generate_johnson_report
+        col = self.worksheet.columns[column_index]
+        if col.kind != "number":
+            raise ValueError("Johnson Transformation requires a numeric data column.")
+
+        target_store = store_column_name or f"Johnson_{col.name}"
+        result = calculate_johnson_transformation(
+            col.values,
+            variable_name=col.name,
+            p_threshold=p_threshold,
+            store_column_name=target_store,
+        )
+        report_text = generate_johnson_report(result)
+        result["report"] = report_text
+
+        # Store transformed data into worksheet column
+        trans_vals = result.get("transformed", {}).get("full_values", [])
+        existing_col = next((c for c in self.worksheet.columns if c.name == target_store), None)
+        if existing_col is not None:
+            existing_col.values = list(trans_vals)
+            existing_col.kind = "number"
+        else:
+            from .model import Column
+            self.worksheet.columns.append(Column(name=target_store, kind="number", values=list(trans_vals)))
+
+        from .connect import create_connected_johnson
+        connected = create_connected_johnson(self.worksheet, column_index, result, p_threshold=p_threshold)
+
+        entry = self._record(
+            f"Johnson Transformation for {col.name}",
+            result,
+            recipe={
+                "action": "johnson_transformation",
+                "parameters": {
+                    "column_index": column_index,
+                    "store_column_name": target_store,
+                    "p_threshold": p_threshold,
+                }
+            }
+        )
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
+
     def dist_id(
         self,
         column_index: int,

@@ -66,6 +66,7 @@ FIELDS = {
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
     'dist_id': {'column_index', 'distributions', 'subgroup_size', 'alpha', 'box_cox_lambda', 'johnson_p_threshold'},
+    'johnson_transformation': {'column_index', 'store_column_name', 'p_threshold'},
     'cause_and_effect': {'branches', 'effect', 'title', 'no_empty', 'no_labels'},
     'individuals_moving_range': {'index'},
     'xbar_r_rows': {'indices'},
@@ -171,6 +172,9 @@ def columns(recipe):
             raise ValueError('Unsupported Cross Correlation parameters.')
     elif action == 'dist_id':
         if not expected - {'box_cox_lambda', 'johnson_p_threshold', 'distributions', 'show_ci'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'johnson_transformation':
+        if not expected - {'store_column_name', 'p_threshold'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
@@ -591,6 +595,8 @@ def columns(recipe):
         elif key == 'factor2_index' and value is None and action == 'anom':
             continue
         elif action == 'dist_id' and key in ('distributions', 'box_cox_lambda', 'johnson_p_threshold', 'alpha'):
+            continue
+        elif action == 'johnson_transformation' and key in ('store_column_name', 'p_threshold'):
             continue
         elif key.endswith('_index') or key == 'index':
             indices.append(value)

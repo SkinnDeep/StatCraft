@@ -475,6 +475,59 @@ def create_connected_cause_and_effect(
     return connected
 
 
+def create_connected_johnson(
+    worksheet: Worksheet,
+    column_index: int,
+    result: Dict[str, Any],
+    p_threshold: float = 0.10,
+) -> ConnectedAnalysis:
+    """Instantiate a durable connected analysis for Johnson Transformation."""
+    ensure_worksheet_identities(worksheet)
+    col = worksheet.columns[column_index]
+    col_id = col.metadata.get("id", "")
+    fingerprint = compute_data_fingerprint(worksheet, [column_index])
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-johnson-{uuid.uuid4().hex[:8]}",
+        analysis_type="johnson_transformation",
+        title=f"Johnson Transformation for {col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=worksheet.metadata.get("id", ""),
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_id,
+        response_name=col.name,
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={
+            "p_threshold": p_threshold,
+            "orig_ad": result.get("original", {}).get("ad", 0.0),
+            "orig_p": result.get("original", {}).get("p_value", 0.0),
+            "trans_ad": result.get("transformed", {}).get("ad", 0.0),
+            "trans_p": result.get("transformed", {}).get("p_value", 0.0),
+            "family": result.get("family", ""),
+        },
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "family": result.get("family", ""),
+            "function": result.get("function", ""),
+            "store_column_name": result.get("store_column_name", ""),
+        }
+    )
+
+    from .connect_r import generate_r_johnson_script
+    connected.r_script = generate_r_johnson_script(connected, worksheet)
+    return connected
+
+
 def create_connected_dist_id(
     worksheet: Worksheet,
     column_index: int,
@@ -1874,6 +1927,10 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
         conn = create_connected_binary_logistic(
             worksheet, p["response_index"], p.get("continuous_indices", []),
             p.get("categorical_indices", []), res, event=p.get("event"), options=p.get("options")
+        )
+    elif action in ("johnson_transformation", "johnson") and "column_index" in p:
+        conn = create_connected_johnson(
+            worksheet, p["column_index"], res, p_threshold=p.get("p_threshold", 0.10)
         )
     elif action in ("dist_id", "individual_distribution_identification") and "column_index" in p:
         conn = create_connected_dist_id(

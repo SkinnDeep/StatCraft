@@ -1283,6 +1283,62 @@ def generate_r_logistic_script(connected: "ConnectedAnalysis", worksheet: "Works
     return "\n".join(lines)
 
 
+def generate_r_johnson_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate reproducible R script for Johnson Transformation."""
+    import json
+    var_name = connected.response_name
+    family = connected.metadata.get("family", "SU")
+    p_threshold = float(connected.statistics.get("p_threshold", 0.10))
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Analysis: Johnson Transformation",
+        f"# Variable: {var_name}",
+        f"# Fitted Family: {family} (P-Value Threshold: {p_threshold:g})",
+        f"# Worksheet: {connected.worksheet_name}",
+        "# ==============================================================================",
+        "",
+        "# 1. Package loading (SuppDists / nortest for Johnson family fit and AD test)",
+        "for (pkg in c('SuppDists', 'nortest')) {",
+        "  if (!requireNamespace(pkg, quietly = TRUE)) {",
+        "    install.packages(pkg, repos = 'https://cloud.r-project.org')",
+        "  }",
+        "}",
+        "library(SuppDists)",
+        "library(nortest)",
+        "",
+        "# 2. Extract variable data and filter missing",
+        f"x_raw <- df[[{json.dumps(var_name)}]]",
+        "x <- na.omit(as.numeric(x_raw))",
+        "n <- length(x)",
+        f"cat('Johnson Transformation for {var_name} (N =', n, ')\n\n')",
+        "",
+        "# 3. Normality test on original data",
+        "cat('--- Original Data Normality Test ---\n')",
+        "print(ad.test(x))",
+        "",
+        "# 4. Fit Johnson distribution system",
+        "j_fit <- JohnsonFit(x)",
+        "cat('\n--- Johnson Fitted Parameters ---\n')",
+        "print(j_fit)",
+        "",
+        "# 5. Side-by-side Normal Probability Comparison",
+        "p_vals <- pJohnson(x, j_fit)",
+        "z <- qnorm(p_vals)",
+        "cat('\n--- Transformed Data Normality Test ---\n')",
+        "print(ad.test(z))",
+        "",
+        "par(mfrow = c(1, 2))",
+        f"qqnorm(x, main = paste('Original:', {json.dumps(var_name)}), col = '#1e3a8a')",
+        "qqline(x, col = '#dc2626', lwd = 2)",
+        "qqnorm(z, main = 'Transformed: Johnson Z', col = '#2563eb')",
+        "qqline(z, col = '#dc2626', lwd = 2)",
+        "par(mfrow = c(1, 1))",
+    ]
+    return "\n".join(lines)
+
+
 def generate_r_dist_id_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate reproducible R script for Individual Distribution Identification."""
     import json
@@ -2154,6 +2210,20 @@ def generate_r_tidyverse_script(connected: "ConnectedAnalysis", worksheet: "Work
             f"  labs(title = 'Statistical Process Control Chart: {m_col}', y = {json.dumps(m_col)}) +",
             "  theme_minimal(base_size = 12)",
             "print(p_spc)",
+        ])
+    elif atype in ("johnson_transformation", "johnson"):
+        target_var = connected.response_name or "Value"
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# Modern ggplot2 Before/After Normality for Johnson Transformation",
+            "# ------------------------------------------------------------------------------",
+            f"dist_df <- df %>% filter(!is.na(.data[[{json.dumps(target_var)}]]))",
+            f"p_j <- ggplot(dist_df, aes(sample = .data[[{json.dumps(target_var)}]])) +",
+            "  stat_qq(color = '#2563eb', alpha = 0.75, size = 2) +",
+            "  stat_qq_line(color = '#dc2626', linewidth = 1) +",
+            f"  labs(title = 'Normal Probability Plot: {target_var}', x = 'Theoretical Normal Quantiles', y = 'Sample Quantiles') +",
+            "  theme_minimal(base_size = 12)",
+            "print(p_j)",
         ])
     elif atype == "dist_id":
         target_var = connected.response_name or "Value"

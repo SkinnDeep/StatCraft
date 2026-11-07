@@ -110,6 +110,7 @@ StatCraft delivers identical statistical reporting and diagnostic rigor to Minit
   - Gage Linearity and Bias Study.
   - Attribute Agreement Analysis (Fleiss' kappa, Kendall's concordance).
 - **Cause-and-Effect (Fishbone / Ishikawa) Diagram**: Standard 6M industrial categories (Personnel, Machines, Materials, Methods, Measurements, Environment), custom branch labels, empty branch suppression, and interactive vector diagram with hover HUD inspection.
+- **Johnson Transformation**: Transform nonnormal process data into a standard normal distribution using the optimal Johnson curve system ($S_B$ bounded, $S_L$ lognormal, $S_U$ unbounded). Evaluates Anderson-Darling goodness-of-fit and p-values before and after transformation, stores transformed values directly to a worksheet column, and outputs side-by-side normal probability comparison plots.
 - **Individual Distribution Identification**: Evaluate data against 16 continuous distributions and transformations (Normal, Box-Cox, Lognormal, 3-Parameter Lognormal, Weibull, 3-Parameter Weibull, Exponential, 2-Parameter Exponential, Gamma, 3-Parameter Gamma, Logistic, Loglogistic, 3-Parameter Loglogistic, Smallest Extreme Value, Largest Extreme Value, and Johnson Transformation). Features Anderson-Darling goodness-of-fit stats, calibrated p-values, Likelihood Ratio Tests (LRT) for 3-parameter threshold models, ML parameter estimates, and 4-in-1 probability plot layouts with 95% confidence intervals.
 - **Pareto Charts**: Defect frequency bars, cumulative percentage curves, and 80/20 reference markers.
 
