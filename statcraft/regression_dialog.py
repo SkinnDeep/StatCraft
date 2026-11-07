@@ -243,8 +243,8 @@ class FitRegressionModelDialog(ProcedureDialog):
 
     def restore_previous(self):
         p = self.window.presenter
-        worksheet_id = p.native_project.worksheet_ids[p.native_project.active_index] if p.native_project else None
-        for entry in reversed(p.history):
+        worksheet_id = p.native_project.worksheet_ids[p.native_project.active_index] if getattr(p, 'native_project', None) else None
+        for entry in reversed(getattr(p, 'history', [])):
             if entry.get("source_unavailable") or entry.get("recipe", {}).get("action") != "multiple_regression":
                 continue
             if entry.get("worksheet_id") != worksheet_id or entry.get("worksheet_name") != p.worksheet.name:
@@ -263,21 +263,25 @@ class FitRegressionModelDialog(ProcedureDialog):
         dlg = RegressionOptionsDialog(self, self.options)
         if dlg.exec():
             self.options = dlg.options
+        dlg.deleteLater()
 
     def open_graphs(self):
         dlg = RegressionGraphsDialog(self, self.options)
         if dlg.exec():
             self.options = dlg.options
+        dlg.deleteLater()
 
     def open_results(self):
         dlg = RegressionResultsDialog(self, self.options)
         if dlg.exec():
             self.options = dlg.options
+        dlg.deleteLater()
 
     def open_storage(self):
         dlg = RegressionStorageDialog(self, self.options)
         if dlg.exec():
             self.options = dlg.options
+        dlg.deleteLater()
 
     def validate(self):
         try:
@@ -291,6 +295,13 @@ class FitRegressionModelDialog(ProcedureDialog):
 
             conf = self.options.get("confidence", 0.95)
             self.entry = self.window.presenter.multiple_regression(resp_idx, pred_indices, confidence=conf)
+
+            # Apply graphs mode
+            graphs_mode = self.options.get("graphs", "four")
+            if "result" in self.entry and isinstance(self.entry["result"], dict):
+                self.entry["result"]["options"] = {"graphs": graphs_mode}
+                self.entry["result"]["graphs"] = graphs_mode
+            self.entry["graphs"] = graphs_mode
 
             # Handle storage
             st = self.options.get("storage", {})

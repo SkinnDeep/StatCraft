@@ -5841,7 +5841,7 @@ def format_entry(entry):
             "Total            " + _display(result["df_total"]).ljust(10) + _display(result["ss_total"])]
         if result.get("unusual_observations"):
             lines += ["", "Fits and Diagnostics for Unusual Observations",
-                      "Obs      " + resp_name.ljust(14) + "Fit           Resid         Std Resid     Symbol"]
+                      "Obs      " + resp_name.ljust(14) + "Fit           Resid         Std Resid     Leverage      Symbol"]
             for obs in result["unusual_observations"]:
                 lines.append(
                     _display(obs["obs"]).ljust(9) +
@@ -5849,6 +5849,7 @@ def format_entry(entry):
                     _display(obs["fit"]).ljust(14) +
                     _display(obs["resid"]).ljust(14) +
                     _display(obs["std_resid"]).ljust(14) +
+                    _display(obs.get("leverage")).ljust(14) +
                     obs["symbol"]
                 )
             lines += ["", "R: Large residual (|Std Resid| > 2)", "X: High leverage (Leverage > 3*p/n)"]

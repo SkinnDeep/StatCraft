@@ -148,6 +148,9 @@ class MultipleRegressionTests(unittest.TestCase):
         widget = RegressionResidualChartWidget(entry)
         self.assertEqual(widget.sizeHint().width(), 920)
         self.assertEqual(widget.sizeHint().height(), 640)
+        widget.close()
+        widget.deleteLater()
+        app.processEvents()
 
     def test_regression_dialog_and_subdialogs(self):
         import sys
@@ -211,6 +214,11 @@ class MultipleRegressionTests(unittest.TestCase):
         col_names = [c.name for c in p.worksheet.columns]
         self.assertIn('FITS1', col_names)
         self.assertIn('RESI1', col_names)
+        for d in (opt_dlg, graph_dlg, res_dlg, store_dlg, dlg, win):
+            d.close()
+            d.setParent(None)
+            d.deleteLater()
+        app.processEvents()
 
 
 if __name__ == '__main__': unittest.main()

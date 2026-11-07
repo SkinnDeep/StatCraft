@@ -156,6 +156,7 @@ class TestTidyverseAndVroom(unittest.TestCase):
         self.assertEqual(dlg.code_view.toPlainText(), vroom)
 
         dlg.close()
+        dlg.deleteLater()
 
     def test_analysis_bar_r_translator_buttons(self):
         conn_dict = {
@@ -173,6 +174,7 @@ class TestTidyverseAndVroom(unittest.TestCase):
 
         self.assertIn("Copy R Script", bar.btn_copy_r.text())
         self.assertIn("Pure Base R", bar.btn_copy_base.text())
+        bar.deleteLater()
 
     def test_modern_window_export_menus_and_helpers(self):
         win = ModernWindow()
@@ -190,6 +192,9 @@ class TestTidyverseAndVroom(unittest.TestCase):
             self.assertIn("vroom::vroom", vroom_code)
         finally:
             win.close()
+            win.deleteLater()
+            if app:
+                app.processEvents()
 
 
 if __name__ == "__main__":

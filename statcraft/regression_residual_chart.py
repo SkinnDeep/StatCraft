@@ -81,21 +81,35 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
         title_text = f"Residual Plots for {self.response_name}"
         p.drawText(QRectF(pad_x, 6, w - 2 * pad_x, 26), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title_text)
 
-        # 2x2 Grid Layout
-        usable_w = w - 2 * pad_x - gap
-        usable_h = h - header_h - pad_y - gap
-        pw = usable_w / 2.0
-        ph = usable_h / 2.0
+        graphs_mode = self.result.get('options', {}).get('graphs') or self.result.get('graphs') or self.entry.get('graphs', 'four')
+        if graphs_mode == 'normal':
+            r_single = QRectF(pad_x, header_h, w - 2 * pad_x, h - header_h - pad_y)
+            self._draw_normal_plot(p, r_single, panel_bg, card_border, text_col, grid_col)
+        elif graphs_mode == 'fits':
+            r_single = QRectF(pad_x, header_h, w - 2 * pad_x, h - header_h - pad_y)
+            self._draw_versus_fits(p, r_single, panel_bg, card_border, text_col, grid_col)
+        elif graphs_mode == 'histogram':
+            r_single = QRectF(pad_x, header_h, w - 2 * pad_x, h - header_h - pad_y)
+            self._draw_histogram(p, r_single, panel_bg, card_border, text_col, grid_col)
+        elif graphs_mode == 'order':
+            r_single = QRectF(pad_x, header_h, w - 2 * pad_x, h - header_h - pad_y)
+            self._draw_versus_order(p, r_single, panel_bg, card_border, text_col, grid_col)
+        else:
+            # 2x2 Grid Layout
+            usable_w = w - 2 * pad_x - gap
+            usable_h = h - header_h - pad_y - gap
+            pw = usable_w / 2.0
+            ph = usable_h / 2.0
 
-        r_norm = QRectF(pad_x, header_h, pw, ph)
-        r_fits = QRectF(pad_x + pw + gap, header_h, pw, ph)
-        r_hist = QRectF(pad_x, header_h + ph + gap, pw, ph)
-        r_ordr = QRectF(pad_x + pw + gap, header_h + ph + gap, pw, ph)
+            r_norm = QRectF(pad_x, header_h, pw, ph)
+            r_fits = QRectF(pad_x + pw + gap, header_h, pw, ph)
+            r_hist = QRectF(pad_x, header_h + ph + gap, pw, ph)
+            r_ordr = QRectF(pad_x + pw + gap, header_h + ph + gap, pw, ph)
 
-        self._draw_normal_plot(p, r_norm, panel_bg, card_border, text_col, grid_col)
-        self._draw_versus_fits(p, r_fits, panel_bg, card_border, text_col, grid_col)
-        self._draw_histogram(p, r_hist, panel_bg, card_border, text_col, grid_col)
-        self._draw_versus_order(p, r_ordr, panel_bg, card_border, text_col, grid_col)
+            self._draw_normal_plot(p, r_norm, panel_bg, card_border, text_col, grid_col)
+            self._draw_versus_fits(p, r_fits, panel_bg, card_border, text_col, grid_col)
+            self._draw_histogram(p, r_hist, panel_bg, card_border, text_col, grid_col)
+            self._draw_versus_order(p, r_ordr, panel_bg, card_border, text_col, grid_col)
 
         p.end()
 
