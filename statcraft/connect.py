@@ -475,6 +475,56 @@ def create_connected_cause_and_effect(
     return connected
 
 
+def create_connected_dist_id(
+    worksheet: Worksheet,
+    column_index: int,
+    result: Dict[str, Any],
+    alpha: float = 0.05,
+) -> ConnectedAnalysis:
+    """Instantiate a durable connected analysis for Individual Distribution Identification."""
+    ensure_worksheet_identities(worksheet)
+    col = worksheet.columns[column_index]
+    col_id = col.metadata.get("id", "")
+    fingerprint = compute_data_fingerprint(worksheet, [column_index])
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-distid-{uuid.uuid4().hex[:8]}",
+        analysis_type="dist_id",
+        title=f"Individual Distribution Identification for {col.name}",
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=worksheet.metadata.get("id", ""),
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=col_id,
+        response_name=col.name,
+        predictor_col_ids=[],
+        predictor_names=[],
+        confidence=1.0 - alpha,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={
+            "alpha": alpha,
+            "best_fit": result.get("best_fit", "Normal"),
+            "best_key": result.get("best_key", "normal"),
+            "n_samples": result.get("n_samples", len(col.values)),
+        },
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "best_fit": result.get("best_fit", "Normal"),
+            "subgroup_size": result.get("subgroup_size", 1),
+        }
+    )
+
+    from .connect_r import generate_r_dist_id_script
+    connected.r_script = generate_r_dist_id_script(connected, worksheet)
+    return connected
+
+
 def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet) -> Tuple[str, str]:
     """Evaluate whether connected analysis is current, stale, or requires repair.
     
@@ -1824,6 +1874,10 @@ def create_connected_analysis_from_entry(entry: Dict[str, Any], worksheet: Works
         conn = create_connected_binary_logistic(
             worksheet, p["response_index"], p.get("continuous_indices", []),
             p.get("categorical_indices", []), res, event=p.get("event"), options=p.get("options")
+        )
+    elif action in ("dist_id", "individual_distribution_identification") and "column_index" in p:
+        conn = create_connected_dist_id(
+            worksheet, p["column_index"], res, alpha=p.get("alpha", 0.05)
         )
     elif action in ("normal_capability", "process_capability", "capability"):
         idx_c = p.get("index") or p.get("variable_index", 0)

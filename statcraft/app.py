@@ -1067,6 +1067,55 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def dist_id(
+        self,
+        column_index: int,
+        distributions=None,
+        subgroup_size: int = 1,
+        alpha: float = 0.05,
+        box_cox_lambda=None,
+        johnson_p_threshold: float = 0.10,
+        show_ci: bool = True,
+    ):
+        from .dist_id import calculate_distribution_identification
+        from .dist_id_report import generate_dist_id_report
+        col = self.worksheet.columns[column_index]
+        if col.kind != "number":
+            raise ValueError("Individual Distribution Identification requires a numeric data column.")
+
+        result = calculate_distribution_identification(
+            col.values,
+            distributions=distributions,
+            subgroup_size=subgroup_size,
+            alpha=alpha,
+            variable_name=col.name,
+            box_cox_lambda=box_cox_lambda,
+            johnson_p_threshold=johnson_p_threshold,
+        )
+        report_text = generate_dist_id_report(result)
+        result["report"] = report_text
+
+        from .connect import create_connected_dist_id
+        connected = create_connected_dist_id(self.worksheet, column_index, result, alpha=alpha)
+
+        entry = self._record(
+            f"Individual Distribution Identification for {col.name}",
+            result,
+            recipe={
+                "action": "dist_id",
+                "parameters": {
+                    "column_index": column_index,
+                    "distributions": list(distributions) if distributions else None,
+                    "subgroup_size": subgroup_size,
+                    "alpha": alpha,
+                    "box_cox_lambda": box_cox_lambda,
+                    "johnson_p_threshold": johnson_p_threshold,
+                }
+            }
+        )
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
+
     def individuals_moving_range(self, index):
         from .quality import individuals_moving_range
         col = self.worksheet.columns[index]

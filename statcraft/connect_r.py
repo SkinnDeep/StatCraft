@@ -1283,6 +1283,75 @@ def generate_r_logistic_script(connected: "ConnectedAnalysis", worksheet: "Works
     return "\n".join(lines)
 
 
+def generate_r_dist_id_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate reproducible R script for Individual Distribution Identification."""
+    import json
+    var_name = connected.response_name
+    best_dist = connected.metadata.get("best_fit", "Normal")
+    alpha = float(connected.statistics.get("alpha", 0.05))
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Analysis: Individual Distribution Identification",
+        f"# Variable: {var_name}",
+        f"# Best Fit: {best_dist} (Alpha: {alpha:g})",
+        f"# Worksheet: {connected.worksheet_name}",
+        "# ==============================================================================",
+        "",
+        "# 1. Package loading (fitdistrplus, MASS, nortest)",
+        "for (pkg in c('fitdistrplus', 'MASS', 'nortest')) {",
+        "  if (!requireNamespace(pkg, quietly = TRUE)) {",
+        "    install.packages(pkg, repos = 'https://cloud.r-project.org')",
+        "  }",
+        "}",
+        "library(fitdistrplus)",
+        "library(MASS)",
+        "library(nortest)",
+        "",
+        "# 2. Extract variable data and filter missing",
+        f"x_raw <- df[[{json.dumps(var_name)}]]",
+        "x <- na.omit(as.numeric(x_raw))",
+        "n <- length(x)",
+        f"cat('Individual Distribution Identification for {var_name} (N =', n, ')\n\n')",
+        "",
+        "# 3. Normal Goodness of Fit",
+        "fit_norm <- fitdist(x, 'norm')",
+        "cat('--- Normal Fit ---\n')",
+        "print(summary(fit_norm))",
+        "cat('\nAnderson-Darling Normality Test:\n')",
+        "print(ad.test(x))",
+        "",
+        "if (all(x > 0)) {",
+        "  cat('\n--- Weibull Fit ---\n')",
+        "  fit_weib <- fitdist(x, 'weibull')",
+        "  print(summary(fit_weib))",
+        "",
+        "  cat('\n--- Lognormal Fit ---\n')",
+        "  fit_lnorm <- fitdist(x, 'lnorm')",
+        "  print(summary(fit_lnorm))",
+        "",
+        "  cat('\n--- Gamma Fit ---\n')",
+        "  fit_gamma <- fitdist(x, 'gamma')",
+        "  print(summary(fit_gamma))",
+        "",
+        "  # 4-in-1 Diagnostic Plots",
+        "  par(mfrow = c(2, 2))",
+        "  denscomp(list(fit_norm, fit_weib, fit_lnorm, fit_gamma), legendtext = c('Norm', 'Weib', 'LNorm', 'Gamma'))",
+        "  qqcomp(list(fit_norm, fit_weib, fit_lnorm, fit_gamma), legendtext = c('Norm', 'Weib', 'LNorm', 'Gamma'))",
+        "  cdfcomp(list(fit_norm, fit_weib, fit_lnorm, fit_gamma), legendtext = c('Norm', 'Weib', 'LNorm', 'Gamma'))",
+        "  ppcomp(list(fit_norm, fit_weib, fit_lnorm, fit_gamma), legendtext = c('Norm', 'Weib', 'LNorm', 'Gamma'))",
+        "  par(mfrow = c(1, 1))",
+        "} else {",
+        "  par(mfrow = c(1, 2))",
+        "  denscomp(fit_norm)",
+        "  qqcomp(fit_norm)",
+        "  par(mfrow = c(1, 1))",
+        "}",
+    ]
+    return "\n".join(lines)
+
+
 def generate_r_capability_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean Base R script for process capability analysis."""
     meta = connected.metadata or {}
@@ -2085,6 +2154,22 @@ def generate_r_tidyverse_script(connected: "ConnectedAnalysis", worksheet: "Work
             f"  labs(title = 'Statistical Process Control Chart: {m_col}', y = {json.dumps(m_col)}) +",
             "  theme_minimal(base_size = 12)",
             "print(p_spc)",
+        ])
+    elif atype == "dist_id":
+        target_var = connected.response_name or "Value"
+        lines.extend([
+            "# ------------------------------------------------------------------------------",
+            "# Modern ggplot2 Probability Plots for Individual Distribution Identification",
+            "# ------------------------------------------------------------------------------",
+            f"dist_df <- df %>% filter(!is.na(.data[[{json.dumps(target_var)}]]))",
+            f"m_val <- mean(dist_df[[{json.dumps(target_var)}]])",
+            f"s_val <- sd(dist_df[[{json.dumps(target_var)}]])",
+            f"p_dist <- ggplot(dist_df, aes(sample = .data[[{json.dumps(target_var)}]])) +",
+            "  stat_qq(color = '#2563eb', alpha = 0.75, size = 2) +",
+            "  stat_qq_line(color = '#dc2626', linewidth = 1) +",
+            f"  labs(title = 'Normal Probability Plot: {target_var}', subtitle = sprintf('Mean = %.4f | StDev = %.4f', m_val, s_val), x = 'Theoretical Normal Quantiles', y = 'Sample Quantiles') +",
+            "  theme_minimal(base_size = 12)",
+            "print(p_dist)",
         ])
     else:
         # Generic automated exploratory tidyverse summary

@@ -1282,6 +1282,7 @@ class ModernWindow(QMainWindow):
         self.multivari_action = self._action(quality, "&Multi-Vari Chart…", self.multivari_dialog, None, "multivari", True)
         self._action(quality, "&Pareto Chart…", self.pareto_chart_dialog, None, "bar_chart", True)
         self.cause_and_effect_action = self._action(quality, "&Cause-and-Effect…", self.cause_and_effect_dialog, None, "workflow", True)
+        self.dist_id_action = self._action(quality, "&Individual Distribution Identification…", self.dist_id_dialog, None, "chart", True)
         capa_menu = quality.addMenu("Capability Analysis")
         self._action(capa_menu, "&Normal…", self.capability, None, "histogram", True)
         self._action(capa_menu, "Between/W&ithin…", self.capability_between_within, None, "histogram", True)
@@ -3539,6 +3540,18 @@ class ModernWindow(QMainWindow):
                 if entry:
                     self.show_result(entry)
 
+    def dist_id_dialog(self):
+        from .dist_id_dialog import DistIdDialog
+        self._commit_editor()
+        self._last_dialog_action = self.dist_id_dialog
+        dlg = DistIdDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.selected_params
+            if p:
+                entry = self._call(lambda: self.presenter.dist_id(**p), result=True)
+                if entry:
+                    self.show_result(entry)
+
     def anom_dialog(self):
         from .anom_dialog import ANOMDialog
         self._commit_editor()
@@ -5383,6 +5396,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
                     from .tables_chart import TablesChartWidget
                     chart = TablesChartWidget(entry)
+                elif result.get('analysis') == 'dist_id':
+                    from .dist_id_chart import DistIdChartWidget
+                    chart = DistIdChartWidget(entry)
                 elif result.get('analysis') == 'cause_and_effect':
                     from .cause_and_effect_chart import CauseAndEffectChartWidget
                     chart = CauseAndEffectChartWidget(entry)
@@ -5408,6 +5424,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
                 elif result.get('analysis') == 'multiple_regression': chart.setMinimumHeight(620)
+                elif result.get('analysis') == 'dist_id': chart.setMinimumHeight(520)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
