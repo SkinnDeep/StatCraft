@@ -643,7 +643,7 @@ class ModernWindow(QMainWindow):
 
     def setWindowTitle(self, title: str):
         if getattr(self, "sandbox_mode", False) and not title.startswith("[🧪 LIVE SANDBOX"):
-            title = f"[🧪 LIVE SANDBOX · v111.0.0-dev] {title}"
+            title = f"[🧪 LIVE SANDBOX · v112.0.0-dev] {title}"
         super().setWindowTitle(title)
 
     def _create_sandbox_banner(self, layout):
@@ -653,7 +653,7 @@ class ModernWindow(QMainWindow):
         b_lay.setContentsMargins(10, 4, 10, 4)
         b_lay.setSpacing(10)
 
-        self.sandbox_badge = QLabel("<b>🧪 LIVE SANDBOX · v111.0.0-dev</b>")
+        self.sandbox_badge = QLabel("<b>🧪 LIVE SANDBOX · v112.0.0-dev</b>")
         b_lay.addWidget(self.sandbox_badge)
 
         self.sandbox_msg = QLabel("Running directly from local repository source. Code edits apply immediately upon restart.")
@@ -682,7 +682,7 @@ class ModernWindow(QMainWindow):
 
     def _copy_sandbox_diagnostics(self):
         import platform
-        text = f"StatCraft Live Sandbox v111.0.0-dev\nPlatform: {platform.platform()}\nPython: {sys.executable}\nSource: {Path(__file__).resolve().parent}"
+        text = f"StatCraft Live Sandbox v112.0.0-dev\nPlatform: {platform.platform()}\nPython: {sys.executable}\nSource: {Path(__file__).resolve().parent}"
         cb = QApplication.clipboard()
         if cb is not None:
             cb.setText(text)
