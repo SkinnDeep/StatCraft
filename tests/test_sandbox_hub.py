@@ -1,3 +1,4 @@
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -37,8 +38,12 @@ class TestSandboxHub(unittest.TestCase):
 
         # Test open_scratch_dir creates directory
         scratch = hub.repo_root / ".sandbox_workspace"
-        if sys_platform_win := True:
+        if sys.platform == "win32":
             with patch("os.startfile"):
+                hub.open_scratch_dir()
+                self.assertTrue(scratch.is_dir())
+        else:
+            with patch("subprocess.run"):
                 hub.open_scratch_dir()
                 self.assertTrue(scratch.is_dir())
 
