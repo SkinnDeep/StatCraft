@@ -11,7 +11,7 @@ from .engine import normalize_numeric
 from .inference import _confidence, _interval
 
 
-def multiple_regression(predictors, response, confidence=.95, predictor_names=None):
+def multiple_regression(predictors, response, confidence=.95, predictor_names=None, response_name=None):
     """Fit y=b0+sum(bj*xj); predictors are columns, not rows.
 
     Missing values delete the whole aligned row. At least p+2 complete rows,
@@ -87,6 +87,48 @@ def multiple_regression(predictors, response, confidence=.95, predictor_names=No
             estimates = [intercept] + slopes.tolist()
             errors = [intercept_se] + slope_se.tolist()
             f = None if exact else ms_regression / ms_error
+
+            # Leverages from centered SVD: h_i = 1/n + sum_j(u_ij^2)
+            leverages = 1.0 / n + np.sum(u**2, axis=1)
+            one_minus_h = np.maximum(1e-14, 1.0 - leverages)
+
+            if exact:
+                press = 0.0
+                pred_r2 = 1.0
+                std_resids = np.zeros(n)
+                cooks_d = np.zeros(n)
+                unusual_observations = []
+            else:
+                std_resids = residuals / (s * np.sqrt(one_minus_h))
+                del_resids = residuals / one_minus_h
+                cooks_d = (std_resids**2 / (p + 1)) * (leverages / one_minus_h)
+                press = float(np.sum(del_resids**2))
+                pred_r2 = max(0.0, min(1.0, 1.0 - press / ss_total)) if ss_total > 0 else 0.0
+
+                # Identify unusual observations (Minitab standard criteria)
+                # Cutoff for unusual X (high leverage): min(0.75, 3 * (p + 1) / n) for small n, else 3 * (p + 1) / n
+                # Cutoff for large standardized residual: |std_resid| > 2.0
+                leverage_cutoff = min(0.75, 3.0 * (p + 1) / n) if n < 20 else 3.0 * (p + 1) / n
+                unusual_observations = []
+                for idx, (orig_row, y_val, fit_val, res_val, r_val, h_val) in enumerate(
+                    zip(indices, y, fitted, residuals, std_resids, leverages)
+                ):
+                    flags = ""
+                    if abs(r_val) > 2.0:
+                        flags += "R"
+                    if h_val > leverage_cutoff:
+                        flags += "X"
+                    if flags:
+                        unusual_observations.append({
+                            "obs": orig_row + 1,
+                            "response": float(y_val),
+                            "fit": float(fit_val),
+                            "resid": float(res_val),
+                            "std_resid": float(r_val),
+                            "leverage": float(h_val),
+                            "symbol": flags,
+                        })
+
             scalars = estimates + errors + [ss_error, ss_total, ss_regression, ms_error, ms_regression, s, r2, adjusted] + vif.tolist()
             if f is not None:
                 scalars.append(f)
@@ -114,13 +156,29 @@ def multiple_regression(predictors, response, confidence=.95, predictor_names=No
         warnings.append("Exact fit at floating-point resolution: residual variation is zero; coefficient tests, intervals and model F test are not reported.")
     if singular[0] / singular[-1] > 1e8:
         warnings.append("Predictors are poorly conditioned; coefficient estimates may be sensitive to rounding.")
+
+    resp_title = response_name if (response_name and isinstance(response_name, str)) else "Y"
+    eq_parts = [f"{intercept:.4g}"]
+    for b, name in zip(slopes, names):
+        sign = "+ " if b >= 0 else "- "
+        eq_parts.append(f"{sign}{abs(b):.4g} {name}")
+    regression_equation = f"{resp_title} = " + " ".join(eq_parts)
+
     return dict(method="Multiple linear regression (OLS, intercept included)",
                 count=n, missing=len(response)-n, row_indices=indices, predictor_names=names,
+                response_name=resp_title,
+                regression_equation=regression_equation,
                 coefficients=coefficients, r_squared=r2, adjusted_r_squared=adjusted,
+                predicted_r_squared=pred_r2, press=press,
                 residual_stdev=s, df_regression=p, df_error=df_error, df_total=n-1,
                 ss_regression=ss_regression, ss_error=ss_error, ss_total=ss_total,
                 ms_regression=ms_regression, ms_error=ms_error, f=f,
                 p_value=None if exact else float(stats.f.sf(f, p, df_error)),
-                fitted=fitted.tolist(), residuals=residuals.tolist(), confidence=confidence,
+                fitted=fitted.tolist(), residuals=residuals.tolist(),
+                standardized_residuals=std_resids.tolist() if not exact else [0.0]*n,
+                leverages=leverages.tolist(),
+                cooks_distance=cooks_d.tolist() if not exact else [0.0]*n,
+                unusual_observations=unusual_observations,
+                confidence=confidence,
                 status="exact_fit" if exact else "estimated", warnings=warnings,
                 assumptions="Continuous predictors and a linear mean relationship; independent, normally distributed errors of constant variance for coefficient and model inference. Rows missing any selected value are omitted together.")

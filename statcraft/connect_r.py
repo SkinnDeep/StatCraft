@@ -60,32 +60,65 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
         "",
     ]
 
-    # Add diagnostic plot if 1 predictor, or residual diagnostics for multiple
-    if len(connected.predictor_names) == 1:
-        p_name = connected.predictor_names[0]
-        p_sym = format_r_symbol(p_name)
-        lines.extend([
-            "# 3. Fitted Line & Diagnostic Plot",
-            f"plot(df${p_sym}, df${resp_sym}, pch = 19, col = '#0284c7', cex = 1.1,",
-            f"     main = 'Fitted Line Plot: {connected.response_name} vs {p_name}',",
-            f"     xlab = '{p_name}', ylab = '{connected.response_name}')",
-            "abline(fit, col = '#ef4444', lwd = 2)",
-            "grid(col = '#cbd5e1', lty = 'dotted')",
-            "",
-        ])
-    else:
-        lines.extend([
-            "# 3. Diagnostic Plots",
-            "par(mfrow = c(1, 2))",
-            "plot(fitted(fit), residuals(fit), pch = 19, col = '#0284c7',",
-            "     main = 'Residuals vs Fitted', xlab = 'Fitted Values', ylab = 'Residuals')",
-            "abline(h = 0, col = '#ef4444', lty = 'dashed', lwd = 2)",
-            "grid(col = '#cbd5e1', lty = 'dotted')",
-            "qqnorm(residuals(fit), pch = 19, col = '#059669', main = 'Normal Q-Q Plot')",
-            "qqline(residuals(fit), col = '#ef4444', lwd = 2)",
-            "par(mfrow = c(1, 1))",
-            "",
-        ])
+    # 3. Model Summary (Minitab Standard: S, R-sq, R-sq(adj), R-sq(pred), PRESS)
+    lines.extend([
+        "cat('\\n================================================================\\n')",
+        "cat('               Model Summary (Minitab Standard)                 \\n')",
+        "cat('================================================================\\n')",
+        "s_res <- summary(fit)$sigma",
+        "r2 <- summary(fit)$r.squared",
+        "r2_adj <- summary(fit)$adj.r.squared",
+        "h_diag <- hatvalues(fit)",
+        "e_res <- resid(fit)",
+        "press_stat <- sum((e_res / (1 - h_diag))^2)",
+        f"y_orig <- df[[{json.dumps(connected.response_name)}]]",
+        "ss_tot <- sum((y_orig - mean(y_orig, na.rm = TRUE))^2, na.rm = TRUE)",
+        "r2_pred <- max(0, 1 - press_stat / ss_tot)",
+        "cat(sprintf('S: %.4f   R-sq: %.2f%%   R-sq(adj): %.2f%%   R-sq(pred): %.2f%%\\nPRESS: %.4f\\n\\n', s_res, r2 * 100, r2_adj * 100, r2_pred * 100, press_stat))",
+        "",
+        "# 4. Fits and Diagnostics for Unusual Observations (Minitab Standard: R and X)",
+        "cat('--- Fits and Diagnostics for Unusual Observations ---\\n')",
+        "p_terms <- length(coef(fit))",
+        "n_obs <- length(e_res)",
+        "std_res <- rstandard(fit)",
+        "unusual_idx <- which(abs(std_res) > 2.0 | h_diag > (3.0 * p_terms / n_obs))",
+        "if (length(unusual_idx) > 0) {",
+        "  syms <- ifelse(abs(std_res[unusual_idx]) > 2.0 & h_diag[unusual_idx] > (3.0 * p_terms / n_obs), 'RX',",
+        "          ifelse(abs(std_res[unusual_idx]) > 2.0, 'R', 'X'))",
+        "  unusual_df <- data.frame(",
+        "    Obs = unusual_idx,",
+        "    Response = y_orig[unusual_idx],",
+        "    Fit = fitted(fit)[unusual_idx],",
+        "    Resid = e_res[unusual_idx],",
+        "    StdResid = std_res[unusual_idx],",
+        "    Leverage = h_diag[unusual_idx],",
+        "    Symbol = syms,",
+        "    check.names = FALSE",
+        "  )",
+        "  print(unusual_df)",
+        "  cat('\\nR: Large residual (|Std Resid| > 2)\\n')",
+        "  cat('X: High leverage (Leverage > 3*p/n)\\n\\n')",
+        "} else {",
+        "  cat('No unusual observations detected.\\n\\n')",
+        "}",
+        "",
+        "# 5. Minitab-Parity 4-in-1 Residual Diagnostic Plots",
+        "cat('Generating 4-in-1 Residual Diagnostic Plots...\\n')",
+        "par(mfrow = c(2, 2))",
+        "qqnorm(std_res, pch = 19, col = '#0284c7', main = 'Normal Probability Plot')",
+        "qqline(std_res, col = '#dc2626', lwd = 2)",
+        "plot(fitted(fit), std_res, pch = 19, col = '#0284c7',",
+        "     main = 'Versus Fits', xlab = 'Fitted Values', ylab = 'Standardized Residuals')",
+        "abline(h = 0, col = '#ef4444', lty = 'dashed', lwd = 1.5)",
+        "abline(h = c(-2, 2), col = '#fca5a5', lty = 'dotted')",
+        "hist(std_res, breaks = 'FD', col = '#93c5fd', border = '#1d4ed8',",
+        "     main = 'Histogram of Residuals', xlab = 'Standardized Residual')",
+        "plot(seq_along(std_res), std_res, type = 'o', pch = 19, col = '#0284c7',",
+        "     main = 'Versus Order', xlab = 'Observation Order', ylab = 'Standardized Residuals')",
+        "abline(h = 0, col = '#ef4444', lty = 'dashed', lwd = 1.5)",
+        "par(mfrow = c(1, 1))",
+        "",
+    ])
 
     lines.extend([
         "# 4. Align Predictions with Source Observations via .statcraft_row_id",
@@ -99,7 +132,7 @@ def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Wor
         ")",
         "",
         "# 5. Export back to StatCraft Worksheet",
-        "statcraft_export(diagnostics, 'Regression_Diagnostics')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(diagnostics, 'Regression_Diagnostics')",
         "cat('\\n[StatCraft Connect] Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
     ])
 
@@ -205,14 +238,14 @@ def generate_r_rsm_script(
         "  Fitted = fit_preds,",
         "  Residuals = fit_resids",
         ")",
-        "statcraft_export(diagnostics, 'RSM_Diagnostics')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(diagnostics, 'RSM_Diagnostics')",
         "",
         "# 6. Export Bootstrap Uncertainty Summary back to StatCraft",
         "boot_summary <- data.frame(",
         "  Metric = c('Candidate_Y_Hat', 'Bootstrap_Mean', 'Bootstrap_SE', 'CI_Lower', 'CI_Upper', 'Confidence', 'Replications'),",
         f"  Value = c(as.numeric(y_hat), mean(boot_preds), sd(boot_preds), as.numeric(ci_lower), as.numeric(ci_upper), {conf_val}, as.numeric({replications}))",
         ")",
-        "statcraft_export(boot_summary, 'Bootstrap_Summary')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(boot_summary, 'Bootstrap_Summary')",
         "cat('[StatCraft Connect] RSM Diagnostics and Bootstrap Summary exported. Ready for ReportPad.\\n')",
     ])
 
@@ -276,7 +309,7 @@ def generate_r_oneway_anova_script(connected: "ConnectedAnalysis", worksheet: "W
         "  Fitted = fit_preds,",
         "  Residuals = fit_resids",
         ")",
-        "statcraft_export(diagnostics, 'ANOVA_Diagnostics')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(diagnostics, 'ANOVA_Diagnostics')",
         "cat('\\n[StatCraft Connect] ANOVA Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
     ]
     return "\n".join(lines)
@@ -329,7 +362,7 @@ def generate_r_factorial_script(connected: "ConnectedAnalysis", worksheet: "Work
         "  Fitted = fit_preds,",
         "  Residuals = fit_resids",
         ")",
-        "statcraft_export(diagnostics, 'Factorial_Diagnostics')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(diagnostics, 'Factorial_Diagnostics')",
         "cat('\\n[StatCraft Connect] Factorial Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
     ]
     return "\n".join(lines)
@@ -387,7 +420,7 @@ def generate_r_glm_script(connected: "ConnectedAnalysis", worksheet: "Worksheet"
         "  Fitted = fit_preds,",
         "  Residuals = fit_resids",
         ")",
-        "statcraft_export(diagnostics, 'GLM_Diagnostics')",
+        "if (exists('statcraft_export', mode = 'function')) statcraft_export(diagnostics, 'GLM_Diagnostics')",
         "cat('\\n[StatCraft Connect] GLM Diagnostics exported. Click \"Apply Predictions\" to sync.\\n')",
     ])
     return "\n".join(lines)

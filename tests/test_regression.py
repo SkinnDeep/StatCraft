@@ -107,5 +107,47 @@ class MultipleRegressionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'rank deficient'):
                 multiple_regression([[1,2,3,4,5],second],[1,3,2,6,5])
 
+    def test_minitab_parity_press_predicted_r2_and_unusual_diagnostics(self):
+        # Known dataset with an outlier and a high leverage point
+        x1 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 20.0]  # row 10 has extreme high leverage
+        x2 = [2.0, 3.0, 2.5, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 10.0]
+        y =  [5.1, 7.2, 7.8, 9.9, 11.8, 30.0, 16.2, 18.0, 20.1, 45.0]  # row 6 (index 5) is an outlier
+        r = multiple_regression([x1, x2], y, predictor_names=['X1', 'X2'], response_name='Y_Response')
+
+        # Check regression equation formatting
+        self.assertIn('Y_Response =', r['regression_equation'])
+        self.assertIn('X1', r['regression_equation'])
+        self.assertIn('X2', r['regression_equation'])
+
+        # Check leverages
+        leverages = r['leverages']
+        self.assertEqual(len(leverages), 10)
+        self.assertAlmostEqual(sum(leverages), 3.0, places=10)  # p + 1 = 3
+
+        # Check PRESS and predicted R-squared
+        self.assertIn('press', r)
+        self.assertIn('predicted_r_squared', r)
+        self.assertGreater(r['press'], 0.0)
+        self.assertGreaterEqual(r['predicted_r_squared'], 0.0)
+        self.assertLessEqual(r['predicted_r_squared'], 1.0)
+
+        # Check unusual observations
+        unusual = r['unusual_observations']
+        self.assertGreater(len(unusual), 0)
+        symbols = [u['symbol'] for u in unusual]
+        # Should flag large residual ('R') or high leverage ('X')
+        self.assertTrue(any('R' in s for s in symbols))
+        self.assertTrue(any('X' in s for s in symbols))
+
+        # Check 4-in-1 widget instantiation
+        import sys
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication(sys.argv)
+        from statcraft.regression_residual_chart import RegressionResidualChartWidget
+        entry = {'result': r, 'title': 'Test Regression'}
+        widget = RegressionResidualChartWidget(entry)
+        self.assertEqual(widget.sizeHint().width(), 920)
+        self.assertEqual(widget.sizeHint().height(), 640)
+
 
 if __name__ == '__main__': unittest.main()

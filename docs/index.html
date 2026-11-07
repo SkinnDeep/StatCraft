@@ -253,7 +253,7 @@
         </div>
         <div>
           <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">R</div>
-          <div class="text-sm text-slate-400 mt-1">Local Scripting Workbench</div>
+          <div class="text-sm text-slate-400 mt-1">Universal R Translator</div>
         </div>
         <div>
           <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-mono">$0 / mo</div>
@@ -281,13 +281,13 @@
             <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-5">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
             </div>
-            <h3 class="text-lg font-bold text-white mb-2">StatCraft Connect (Tri-Mode)</h3>
+            <h3 class="text-lg font-bold text-white mb-2">Universal R Translator & Minitab Parity</h3>
             <p class="text-slate-400 text-sm leading-relaxed">
-              Seamlessly bridge Minitab quality procedures, JMP interactive visual platforms, and an integrated R Workbench. Contextual <code>Open in… ▾</code> dispatch, linked graph brushing, and 1e-4 tolerance cross-engine verification.
+              Generate production-grade R scripts (Tidyverse, ggplot2, Base R, and vroom) with real statistical calculations. Full Minitab 22 regression parity including PRESS, Predicted R-squared, Unusual Observations, and publication 4-in-1 diagnostic plots.
             </p>
           </div>
           <div class="mt-4 pt-4 border-t border-white/5 flex items-center text-xs text-indigo-400 font-mono">
-            <span>Minitab &harr; JMP &harr; R Workbench</span>
+            <span>Minitab 22 Parity · Tidyverse · ggplot2</span>
           </div>
         </div>
 
@@ -403,10 +403,10 @@
 
       <!-- Showcase Tabs -->
       <div class="flex overflow-x-auto no-scrollbar sm:flex-wrap items-center sm:justify-center gap-2 mb-8 px-2 py-2 -mx-2 sm:mx-0">
-        <button onclick="switchTab('connect')" id="tab-connect" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">StatCraft Connect</button>
+        <button onclick="switchTab('connect')" id="tab-connect" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white shadow-lg shadow-blue-500/20 transition-all">Universal R Translator</button>
         <button onclick="switchTab('jmp_ui')"
- id="tab-jmp_ui" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Workspace Mode Switcher</button>
-        <button onclick="switchTab('r_bench')" id="tab-r_bench" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">R Workbench (Positron)</button>
+ id="tab-jmp_ui" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Minitab 22 Regression Parity</button>
+        <button onclick="switchTab('r_bench')" id="tab-r_bench" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Tidyverse & ggplot2 Viewer</button>
         <button onclick="switchTab('jmp_dist')" id="tab-jmp_dist" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Distribution (JMP)</button>
         <button onclick="switchTab('sixpack')" id="tab-sixpack" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Capability Sixpack</button>
         <button onclick="switchTab('jmp_biv')" id="tab-jmp_biv" class="tab-btn flex-shrink-0 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition-all">Bivariate Fit (JMP)</button>
@@ -800,11 +800,11 @@
     const showcaseData = {
       connect: {
         img: 'images/statcraft-connect.png',
-        caption: 'StatCraft Connect: Start an analysis in Minitab mode, explore interactively in JMP profilers, and extend in R Workbench with live cross-engine numerical verification.'
+        caption: 'Universal R Code Translator: Instant, one-click translation of any analysis into standalone, executable R code (Tidyverse, ggplot2, Base R, and vroom) with real calculations for ANOVA, PRESS, Predicted R-sq, and normal curve overlays.'
       },
       jmp_ui: {
         img: 'images/jmp-platform-ui.png',
-        caption: 'Unified Workspace Modes: Instantly switch between Minitab Mode (Quality & SPC), JMP Mode (Interactive Platforms & Means Diamonds), and R Mode (Positron-style Data Science Workbench with REPL and live plotting) with 1 click or Ctrl+Alt+J.'
+        caption: 'Minitab 22 Regression Parity: Formatted regression equations, Model Summary with S, R-sq, R-sq(adj), R-sq(pred via PRESS), Fits & Diagnostics for Unusual Observations (R & X), and 4-in-1 Residual Diagnostic Plots.'
       },
       jmp_dist: {
         img: 'images/jmp-distribution.png',
@@ -880,7 +880,7 @@
       },
       r_bench: {
         img: 'images/r-workbench.png',
-        caption: 'R Workbench: Edit and run scripts, use the console and command history, inspect worksheet data and plots, and send R data to a StatCraft worksheet. Requires a local R installation.'
+        caption: 'Multi-Engine R Code Viewer: Inspect and copy authentic Tidyverse, ggplot2, Base R, and vroom scripts ready for Positron, RStudio, or VS Code with zero package installation headaches.'
       }
     };
 

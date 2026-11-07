@@ -5117,8 +5117,11 @@ class ModernWindow(QMainWindow):
                     graph_stage = QWidget(); graph_stage.setObjectName("outputPane")
                     graph_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     graph_stage.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_stage.mapToGlobal(pos)))
-                    graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(8, 6, 8, 6); graph_stage_layout.setSpacing(6)
+                    graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(12, 10, 12, 10); graph_stage_layout.setSpacing(6)
+                    graph_stage_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                     graph_card = QFrame(); graph_card.setObjectName("resultCard")
+                    graph_card.setMaximumWidth(1040)
+                    graph_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                     graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
                     graph_card_layout = QVBoxLayout(graph_card); graph_card_layout.setContentsMargins(8, 6, 8, 6); graph_card_layout.setSpacing(6)
@@ -5331,6 +5334,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
                     from .tables_chart import TablesChartWidget
                     chart = TablesChartWidget(entry)
+                elif result.get('analysis') == 'multiple_regression':
+                    from .regression_residual_chart import RegressionResidualChartWidget
+                    chart = RegressionResidualChartWidget(entry)
                 else:
                     chart = ChartWidget(entry)
                 if result.get('graph')=='categorical_points':chart.setMinimumHeight(len(chart.panels)*350+36)
@@ -5343,6 +5349,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='binary_logistic':chart.setMinimumHeight(720)
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
+                elif result.get('analysis') == 'multiple_regression': chart.setMinimumHeight(620)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
@@ -5354,8 +5361,11 @@ class ModernWindow(QMainWindow):
                 graph_stage = QWidget(); graph_stage.setObjectName("outputPane")
                 graph_stage.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 graph_stage.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_stage.mapToGlobal(pos)))
-                graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(8, 6, 8, 6); graph_stage_layout.setSpacing(6)
+                graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(12, 10, 12, 10); graph_stage_layout.setSpacing(6)
+                graph_stage_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                 graph_card = QFrame(); graph_card.setObjectName("resultCard")
+                graph_card.setMaximumWidth(1040)
+                graph_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
                 graph_card_layout = QVBoxLayout(graph_card); graph_card_layout.setContentsMargins(8, 6, 8, 6); graph_card_layout.setSpacing(6)

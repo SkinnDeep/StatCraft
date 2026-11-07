@@ -56,6 +56,8 @@ def supported(entry):
     if isinstance(r, dict) and r.get('analysis') == 'subgroup_control':
         from .subgroup_control_chart import supported as subgroup_control_supported
         return subgroup_control_supported(r)
+    if isinstance(r, dict) and r.get('analysis') == 'multiple_regression':
+        return True
     if isinstance(r, dict) and (r.get('graph') == 'attribute_capability' or r.get('analysis') in ('attribute_control', 'time_weighted_control', 'rare_event_control', 'multivariate_control', 'pareto_chart', 'type1_gage', 'tolerance_intervals', 'acceptance_control')):
         return True
     if isinstance(r, dict) and r.get('analysis') == 'oneway_anova':

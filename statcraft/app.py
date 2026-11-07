@@ -918,11 +918,11 @@ class Presenter:
             raise ValueError("Regression requires numeric response and predictor columns.")
         size = max(len(c.values) for c in columns)
         aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in columns]
-        result = multiple_regression(aligned[:-1], aligned[-1], confidence, [c.name for c in predictors])
+        result = multiple_regression(aligned[:-1], aligned[-1], confidence, [c.name for c in predictors], response_name=response.name)
         from .connect import create_connected_regression
         connected = create_connected_regression(self.worksheet, response_index, predictor_indices, result, confidence)
         entry = self._record("Multiple Regression — " + response.name,
-                            {"response_name": response.name, "variables": [c.name for c in predictors], **result},
+                            {"response_name": response.name, "variables": [c.name for c in predictors], "analysis": "multiple_regression", **result},
                             recipe={"action":"multiple_regression", "parameters":{"response_index":response_index, "predictor_indices":list(predictor_indices), "confidence":confidence}})
         entry["connected_analysis"] = connected.to_dict()
         return entry
@@ -5816,11 +5816,19 @@ def format_entry(entry):
         from .glm_report import text_report
         return title+text_report(result)
     if isinstance(result, dict) and "coefficients" in result and "adjusted_r_squared" in result:
-        lines = ["Response: " + result.get("response_name", "Y"), "", "Model Summary",
-            "N       N*      S             R-sq          R-sq(adj)",
+        resp_name = result.get("response_name", "Y")
+        lines = []
+        if result.get("regression_equation"):
+            lines += ["Regression Equation", result["regression_equation"], ""]
+        else:
+            lines += ["Response: " + resp_name, ""]
+        lines += [
+            "Model Summary",
+            "N       N*      S             R-sq          R-sq(adj)     R-sq(pred)",
             _display(result.get("count")).ljust(8) + _display(result.get("missing")).ljust(8) +
             _display(result.get("residual_stdev")).ljust(14) + (_display(100 * result["r_squared"]) + "%").ljust(14) +
-            _display(100 * result["adjusted_r_squared"]) + "%", "",
+            (_display(100 * result["adjusted_r_squared"]) + "%").ljust(14) +
+            (_display(100 * result.get("predicted_r_squared", 0.0)) + "%"), "",
             "Coefficients  (" + _display(result.get("confidence", .95) * 100) + "% confidence intervals)",
             "Term                 Coef          SE Coef       T             P             Lower CI      Upper CI      VIF"]
         for row in result["coefficients"]:
@@ -5831,6 +5839,19 @@ def format_entry(entry):
             _display(result["ms_regression"]).ljust(14) + _display(result.get("f")).ljust(14) + _display(result.get("p_value")),
             "Error            " + _display(result["df_error"]).ljust(10) + _display(result["ss_error"]).ljust(14) + _display(result["ms_error"]),
             "Total            " + _display(result["df_total"]).ljust(10) + _display(result["ss_total"])]
+        if result.get("unusual_observations"):
+            lines += ["", "Fits and Diagnostics for Unusual Observations",
+                      "Obs      " + resp_name.ljust(14) + "Fit           Resid         Std Resid     Symbol"]
+            for obs in result["unusual_observations"]:
+                lines.append(
+                    _display(obs["obs"]).ljust(9) +
+                    _display(obs["response"]).ljust(14) +
+                    _display(obs["fit"]).ljust(14) +
+                    _display(obs["resid"]).ljust(14) +
+                    _display(obs["std_resid"]).ljust(14) +
+                    obs["symbol"]
+                )
+            lines += ["", "R: Large residual (|Std Resid| > 2)", "X: High leverage (Leverage > 3*p/n)"]
         if result.get('effects'):
             lines += ['', 'Estimated Effects', 'Term                 Effect        SE Effect     T             P']
             for row in result['effects']:
