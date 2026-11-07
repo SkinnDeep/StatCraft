@@ -149,5 +149,68 @@ class MultipleRegressionTests(unittest.TestCase):
         self.assertEqual(widget.sizeHint().width(), 920)
         self.assertEqual(widget.sizeHint().height(), 640)
 
+    def test_regression_dialog_and_subdialogs(self):
+        import sys
+        from PySide6.QtWidgets import QApplication, QWidget
+        app = QApplication.instance() or QApplication(sys.argv)
+        from statcraft.app import Presenter, Worksheet, Column
+        from statcraft.regression_dialog import (
+            FitRegressionModelDialog, RegressionOptionsDialog,
+            RegressionGraphsDialog, RegressionResultsDialog, RegressionStorageDialog
+        )
+        p = Presenter()
+        p.worksheet = Worksheet("Test", [
+            Column("Y", values=[10.0, 12.0, 15.0, 18.0, 22.0, 25.0]),
+            Column("X1", values=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            Column("X2", values=[2.0, 1.0, 4.0, 3.0, 5.0, 7.0]),
+        ])
+        class MockWindow(QWidget):
+            def __init__(self, presenter):
+                super().__init__()
+                self.presenter = presenter
+                self.results_shown = []
+            def refresh(self): pass
+            def show_result(self, entry): self.results_shown.append(entry)
+
+        win = MockWindow(p)
+        dlg = FitRegressionModelDialog(win)
+
+        # Test subdialogs
+        opt_dlg = RegressionOptionsDialog(dlg, dlg.options)
+        opt_dlg.spin_conf.setValue(90.0)
+        opt_dlg.validate()
+        self.assertAlmostEqual(opt_dlg.options['confidence'], 0.90)
+
+        graph_dlg = RegressionGraphsDialog(dlg, dlg.options)
+        graph_dlg.combo_graphs.setCurrentIndex(0)
+        graph_dlg.validate()
+        self.assertEqual(graph_dlg.options['graphs'], 'four')
+
+        res_dlg = RegressionResultsDialog(dlg, dlg.options)
+        res_dlg.chk_unusual.setChecked(True)
+        res_dlg.validate()
+        self.assertTrue(res_dlg.options['results']['unusual'])
+
+        store_dlg = RegressionStorageDialog(dlg, dlg.options)
+        store_dlg.chk_fits.setChecked(True)
+        store_dlg.chk_residuals.setChecked(True)
+        store_dlg.validate()
+        self.assertTrue(store_dlg.options['storage']['fits'])
+        self.assertTrue(store_dlg.options['storage']['residuals'])
+
+        # Apply storage to dialog
+        dlg.options['storage'] = store_dlg.options['storage']
+        dlg.controls['response_index'].setText('C1')
+        dlg.controls['predictor_indices'].setText('C2 C3')
+        dlg.validate()
+
+        self.assertEqual(len(win.results_shown), 1)
+        res_entry = win.results_shown[0]
+        self.assertEqual(res_entry['result']['count'], 6)
+        # Check storage columns added to worksheet
+        col_names = [c.name for c in p.worksheet.columns]
+        self.assertIn('FITS1', col_names)
+        self.assertIn('RESI1', col_names)
+
 
 if __name__ == '__main__': unittest.main()

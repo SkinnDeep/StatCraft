@@ -3525,7 +3525,10 @@ class ModernWindow(QMainWindow):
         self._commit_editor();GeneralLinearModelDialog(self).exec()
 
     def multiple_regression(self):
-        self._dialog("Fit Regression Model", [selector("response_index", "Response"), selector("predictor_indices", "Continuous predictors", True)], [numeric("confidence", "Confidence level", .95)], lambda p: self.presenter.multiple_regression(**p), "Choose a response and distinct numeric predictors. An intercept is included; incomplete rows are omitted together.")
+        from .regression_dialog import FitRegressionModelDialog
+        self._commit_editor()
+        self._last_dialog_action = self.multiple_regression
+        FitRegressionModelDialog(self).exec()
 
     def imr_dialog(self):
         from .imr_dialogs import IMRChartDialog
