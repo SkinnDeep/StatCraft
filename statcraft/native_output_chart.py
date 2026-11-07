@@ -146,6 +146,10 @@ def handle_viewcube_action(chart, target):
     if not target or not target.startswith('viewcube_'):
         return False
     action = target.replace('viewcube_', '')
+    if action in ('tips_card', 'tips_pill'):
+        chart._cad_hint_visible = not getattr(chart, '_cad_hint_visible', False)
+        chart.update()
+        return True
     if action == 'body':
         return False
 
@@ -763,7 +767,7 @@ class NativeOutputChart(SnapshotChartWidget):
             return
         zr = _range([v for row in zs for v in row])
         ranges = (_range(xs), _range(ys), zr)
-        viewport = (area.left() + 30, area.top() - 35, max(60, area.width() - 60), max(60, area.height()))
+        viewport = (area.left() + 24, area.top() + 10, max(60, area.width() - 48), max(60, area.height() - 20))
         cube_rect = QRectF(*viewport)
         self._last_cube_rect = cube_rect
 

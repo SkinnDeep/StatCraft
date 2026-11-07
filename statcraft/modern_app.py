@@ -5126,7 +5126,8 @@ class ModernWindow(QMainWindow):
                     graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(12, 10, 12, 10); graph_stage_layout.setSpacing(6)
                     graph_stage_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                     graph_card = QFrame(); graph_card.setObjectName("resultCard")
-                    graph_card.setMaximumWidth(1040)
+                    is_single_nat = len(native_graphs) <= 1 and not (getattr(chart, '_has_3d_panel', lambda: False)())
+                    graph_card.setMaximumWidth(860 if is_single_nat else 1040)
                     graph_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                     graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
@@ -5359,7 +5360,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
-                    chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 180))
+                    chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 460))
                 chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 chart.customContextMenuRequested.connect(lambda pos, c=chart: self._show_output_context_menu(c.mapToGlobal(pos)) if not (getattr(c, '_has_3d_panel', lambda: False)()) else None)
                 self._active_chart_widget = chart
@@ -5370,7 +5371,8 @@ class ModernWindow(QMainWindow):
                 graph_stage_layout = QVBoxLayout(graph_stage); graph_stage_layout.setContentsMargins(12, 10, 12, 10); graph_stage_layout.setSpacing(6)
                 graph_stage_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                 graph_card = QFrame(); graph_card.setObjectName("resultCard")
-                graph_card.setMaximumWidth(1040)
+                is_single = len(getattr(chart, 'panels', [])) <= 1 and not (getattr(chart, '_has_3d_panel', lambda: False)())
+                graph_card.setMaximumWidth(860 if is_single else 1040)
                 graph_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 graph_card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 graph_card.customContextMenuRequested.connect(lambda pos: self._show_output_context_menu(graph_card.mapToGlobal(pos)))
@@ -5397,9 +5399,20 @@ class ModernWindow(QMainWindow):
                 graph_frame.header.addWidget(self.graph_dropdown_button)
                 graph_frame.export_hidden.append(self.graph_dropdown_button)
                 if conn_dict:
-                    from .connect_hub import StatCraftAnalysisBar
-                    graph_r_bar = StatCraftAnalysisBar(self, entry, conn_dict)
-                    graph_card_layout.addWidget(graph_r_bar)
+                    r_code_btn = QToolButton()
+                    r_code_btn.setText("R Code ▾")
+                    r_code_btn.setObjectName("graphRCodeBtn")
+                    r_code_btn.setToolTip("R Script & Tidyverse Pipeline Options")
+                    from PySide6.QtWidgets import QMenu
+                    r_menu = QMenu(r_code_btn)
+                    copy_act = r_menu.addAction("📋 Copy R Script (Base R & Tidyverse)")
+                    copy_act.triggered.connect(lambda checked=False, e=entry: self.copy_connected_r_script(e))
+                    view_act = r_menu.addAction("📄 View R Code Dialog…")
+                    view_act.triggered.connect(lambda checked=False: self.view_active_r_code())
+                    r_code_btn.setMenu(r_menu)
+                    r_code_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+                    graph_frame.header.addWidget(r_code_btn)
+                    graph_frame.export_hidden.append(r_code_btn)
                 graph_card_layout.addWidget(graph_frame, 1)
                 self._active_graph_frame=graph_frame
                 graph_stage_layout.addWidget(graph_card, 1)

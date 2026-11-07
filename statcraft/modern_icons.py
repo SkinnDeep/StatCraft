@@ -27,6 +27,9 @@ ICON_KEYS = (
     'status_command_line', 'sheet_menu',
     'delete_red_x', 'format_column', 'send_report', 'copy_graph',
     'make_similar_graph', 'edit_graph', 'panel_graph', 'brush_points', 'layout_tool',
+    'chart', 'code_view', 'connect', 'covariance', 'graphical_summary',
+    'multivari', 'outlier_test', 'report', 'run_chart', 'select_all',
+    'standardize', 'subset', 'table', 'update', 'workflow',
 )
 _ALIASES = {
     'new': 'new_project', 'save_as': 'save_copy', 'plot': 'scatter',
@@ -45,6 +48,8 @@ _ALIASES = {
     'edit_last_dialog': 'last_dialog', 'formula': 'assign_formula',
     'previous_brushed': 'prev_brushed', 'next_brushed_row': 'next_brushed',
     'delete_x': 'delete_red_x',
+    'distribution': 'graphical_summary', 'check_for_updates': 'update',
+    'r_code': 'code_view', 'r_script': 'code_view',
 }
 
 
@@ -376,6 +381,87 @@ def _draw(p, kind):
             line(13,4,13,20,w_col,1.3)
             poly([(15.5,8.5),(18.5,11),(15.5,13.5)],w_col,width=1.5)
             line(16,16,19.5,16,w_col,1.5)
+    elif kind == 'graphical_summary':
+        # Minitab 4-panel thumbnail: histogram + normal curve, boxplot, summary lines
+        rect(3, 7, 2, 4, blue, blue); rect(5.5, 4, 2, 7, blue, blue); rect(8, 6, 2, 5, blue, blue)
+        poly([(2.5, 10.5), (4.5, 7.5), (6.5, 3.5), (8.5, 6), (10.5, 10.5)], red, width=1.1)
+        rect(3.5, 15, 6, 3, ink, '#f1f5f9'); line(6.5, 15, 6.5, 18, red, 1.2)
+        line(1.5, 16.5, 3.5, 16.5, ink, 1.0); line(9.5, 16.5, 11.5, 16.5, ink, 1.0)
+        line(12.5, 3, 12.5, 21, ink, 0.9)
+        line(14.5, 6, 21.5, 6, ink, 1.3); line(14.5, 9, 19.5, 9, ink, 1.1)
+        line(14.5, 12, 21, 12, ink, 1.1); line(14.5, 15, 18, 15, ink, 1.1); line(14.5, 18, 20.5, 18, ink, 1.1)
+    elif kind == 'run_chart':
+        axes(); line(3, 12, 21, 12, green, 1.1)
+        poly([(4, 16), (7, 8), (10, 14), (13, 7), (16, 17), (19, 9)], blue, width=1.3)
+        for x, y in ((4, 16), (7, 8), (10, 14), (13, 7), (16, 17), (19, 9)): dot(x, y, 1.1, blue)
+    elif kind == 'multivari':
+        axes()
+        for x in (7, 12, 17): line(x, 6, x, 18, ink, 1.0)
+        for x, y in ((7, 8), (7, 16), (12, 7), (12, 15), (17, 9), (17, 17)): dot(x, y, 1.1, ink)
+        poly([(7, 12), (12, 10.5), (17, 13)], blue, width=1.5)
+        for x, y in ((7, 12), (12, 10.5), (17, 13)): dot(x, y, 1.3, blue)
+    elif kind == 'outlier_test':
+        axes(); rect(6, 9, 8, 6, ink, '#e0f2fe'); line(10, 9, 10, 15, blue, 1.3)
+        line(3, 12, 6, 12, ink, 1.1); line(3, 10, 3, 14, ink, 1.1)
+        line(14, 12, 17, 12, ink, 1.1); line(17, 10, 17, 14, ink, 1.1)
+        dot(20.5, 12, 1.6, red, filled=True)
+        line(19.5, 8, 21.5, 6, red, 1.2); line(19.5, 6, 21.5, 8, red, 1.2)
+    elif kind == 'chart':
+        axes()
+        line(4, 7, 21, 7, red, 1.0); line(4, 17, 21, 17, red, 1.0); line(4, 12, 21, 12, green, 1.1)
+        poly([(5, 11), (8, 9), (11, 14), (14, 8), (17, 10), (20, 15)], blue, width=1.3)
+        for x, y in ((5, 11), (8, 9), (11, 14), (14, 8), (17, 10), (20, 15)): dot(x, y, 1.1, blue)
+    elif kind == 'covariance':
+        axes()
+        p.save(); p.translate(12, 12); p.rotate(-35)
+        rect(-7.5, -3.5, 15, 7, blue, '#e0f2fe', radius=3.5)
+        p.restore()
+        line(6, 16.5, 18, 7.5, red, 1.2)
+    elif kind == 'standardize':
+        poly([(3, 19), (6, 18), (9, 13), (12, 5), (15, 13), (18, 18), (21, 19)], blue, width=1.4)
+        line(12, 5, 12, 21, ink, 1.0); line(2, 19, 22, 19, ink, 1.2)
+        line(8, 18, 8, 20, ink, 1.1); line(16, 18, 16, 20, ink, 1.1)
+        poly([(14.5, 8.5), (17.5, 8.5), (14.5, 12), (17.5, 12)], amber, width=1.2)
+    elif kind == 'select_all':
+        for cx, cy in ((3, 3), (18, 3), (3, 18), (18, 18)): rect(cx, cy, 3, 3, blue, '#ffffff')
+        line(6, 4.5, 18, 4.5, blue, 1.1); line(4.5, 6, 4.5, 18, blue, 1.1)
+        line(6, 19.5, 18, 19.5, blue, 1.1); line(19.5, 6, 19.5, 18, blue, 1.1)
+        poly([(8, 12), (11, 15), (16, 8)], green, width=2.0)
+    elif kind == 'subset':
+        rect(3, 3, 11, 12, ink, '#f8fafc'); line(3, 6, 14, 6, ink, 0.9)
+        rect(9, 8, 12, 13, blue, '#ffffff'); rect(9, 8, 12, 4, blue, '#38bdf8')
+        line(9, 15, 21, 15, blue, 0.9); line(15, 8, 15, 21, blue, 0.9)
+        poly([(6, 10), (9, 13), (7.5, 13)], amber, width=1.2)
+    elif kind == 'table':
+        rect(3, 4, 18, 16, ink, '#ffffff')
+        rect(3, 4, 18, 4.5, blue, '#dbeafe')
+        line(9, 4, 9, 20, ink, 1.0); line(15, 4, 15, 20, ink, 1.0)
+        line(3, 12.5, 21, 12.5, ink, 1.0); line(3, 16.5, 21, 16.5, ink, 1.0)
+    elif kind == 'code_view':
+        poly([(7, 8), (4, 12), (7, 16)], blue, width=1.8)
+        line(10, 17, 14, 7, amber, 1.8)
+        poly([(17, 8), (20, 12), (17, 16)], blue, width=1.8)
+    elif kind == 'connect':
+        p.save(); p.translate(9, 9); p.rotate(-45); rect(-4.5, -2.5, 9, 5, blue, None, 2.5); p.restore()
+        p.save(); p.translate(15, 15); p.rotate(-45); rect(-4.5, -2.5, 9, 5, green, None, 2.5); p.restore()
+    elif kind == 'workflow':
+        rect(3, 4, 6, 5, blue, '#dbeafe', 1)
+        line(9, 6.5, 15, 6.5, ink, 1.2); poly([(13.5, 5), (15.5, 6.5), (13.5, 8)], ink, fill=ink, closed=True)
+        rect(15, 4, 6, 5, amber, '#fef3c7', 1)
+        line(18, 9, 18, 14, ink, 1.2); poly([(16.5, 12), (18, 14), (19.5, 12)], ink, fill=ink, closed=True)
+        rect(14, 14, 7, 6, green, '#dcfce7', 1)
+        line(14, 17, 9, 17, ink, 1.2); poly([(11, 15.5), (9, 17), (11, 18.5)], ink, fill=ink, closed=True)
+        rect(3, 14, 6, 5, purple, '#f3e8ff', 1)
+    elif kind == 'report':
+        page(4, 2, ink)
+        rect(7, 5, 7, 2, blue, blue)
+        line(7, 9, 14, 9, ink, 1.0); line(7, 11, 15, 11, ink, 1.0)
+        rect(7, 15, 2, 3, amber, amber); rect(10, 13, 2, 5, blue, blue); rect(13, 16, 2, 2, green, green)
+    elif kind == 'update':
+        style(blue, 1.6); p.drawArc(QRectF(4, 4, 16, 16), int(35 * 16), int(135 * 16))
+        poly([(13, 3), (17, 5.5), (15, 9.5)], blue, fill=blue, closed=True)
+        style(green, 1.6); p.drawArc(QRectF(4, 4, 16, 16), int(215 * 16), int(135 * 16))
+        poly([(11, 21), (7, 18.5), (9, 14.5)], green, fill=green, closed=True)
     else:
         # A neutral sheet for unknown action identifiers, never a misleading graph.
         page(); line(8,11,16,11); line(8,15,16,15)

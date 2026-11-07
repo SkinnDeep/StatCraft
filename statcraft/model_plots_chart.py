@@ -879,6 +879,10 @@ def handle_viewcube_action(chart, target):
     if not target or not target.startswith('viewcube_'):
         return False
     action = target.replace('viewcube_', '')
+    if action in ('tips_card', 'tips_pill'):
+        chart._cad_hint_visible = not getattr(chart, '_cad_hint_visible', False)
+        chart.update()
+        return True
     if action == 'body':
         return False
 
@@ -1081,8 +1085,104 @@ def _draw_viewcube(chart, p, cube_rect):
     elif hasattr(chart, 'remember_point_hover'):
         chart.remember_point_hover(iso_rect, tip_iso)
 
+    # Super quick reference card / button under the ViewCube
+    is_hint_visible = getattr(chart, '_cad_hint_visible', True)
+    tip_top = cube_box.bottom() + 6.0
+    if is_hint_visible:
+        tip_box = QRectF(cube_box.left(), tip_top, box_size, 82.0)
+        _draw_mouse_reference_card(chart, p, tip_box)
+        path_tips = QPainterPath()
+        path_tips.addRoundedRect(tip_box, 7.0, 7.0)
+        chart.hit_regions.append(('viewcube_tips_card', path_tips))
+    else:
+        pill_box = QRectF(cube_box.left(), tip_top, box_size, 16.0)
+        _draw_mouse_tips_pill(chart, p, pill_box)
+        path_pill = QPainterPath()
+        path_pill.addRoundedRect(pill_box, 4.0, 4.0)
+        chart.hit_regions.append(('viewcube_tips_pill', path_pill))
+        if hasattr(chart, 'remember_hover'):
+            chart.remember_hover(path_pill, {'text': 'Click or hover to view mouse CAD controls'})
+        elif hasattr(chart, 'remember_point_hover'):
+            chart.remember_point_hover(pill_box, 'Click or hover to view mouse CAD controls')
+
     p.restore()
 
+
+
+def _draw_mouse_reference_card(chart, p, ref_rect):
+    p.save()
+    p.setRenderHint(p.RenderHint.Antialiasing)
+
+    # Card background plate
+    p.setPen(QPen(QColor(203, 213, 225, 180), 0.9))
+    p.setBrush(QColor(255, 255, 255, 240))
+    p.drawRoundedRect(ref_rect, 7.0, 7.0)
+
+    cx = ref_rect.center().x()
+    top = ref_rect.top() + 6.0
+
+    # Draw mini mouse vector icon
+    mw = 18.0
+    mh = 26.0
+    mouse_rect = QRectF(cx - mw / 2.0, top, mw, mh)
+
+    mouse_path = QPainterPath()
+    mouse_path.addRoundedRect(mouse_rect, 8.0, 8.0)
+    p.setPen(QPen(QColor('#64748b'), 1.0))
+    p.setBrush(QColor('#f8fafc'))
+    p.drawPath(mouse_path)
+
+    # Highlight right button in blue (Right-drag: Orbit)
+    clip_p = QPainterPath()
+    clip_p.addRect(QRectF(cx, top, mw / 2.0, 11.0))
+    r_btn = mouse_path.intersected(clip_p)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor('#2563eb'))
+    p.drawPath(r_btn)
+
+    # Divider lines
+    btn_divider_y = top + 11.0
+    p.setPen(QPen(QColor('#94a3b8'), 0.8))
+    p.drawLine(QPointF(cx, top), QPointF(cx, btn_divider_y))
+    p.drawLine(QPointF(cx - mw / 2.0, btn_divider_y), QPointF(cx + mw / 2.0, btn_divider_y))
+
+    # Scroll wheel (cyan pill)
+    wheel_w = 3.6
+    wheel_h = 6.5
+    wheel_rect = QRectF(cx - wheel_w / 2.0, top + 3.0, wheel_w, wheel_h)
+    p.setPen(QPen(QColor('#0284c7'), 0.8))
+    p.setBrush(QColor('#38bdf8'))
+    p.drawRoundedRect(wheel_rect, 1.5, 1.5)
+
+    # Mouse instructions
+    p.setFont(QFont('Segoe UI', 6, QFont.Weight.DemiBold))
+    ty = top + mh + 4.0
+    line_h = 10.0
+    items = [
+        ('R-drag: Orbit', '#1d4ed8'),
+        ('Mid: Pan', '#0284c7'),
+        ('Wheel: Zoom', '#334155'),
+        ('Dbl: Reset', '#64748b'),
+    ]
+    for text, col in items:
+        p.setPen(QColor(col))
+        p.drawText(QRectF(ref_rect.left() + 2, ty, ref_rect.width() - 4, line_h),
+                   Qt.AlignmentFlag.AlignCenter, text)
+        ty += line_h
+
+    p.restore()
+
+
+def _draw_mouse_tips_pill(chart, p, pill_rect):
+    p.save()
+    p.setRenderHint(p.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor(203, 213, 225, 160), 0.8))
+    p.setBrush(QColor(255, 255, 255, 200))
+    p.drawRoundedRect(pill_rect, 4.0, 4.0)
+    p.setFont(QFont('Segoe UI', 6, QFont.Weight.Medium))
+    p.setPen(QColor('#475569'))
+    p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, '🖱 Mouse Tips')
+    p.restore()
 
 
 def _draw_cad_hint_pill(chart, p, cube_rect):

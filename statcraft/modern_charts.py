@@ -794,6 +794,12 @@ class ChartWidget(GraphInteractionMixin,QWidget):
             event.accept()
             return
 
+        if self._has_3d_panel():
+            is_near = (pos.x() >= self.width() - 110 and pos.y() <= 200)
+            if is_near != getattr(self, '_cad_hint_visible', False):
+                self._cad_hint_visible = is_near
+                self.update()
+
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
