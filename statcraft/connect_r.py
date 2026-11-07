@@ -33,6 +33,54 @@ def format_r_symbol(name: str) -> str:
     return name
 
 
+def generate_r_cause_and_effect_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate reproducible R script for Cause-and-Effect (Fishbone / Ishikawa) diagrams."""
+    import json
+    effect_str = connected.metadata.get("effect", "Effect")
+    title_str = connected.title
+    branches = connected.metadata.get("branches", [])
+
+    branch_code_lines = []
+    for b in branches:
+        lbl = b.get("label") or f"Branch_{b.get('branch_index', 1)}"
+        safe_lbl = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in lbl).strip("_") or "Category"
+        causes = b.get("causes", [])
+        causes_r = ", ".join(json.dumps(str(cs)) for cs in causes)
+        branch_code_lines.append(f'  "{safe_lbl}" = c({causes_r})')
+
+    causes_list_str = "\n".join(b + "," for b in branch_code_lines) if branch_code_lines else ""
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Diagram: {title_str}",
+        f"# Effect: {effect_str}",
+        f"# Worksheet: {connected.worksheet_name}",
+        "# ==============================================================================",
+        "",
+        "# 1. Package Loading (qcc provides standard publication Ishikawa fishbone diagrams)",
+        "if (!requireNamespace('qcc', quietly = TRUE)) {",
+        "  install.packages('qcc', repos = 'https://cloud.r-project.org')",
+        "}",
+        "library(qcc)",
+        "",
+        "# 2. Structured Causes List",
+        "causes_list <- list(",
+        f"{causes_list_str}",
+        ")",
+        "",
+        "# 3. Render Cause-and-Effect Diagram",
+        f"cause.and.effect(",
+        f"  cause = causes_list,",
+        f"  effect = {json.dumps(effect_str)},",
+        f"  title = {json.dumps(title_str)}",
+        ")",
+        "",
+        "cat('Cause-and-Effect diagram rendered successfully.\n')",
+    ]
+    return "\n".join(lines)
+
+
 def generate_r_anom_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate reproducible R script for Analysis of Means (ANOM)."""
     import json

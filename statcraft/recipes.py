@@ -65,6 +65,7 @@ FIELDS = {
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
+    'cause_and_effect': {'branches', 'effect', 'title', 'no_empty', 'no_labels'},
     'individuals_moving_range': {'index'},
     'xbar_r_rows': {'indices'},
     'xbar_r_stacked': {'response_index', 'factor_index'},

@@ -963,6 +963,46 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def cause_and_effect(self, branches, effect="Effect", title="", no_empty=False, no_labels=False):
+        from .cause_and_effect import build_cause_and_effect
+        populated_branches = []
+        for b in branches:
+            b_copy = dict(b)
+            if not b_copy.get("causes") and b_copy.get("column_index") is not None:
+                c_idx = b_copy["column_index"]
+                if 0 <= c_idx < len(self.worksheet.columns):
+                    col = self.worksheet.columns[c_idx]
+                    b_copy["causes"] = [v for v in col.values if v is not None and str(v).strip()]
+            populated_branches.append(b_copy)
+
+        result = build_cause_and_effect(
+            populated_branches,
+            effect=effect,
+            title=title,
+            no_empty=no_empty,
+            no_labels=no_labels,
+        )
+
+        from .connect import create_connected_cause_and_effect
+        connected = create_connected_cause_and_effect(self.worksheet, populated_branches, result)
+
+        entry = self._record(
+            title or f"Cause-and-Effect Diagram: {effect}",
+            result,
+            recipe={
+                "action": "cause_and_effect",
+                "parameters": {
+                    "branches": branches,
+                    "effect": effect,
+                    "title": title,
+                    "no_empty": no_empty,
+                    "no_labels": no_labels,
+                }
+            }
+        )
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
+
     def anom(self, response_index, factor1_index, factor2_index=None, distribution="normal", sample_size=100, alpha=0.05, title=""):
         from .anom import (
             calculate_anom_normal_1way,
@@ -5675,6 +5715,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get('analysis') == 'graphical_summary':
         from .graphical_summary_report import format_graphical_summary_report
         return title + format_graphical_summary_report(result)
+    if isinstance(result, dict) and result.get('analysis') == 'cause_and_effect':
+        from .cause_and_effect_report import format_cause_and_effect_report
+        return title + format_cause_and_effect_report(result)
     if isinstance(result, dict) and result.get('analysis') == 'anom':
         from .anom_report import format_anom_report
         return title + format_anom_report(result)

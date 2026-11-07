@@ -32,6 +32,7 @@ def supported(entry):
         "graphical_summary", "run_chart", "multivari", "outlier_test", "cross_correlation",
         "fitted_line_plot",
         "anom",
+        "cause_and_effect",
         "jmp_distribution", "control_chart_builder", "process_screening",
     ):
         return True

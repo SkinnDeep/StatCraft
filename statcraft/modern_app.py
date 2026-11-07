@@ -1281,6 +1281,7 @@ class ModernWindow(QMainWindow):
         self.run_chart_action = self._action(quality, "&Run Chart…", self.run_chart_dialog, None, "run_chart", True)
         self.multivari_action = self._action(quality, "&Multi-Vari Chart…", self.multivari_dialog, None, "multivari", True)
         self._action(quality, "&Pareto Chart…", self.pareto_chart_dialog, None, None, True)
+        self.cause_and_effect_action = self._action(quality, "&Cause-and-Effect…", self.cause_and_effect_dialog, None, "workflow", True)
         capa_menu = quality.addMenu("Capability Analysis")
         self._action(capa_menu, "&Normal…", self.capability, None, None, True)
         self._action(capa_menu, "Between/W&ithin…", self.capability_between_within, None, None, True)
@@ -3526,6 +3527,18 @@ class ModernWindow(QMainWindow):
         from .glm_dialogs import GeneralLinearModelDialog
         self._commit_editor();GeneralLinearModelDialog(self).exec()
 
+    def cause_and_effect_dialog(self):
+        from .cause_and_effect_dialog import CauseAndEffectDialog
+        self._commit_editor()
+        self._last_dialog_action = self.cause_and_effect_dialog
+        dlg = CauseAndEffectDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.selected_params
+            if p:
+                entry = self._call(lambda: self.presenter.cause_and_effect(**p), result=True)
+                if entry:
+                    self.show_result(entry)
+
     def anom_dialog(self):
         from .anom_dialog import ANOMDialog
         self._commit_editor()
@@ -5370,6 +5383,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
                     from .tables_chart import TablesChartWidget
                     chart = TablesChartWidget(entry)
+                elif result.get('analysis') == 'cause_and_effect':
+                    from .cause_and_effect_chart import CauseAndEffectChartWidget
+                    chart = CauseAndEffectChartWidget(entry)
                 elif result.get('analysis') == 'anom':
                     from .anom_chart import ANOMChartWidget
                     chart = ANOMChartWidget(entry)

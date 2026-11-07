@@ -425,6 +425,56 @@ def create_connected_anom(
     return connected
 
 
+def create_connected_cause_and_effect(
+    worksheet: Worksheet,
+    branches: Sequence[Dict[str, Any]],
+    result: Dict[str, Any],
+) -> ConnectedAnalysis:
+    """Instantiate a durable connected analysis for Cause-and-Effect diagrams."""
+    ensure_worksheet_identities(worksheet)
+    col_indices = [b["column_index"] for b in branches if b.get("column_index") is not None and 0 <= b["column_index"] < len(worksheet.columns)]
+    fingerprint = compute_data_fingerprint(worksheet, col_indices) if col_indices else ""
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+
+    pred_ids = [worksheet.columns[i].metadata.get("id", "") for i in col_indices]
+    pred_names = [worksheet.columns[i].name for i in col_indices]
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-fishbone-{uuid.uuid4().hex[:8]}",
+        analysis_type="cause_and_effect",
+        title=result.get("title", f"Cause-and-Effect: {result.get('effect', 'Effect')}"),
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=worksheet.metadata.get("id", ""),
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id="",
+        response_name=result.get("effect", "Effect"),
+        predictor_col_ids=pred_ids,
+        predictor_names=pred_names,
+        confidence=0.95,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={
+            "branch_count": result.get("branch_count", len(branches)),
+            "total_causes": result.get("total_causes", 0),
+        },
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "effect": result.get("effect", "Effect"),
+            "options": result.get("options", {}),
+            "branches": result.get("branches", []),
+        }
+    )
+
+    from .connect_r import generate_r_cause_and_effect_script
+    connected.r_script = generate_r_cause_and_effect_script(connected, worksheet)
+    return connected
+
+
 def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet) -> Tuple[str, str]:
     """Evaluate whether connected analysis is current, stale, or requires repair.
     
