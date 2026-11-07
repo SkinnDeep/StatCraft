@@ -90,7 +90,9 @@ StatCraft delivers identical statistical reporting and diagnostic rigor to Minit
 - **One-Way ANOVA**: Multiple comparisons via Tukey, Fisher LSD, Dunnett (with control), Hsu MCB, and Games-Howell.
 - **Two-Way ANOVA**: Full factorial ($A, B, A \times B$) and additive models with Main Effects and Interaction Plots.
 - **General Linear Model (GLM)**: Handles continuous covariates, categorical factors, and custom interaction terms.
-- **Multiple Linear Regression (OLS)**: Full Minitab parity with PRESS, Predicted R-squared, Unusual Observations, and 4-in-1 plots.
+- **Fitted Line Plot**: Linear, Quadratic, and Cubic polynomial regression with 95% Confidence and Prediction bands, sequential ANOVA decomposition, PRESS, $R^2_{pred}$, and Unusual Observation flags ($R$ for large residuals, $X$ for high leverage).
+- **Multiple Linear Regression (OLS)**: Full Minitab 22 parity with PRESS, Predicted R-squared, Unusual Observations, and publication 4-in-1 residual plots.
+- **Analysis of Means (ANOM)**: One-Way and Two-Way ANOM for Normal data (Nelson critical values, pooled $s_p$, interaction effects), Binomial proportions, and Poisson flaw rates with Upper and Lower Decision Limits (UDL/LDL).
 - **Test for Equal Variances**: Bartlett's test, Levene's test, and Multiple Comparisons confidence intervals.
 
 ### 3. Statistical Process Control (SPC) & Six Sigma Quality
@@ -107,6 +109,7 @@ StatCraft delivers identical statistical reporting and diagnostic rigor to Minit
   - Type 1 Gage Study ($C_g, C_{gk}$, run charts).
   - Gage Linearity and Bias Study.
   - Attribute Agreement Analysis (Fleiss' kappa, Kendall's concordance).
+- **Cause-and-Effect (Fishbone / Ishikawa) Diagram**: Standard 6M industrial categories (Personnel, Machines, Materials, Methods, Measurements, Environment), custom branch labels, empty branch suppression, and interactive vector diagram with hover HUD inspection.
 - **Pareto Charts**: Defect frequency bars, cumulative percentage curves, and 80/20 reference markers.
 
 ### 4. Design of Experiments (DOE)
