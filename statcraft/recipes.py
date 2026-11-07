@@ -64,6 +64,7 @@ FIELDS = {
     'inference': {'method', 'indices', 'mu', 'confidence'},
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
+    'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
     'individuals_moving_range': {'index'},
     'xbar_r_rows': {'indices'},
     'xbar_r_stacked': {'response_index', 'factor_index'},
@@ -581,6 +582,8 @@ def columns(recipe):
         elif key=='x_index' and value is None and action=='graph_builder':
             continue
         elif key=='group_index' and value is None and action in ('histogram_graphs','scatter_plot','expanded_graph'):
+            continue
+        elif key == 'factor2_index' and value is None and action == 'anom':
             continue
         elif key.endswith('_index') or key == 'index':
             indices.append(value)

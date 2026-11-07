@@ -363,6 +363,68 @@ def create_connected_fitted_line_plot(
     return connected
 
 
+def create_connected_anom(
+    worksheet: Worksheet,
+    response_index: int,
+    factor1_index: int,
+    result: Dict[str, Any],
+    factor2_index: Optional[int] = None,
+    alpha: float = 0.05,
+) -> ConnectedAnalysis:
+    """Instantiate a durable connected analysis for Analysis of Means."""
+    ensure_worksheet_identities(worksheet)
+    resp_col = worksheet.columns[response_index]
+    f1_col = worksheet.columns[factor1_index]
+    col_indices = [response_index, factor1_index]
+    pred_ids = [f1_col.metadata.get("id", "")]
+    pred_names = [f1_col.name]
+    if factor2_index is not None and 0 <= factor2_index < len(worksheet.columns):
+        f2_col = worksheet.columns[factor2_index]
+        col_indices.append(factor2_index)
+        pred_ids.append(f2_col.metadata.get("id", ""))
+        pred_names.append(f2_col.name)
+
+    fingerprint = compute_data_fingerprint(worksheet, col_indices)
+    resp_id = resp_col.metadata.get("id", "")
+    all_row_ids = list(worksheet.metadata.get("row_ids", []))
+
+    connected = ConnectedAnalysis(
+        analysis_id=f"conn-anom-{uuid.uuid4().hex[:8]}",
+        analysis_type="anom",
+        title=result.get("title", f"Analysis of Means: {resp_col.name}"),
+        engine="statcraft",
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        worksheet_id=worksheet.metadata.get("id", ""),
+        worksheet_name=worksheet.name,
+        data_fingerprint=fingerprint,
+        response_col_id=resp_id,
+        response_name=resp_col.name,
+        predictor_col_ids=pred_ids,
+        predictor_names=pred_names,
+        confidence=1.0 - alpha,
+        row_ids=all_row_ids,
+        fitted_row_ids=all_row_ids,
+        omitted_row_ids=[],
+        coefficients=[],
+        statistics={
+            "grand_mean": result.get("grand_mean", 0.0),
+            "pooled_sd": result.get("pooled_sd", 0.0),
+            "alpha": alpha,
+            "critical_value": result.get("critical_value", 0.0),
+        },
+        fitted_values=[],
+        residuals=[],
+        metadata={
+            "distribution": result.get("distribution", "normal"),
+            "type": result.get("type", "one_way"),
+        }
+    )
+
+    from .connect_r import generate_r_anom_script
+    connected.r_script = generate_r_anom_script(connected, worksheet)
+    return connected
+
+
 def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet) -> Tuple[str, str]:
     """Evaluate whether connected analysis is current, stale, or requires repair.
     

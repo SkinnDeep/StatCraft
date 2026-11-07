@@ -33,6 +33,90 @@ def format_r_symbol(name: str) -> str:
     return name
 
 
+def generate_r_anom_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
+    """Generate reproducible R script for Analysis of Means (ANOM)."""
+    import json
+    resp_name = connected.response_name
+    f1_name = connected.predictor_names[0] if connected.predictor_names else "Factor"
+    alpha = float(connected.statistics.get("alpha", 0.05))
+    dist = connected.metadata.get("distribution", "normal")
+
+    lines = [
+        "# ==============================================================================",
+        "# StatCraft Connect — R Translation",
+        f"# Analysis: {connected.title}",
+        f"# Distribution: {dist.capitalize()} (Alpha: {alpha:g})",
+        f"# Worksheet: {connected.worksheet_name}",
+        "# ==============================================================================",
+        "",
+        "# 1. Extract Variables and Filter NA",
+        f"y_raw <- df[[{json.dumps(resp_name)}]]",
+        f"f_raw <- as.factor(df[[{json.dumps(f1_name)}]])",
+        "valid_idx <- !is.na(y_raw) & !is.na(f_raw)",
+        "y <- y_raw[valid_idx]",
+        "f <- f_raw[valid_idx]",
+        "",
+        "# 2. Calculate Group Statistics & Overall Center Line",
+        "means <- tapply(y, f, mean)",
+        "counts <- tapply(y, f, length)",
+        "k <- length(means)",
+        "total_n <- sum(counts)",
+        "grand_mean <- mean(y)",
+        f"alpha_val <- {alpha}",
+        "",
+    ]
+
+    if dist == "normal":
+        lines.extend([
+            "# 3. Pooled Standard Deviation & Nelson / Bonferroni Critical Value",
+            "fit_aov <- aov(y ~ f)",
+            "mse <- summary(fit_aov)[[1]]['Residuals', 'Mean Sq']",
+            "s_p <- sqrt(mse)",
+            "df_res <- summary(fit_aov)[[1]]['Residuals', 'Df']",
+            "p_crit <- 1.0 - alpha_val / (2.0 * k)",
+            "h_crit <- qt(p_crit, df = df_res)",
+            "",
+            "# 4. Upper and Lower Decision Limits (UDL / LDL)",
+            "se_diff <- s_p * sqrt((total_n - counts) / (total_n * counts))",
+            "udl <- grand_mean + h_crit * se_diff",
+            "ldl <- grand_mean - h_crit * se_diff",
+            "",
+            "anom_df <- data.frame(",
+            "  Level = names(means),",
+            "  N = as.numeric(counts),",
+            "  Mean = as.numeric(means),",
+            "  LDL = as.numeric(ldl),",
+            "  Center = grand_mean,",
+            "  UDL = as.numeric(udl),",
+            "  Significant = as.numeric(means) > as.numeric(udl) | as.numeric(means) < as.numeric(ldl),",
+            "  check.names = FALSE",
+            ")",
+            "cat('--- Analysis of Means Table ---\n')",
+            "print(anom_df)",
+            "",
+            "# 5. Plot ANOM Chart",
+            "y_lims <- c(min(c(means, ldl, grand_mean)) * 0.95, max(c(means, udl, grand_mean)) * 1.05)",
+            "plot(1:k, means, pch = 19, col = '#0284c7', xaxt = 'n', ylim = y_lims,",
+            f"     xlab = {json.dumps(f1_name)}, ylab = {json.dumps(resp_name)},",
+            f"     main = 'One-Way Normal ANOM for {resp_name} by {f1_name}')",
+            "axis(1, at = 1:k, labels = names(means))",
+            "lines(1:k, means, col = '#0284c7', lwd = 1.5)",
+            "abline(h = grand_mean, col = '#16a34a', lwd = 2)",
+            "lines(1:k, udl, col = '#dc2626', lty = 2, lwd = 1.5)",
+            "lines(1:k, ldl, col = '#dc2626', lty = 2, lwd = 1.5)",
+            "sig_pts <- which(anom_df$Significant)",
+            "if (length(sig_pts) > 0) points(sig_pts, means[sig_pts], pch = 19, col = '#dc2626', cex = 1.4)",
+            "legend('topright', legend = c('Center', 'Decision Limits (UDL/LDL)', 'Level Mean', 'Significant'),",
+            "       col = c('#16a34a', '#dc2626', '#0284c7', '#dc2626'), lty = c(1, 2, 1, NA), pch = c(NA, NA, 19, 19), bty = 'n')",
+        ])
+    else:
+        lines.extend([
+            "cat('Analysis of Means calculated.\n')",
+        ])
+
+    return "\n".join(lines)
+
+
 def generate_r_regression_script(connected: "ConnectedAnalysis", worksheet: "Worksheet") -> str:
     """Generate clean, standalone R code reproducing the fitted OLS regression."""
     resp_sym = format_r_symbol(connected.response_name)

@@ -1162,6 +1162,7 @@ class ModernWindow(QMainWindow):
         anova = stat.addMenu("ANOVA")
         self.oneway_anova_action = self._action(anova, "One-Way...", self.oneway_anova_dialog, None, None, True)
         self.twoway_anova_action = self._action(anova, "Two-Way…", self.twoway_anova_dialog, None, None, True)
+        self.anom_action = self._action(anova, "Analysis of Means…", self.anom_dialog, None, "chart", True)
         self.main_effects_plot_action = self._action(anova, "Main Effects Plot…", self.main_effects_plot_dialog, None, None, True)
         self.interactions_plot_action = self._action(anova, "Interactions Plot…", self.interactions_plot_dialog, None, None, True)
         self.test_equal_variances_action = self._action(anova, "Test for Equal Variances…", self.test_equal_variances_dialog, None, None, True)
@@ -3525,6 +3526,18 @@ class ModernWindow(QMainWindow):
         from .glm_dialogs import GeneralLinearModelDialog
         self._commit_editor();GeneralLinearModelDialog(self).exec()
 
+    def anom_dialog(self):
+        from .anom_dialog import ANOMDialog
+        self._commit_editor()
+        self._last_dialog_action = self.anom_dialog
+        dlg = ANOMDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.selected_params
+            if p:
+                entry = self._call(lambda: self.presenter.anom(**p), result=True)
+                if entry:
+                    self.show_result(entry)
+
     def fitted_line_plot_dialog(self):
         from .fitted_line_plot_dialog import FittedLinePlotDialog
         self._commit_editor()
@@ -5357,6 +5370,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'):
                     from .tables_chart import TablesChartWidget
                     chart = TablesChartWidget(entry)
+                elif result.get('analysis') == 'anom':
+                    from .anom_chart import ANOMChartWidget
+                    chart = ANOMChartWidget(entry)
                 elif result.get('analysis') == 'fitted_line_plot':
                     from .fitted_line_plot_chart import FittedLinePlotChartWidget
                     chart = FittedLinePlotChartWidget(entry)

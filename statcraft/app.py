@@ -963,6 +963,70 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def anom(self, response_index, factor1_index, factor2_index=None, distribution="normal", sample_size=100, alpha=0.05, title=""):
+        from .anom import (
+            calculate_anom_normal_1way,
+            calculate_anom_normal_2way,
+            calculate_anom_binomial,
+            calculate_anom_poisson,
+        )
+        resp_col = self.worksheet.columns[response_index]
+        f1_col = self.worksheet.columns[factor1_index]
+        if resp_col.kind != "number":
+            raise ValueError("ANOM requires a numeric response column.")
+        
+        f2_col = self.worksheet.columns[factor2_index] if factor2_index is not None and 0 <= factor2_index < len(self.worksheet.columns) else None
+
+        if distribution == "normal":
+            if f2_col is not None:
+                result = calculate_anom_normal_2way(
+                    resp_col.values, f1_col.values, f2_col.values,
+                    alpha=alpha, response_name=resp_col.name,
+                    factor1_name=f1_col.name, factor2_name=f2_col.name, title=title
+                )
+            else:
+                result = calculate_anom_normal_1way(
+                    resp_col.values, f1_col.values,
+                    alpha=alpha, response_name=resp_col.name,
+                    factor_name=f1_col.name, title=title
+                )
+        elif distribution == "binomial":
+            result = calculate_anom_binomial(
+                resp_col.values, f1_col.values, sample_size=sample_size,
+                alpha=alpha, response_name=resp_col.name,
+                factor_name=f1_col.name, title=title
+            )
+        elif distribution == "poisson":
+            result = calculate_anom_poisson(
+                resp_col.values, f1_col.values, sample_size=sample_size,
+                alpha=alpha, response_name=resp_col.name,
+                factor_name=f1_col.name, title=title
+            )
+        else:
+            raise ValueError(f"Unsupported distribution '{distribution}'.")
+
+        from .connect import create_connected_anom
+        connected = create_connected_anom(self.worksheet, response_index, factor1_index, result, factor2_index=factor2_index, alpha=alpha)
+
+        entry = self._record(
+            title or f"Analysis of Means: {resp_col.name} by {f1_col.name}",
+            result,
+            recipe={
+                "action": "anom",
+                "parameters": {
+                    "response_index": response_index,
+                    "factor1_index": factor1_index,
+                    "factor2_index": factor2_index,
+                    "distribution": distribution,
+                    "sample_size": sample_size,
+                    "alpha": alpha,
+                    "title": title,
+                }
+            }
+        )
+        entry["connected_analysis"] = connected.to_dict()
+        return entry
+
     def individuals_moving_range(self, index):
         from .quality import individuals_moving_range
         col = self.worksheet.columns[index]
@@ -5611,6 +5675,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get('analysis') == 'graphical_summary':
         from .graphical_summary_report import format_graphical_summary_report
         return title + format_graphical_summary_report(result)
+    if isinstance(result, dict) and result.get('analysis') == 'anom':
+        from .anom_report import format_anom_report
+        return title + format_anom_report(result)
     if isinstance(result, dict) and result.get('analysis') == 'fitted_line_plot':
         from .fitted_line_plot_report import format_fitted_line_plot_report
         return title + format_fitted_line_plot_report(result)
