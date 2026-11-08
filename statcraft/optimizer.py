@@ -11,7 +11,7 @@ import copy
 import itertools
 import math
 import numpy as np
-from scipy import optimize as sp_optimize, stats
+# scipy imported lazily
 from .model import finite_number
 from .prediction import _encode as _encode_ols, normalize_recipe as _normalize_prediction_recipe
 
@@ -362,6 +362,7 @@ def _predict_bundle_rows(bundle, rows, confidence=0.95, side='two_sided', comput
             return [dict(fit=float(p), se_fit=None, ci_low=None, ci_high=None, pi_low=None, pi_high=None) for p in probs]
         cov = np.asarray(res['_covariance'])
         var = np.maximum(0.0, np.einsum('ij,jk,ik->i', z, cov, z))
+        from scipy import stats
         quantile = float(stats.norm.isf((1.0 - confidence) / 2.0)) if side == 'two_sided' else float(stats.norm.ppf(confidence))
         out = []
         for p_val, e_val, v_val in zip(probs, eta, var):
@@ -382,6 +383,7 @@ def _predict_bundle_rows(bundle, rows, confidence=0.95, side='two_sided', comput
         return [dict(fit=float(f), se_fit=None, ci_low=None, ci_high=None, pi_low=None, pi_high=None) for f in fits]
     transformed = (coded @ svd['vh'].T) / svd['singular']
     leverages = 1.0 / svd['n'] + np.sum(transformed * transformed, axis=1)
+    from scipy import stats
     quantile = float(stats.t.ppf((1.0 + confidence) / 2.0 if side == 'two_sided' else confidence, res['df_error']))
     out = []
     for f_val, h_val in zip(fits, leverages):
@@ -831,6 +833,7 @@ def optimize(worksheet, responses, options=None):
             if all(max(abs(vec_c[d] - s['setting'][cont_indices[d]]) / max(1e-9, cont_bounds[d][1] - cont_bounds[d][0]) for d in range(k_cont)) > 0.08 for s in top_seeds):
                 top_seeds.append(cand)
         for seed in top_seeds:
+            from scipy import optimize as sp_optimize
             x0 = np.asarray([seed['setting'][j] for j in cont_indices], dtype=float)
             def obj(x_vec):
                 clipped = [min(cont_bounds[d][1], max(cont_bounds[d][0], float(x_vec[d]))) for d in range(k_cont)]

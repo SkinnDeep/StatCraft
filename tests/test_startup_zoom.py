@@ -20,6 +20,16 @@ class StartupZoomTests(unittest.TestCase):
     def tearDown(self):
         dispose_startup(self.app)
 
+    def test_instant_startup_zero_splash(self):
+        class Window(QMainWindow):
+            def load_path(self, path): self.loaded = str(path)
+        state = start_window(self.app, Window, ['C:/sample data/quiz1.mpx'])
+        self.assertIsNone(state['splash'])
+        self.assertTrue(state['ready'])
+        self.assertIsNotNone(state['window'])
+        self.assertTrue(state['window'].isMaximized())
+        self.assertEqual(state['window'].loaded.replace('\\', '/'), 'C:/sample data/quiz1.mpx')
+
     def test_startup_shows_splash_then_maximizes_and_loads_one_literal_path(self):
         class Window(QMainWindow):
             def load_path(self,path):self.loaded=str(path)

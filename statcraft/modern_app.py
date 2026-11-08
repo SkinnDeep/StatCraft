@@ -615,6 +615,9 @@ class ModernWindow(QMainWindow):
         self._report_pad_entries = []
         self._prepare_blank()
         self._ui_mode = "minitab"
+        self._jmp_panel = None
+        self._r_workbench = None
+        self._r_explorer_panel = None
         self.setWindowTitle("StatCraft - Untitled")
         self.resize(1280, 760); self.setMinimumSize(920, 520)
         self.setFont(QFont("Segoe UI", 9))
@@ -633,6 +636,69 @@ class ModernWindow(QMainWindow):
         self._show_welcome()
         self.set_ui_mode(self._ui_mode)
         QTimer.singleShot(800, self._check_startup_updates)
+
+    @property
+    def jmp_panel(self):
+        if self._jmp_panel is None:
+            from .jmp_panel import JMPTablePanel
+            self._jmp_panel = JMPTablePanel(self)
+            self._jmp_panel.set_dark_mode(getattr(self, "_dark_mode", False))
+            if hasattr(self, "sidebar_stack") and self.sidebar_stack.count() > 1:
+                cur = self.sidebar_stack.currentIndex()
+                old = self.sidebar_stack.widget(1)
+                self.sidebar_stack.removeWidget(old)
+                old.deleteLater()
+                self.sidebar_stack.insertWidget(1, self._jmp_panel)
+                self.sidebar_stack.setCurrentIndex(cur)
+        return self._jmp_panel
+
+    @jmp_panel.setter
+    def jmp_panel(self, val):
+        self._jmp_panel = val
+
+    @property
+    def r_workbench(self):
+        if self._r_workbench is None:
+            from .r_workbench_widget import RWorkbenchWidget
+            self._r_workbench = RWorkbenchWidget(self)
+            self._r_workbench.set_dark_mode(getattr(self, "_dark_mode", False))
+            if hasattr(self, "work_stack") and self.work_stack.count() > 1:
+                cur = self.work_stack.currentIndex()
+                old = self.work_stack.widget(1)
+                self.work_stack.removeWidget(old)
+                old.deleteLater()
+                self.work_stack.insertWidget(1, self._r_workbench)
+                self.work_stack.setCurrentIndex(cur)
+            if getattr(self, "_r_explorer_panel", None) is not None:
+                self._r_explorer_panel.workbench = self._r_workbench
+        return self._r_workbench
+
+    @r_workbench.setter
+    def r_workbench(self, val):
+        self._r_workbench = val
+
+    @property
+    def r_explorer_panel(self):
+        if self._r_explorer_panel is None:
+            from .r_file_explorer import RExplorerPanel
+            self._r_explorer_panel = RExplorerPanel(
+                main_window=self,
+                presenter=self.presenter,
+                workbench=self.r_workbench,
+            )
+            self._r_explorer_panel.set_dark_mode(getattr(self, "_dark_mode", False))
+            if hasattr(self, "sidebar_stack") and self.sidebar_stack.count() > 2:
+                cur = self.sidebar_stack.currentIndex()
+                old = self.sidebar_stack.widget(2)
+                self.sidebar_stack.removeWidget(old)
+                old.deleteLater()
+                self.sidebar_stack.insertWidget(2, self._r_explorer_panel)
+                self.sidebar_stack.setCurrentIndex(cur)
+        return self._r_explorer_panel
+
+    @r_explorer_panel.setter
+    def r_explorer_panel(self, val):
+        self._r_explorer_panel = val
 
     def _prepare_blank(self):
         sheet = self.presenter.worksheet
@@ -717,21 +783,12 @@ class ModernWindow(QMainWindow):
         self.navigator.customContextMenuRequested.connect(self._show_navigator_item_menu)
         nav_layout.addWidget(self.navigator, 1)
 
-        from .jmp_panel import JMPTablePanel
-        self.jmp_panel = JMPTablePanel(self)
-
         self.sidebar_stack = QStackedWidget()
         self.sidebar_stack.setObjectName("sidebarStack")
         self.sidebar_stack.setMinimumWidth(175); self.sidebar_stack.setMaximumWidth(380)
         self.sidebar_stack.addWidget(self.navigator_container)
-        self.sidebar_stack.addWidget(self.jmp_panel)
-        from .r_file_explorer import RExplorerPanel
-        self.r_explorer_panel = RExplorerPanel(
-            main_window=self,
-            presenter=self.presenter,
-            workbench=getattr(self, "r_workbench", None),
-        )
-        self.sidebar_stack.addWidget(self.r_explorer_panel)
+        self.sidebar_stack.addWidget(QWidget())  # placeholder for lazy jmp_panel
+        self.sidebar_stack.addWidget(QWidget())  # placeholder for lazy r_explorer_panel
         self.splitter.addWidget(self.sidebar_stack)
 
         # Center/Right vertical splitter: Output pane on top, Worksheet grid on bottom
@@ -942,11 +999,7 @@ class ModernWindow(QMainWindow):
         self.work_stack = QStackedWidget()
         self.work_stack.addWidget(self.work_splitter)
 
-        from .r_workbench_widget import RWorkbenchWidget
-        self.r_workbench = RWorkbenchWidget(self)
-        if hasattr(self, "r_explorer_panel"):
-            self.r_explorer_panel.workbench = self.r_workbench
-        self.work_stack.addWidget(self.r_workbench)
+        self.work_stack.addWidget(QWidget())  # placeholder for lazy r_workbench
 
         self.splitter.addWidget(self.work_stack)
         self.splitter.setSizes([182, 1098])
@@ -1696,23 +1749,24 @@ class ModernWindow(QMainWindow):
         if hasattr(self, "sidebar_stack"):
             if mode == "jmp":
                 self.sidebar_stack.show()
+                _ = self.jmp_panel
                 self.sidebar_stack.setCurrentIndex(1)
-                if hasattr(self, "jmp_panel"):
-                    self.jmp_panel.set_dark_mode(is_dark)
-                    self.jmp_panel.refresh()
+                self.jmp_panel.set_dark_mode(is_dark)
+                self.jmp_panel.refresh()
             elif mode == "r":
                 self.sidebar_stack.show()
+                _ = self.r_explorer_panel
                 self.sidebar_stack.setCurrentIndex(2)
-                if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
-                    self.r_explorer_panel.set_dark_mode(is_dark)
-                    self.r_explorer_panel.refresh_all()
+                self.r_explorer_panel.set_dark_mode(is_dark)
+                self.r_explorer_panel.refresh_all()
             else:
                 self.sidebar_stack.show()
                 self.sidebar_stack.setCurrentIndex(0)
 
         if hasattr(self, "work_stack"):
-            self.work_stack.setCurrentIndex(1 if mode == "r" else 0)
-            if mode == "r" and hasattr(self, "r_workbench") and self.r_workbench:
+            if mode == "r":
+                _ = self.r_workbench
+                self.work_stack.setCurrentIndex(1)
                 self.r_workbench.set_dark_mode(is_dark)
                 self.r_workbench.sync_active_worksheet_to_r()
                 target_entry = self.selected_entry or (self.presenter.history[-1] if hasattr(self, "presenter") and getattr(self.presenter, "history", None) else None)
@@ -1732,6 +1786,8 @@ class ModernWindow(QMainWindow):
                         if hasattr(self, "statusBar") and self.statusBar():
                             self.statusBar().showMessage(f"R Translator: Translated '{conn_dict.get('title', 'Analysis')}' to Base R", 5000)
                 self.r_workbench.refresh_environment()
+            else:
+                self.work_stack.setCurrentIndex(0)
 
         if hasattr(self, "column_names") and not getattr(self, "_refreshing", False):
             self.refresh()
@@ -1766,12 +1822,12 @@ class ModernWindow(QMainWindow):
         if hasattr(self, "dark_mode_action_jmp") and self.dark_mode_action_jmp:
             self.dark_mode_action_jmp.setChecked(is_dark)
 
-        if hasattr(self, "jmp_panel") and self.jmp_panel:
-            self.jmp_panel.set_dark_mode(is_dark)
-        if hasattr(self, "r_workbench") and self.r_workbench:
-            self.r_workbench.set_dark_mode(is_dark)
-        if hasattr(self, "r_explorer_panel") and self.r_explorer_panel:
-            self.r_explorer_panel.set_dark_mode(is_dark)
+        if getattr(self, "_jmp_panel", None) is not None:
+            self._jmp_panel.set_dark_mode(is_dark)
+        if getattr(self, "_r_workbench", None) is not None:
+            self._r_workbench.set_dark_mode(is_dark)
+        if getattr(self, "_r_explorer_panel", None) is not None:
+            self._r_explorer_panel.set_dark_mode(is_dark)
 
         if hasattr(self, "entry_dir_label"):
             self.entry_dir_label.setStyleSheet(
@@ -1971,6 +2027,9 @@ class ModernWindow(QMainWindow):
         menu.exec(self.sheet_menu_button.mapToGlobal(self.sheet_menu_button.rect().topLeft()))
 
     def refresh(self):
+        if hasattr(self, "table"): self.table.setUpdatesEnabled(False)
+        if hasattr(self, "column_names"): self.column_names.setUpdatesEnabled(False)
+        if hasattr(self, "navigator"): self.navigator.setUpdatesEnabled(False)
         if hasattr(self,"_workspace"):
             self._workspace.sync_document()
             if not self._workspace.busy:self._workspace.rebuild()
@@ -2095,35 +2154,36 @@ class ModernWindow(QMainWindow):
         if sheet.matrices: counts += ' · ' + str(len(sheet.matrices)) + ' matrices'
         self.sheet_counts.setText(counts)
         self.page_label.setText("Rows " + str(start + 1) + "–" + str(start + visible))
-        from .prediction import normalize_recipe
-        from .optimizer import normalize_model_recipe
         available_models=set(); optimizer_models=set(); two_cont_models=set()
-        for entry in self.presenter.history:
-            if entry.get('source_unavailable'):continue
-            try:
-                if self.presenter.result_worksheet(entry) is sheet:
-                    from .native_mpx_models import resolve_entry_recipe
-                    recipe = resolve_entry_recipe(entry, sheet)
-                    if not isinstance(recipe, dict):
-                        continue
-                    if recipe.get('action') in ('predict_model','factorial_plots','model_contour_plot','model_surface_plot'):
-                        recipe=recipe.get('parameters',{}).get('model_recipe')
-                    if recipe.get('action')=='optimize_responses':
-                        for r_item in recipe.get('parameters',{}).get('responses',[]):
-                            norm_r=normalize_model_recipe(r_item.get('model_recipe')); act=norm_r['action']; canon='analyze_factorial' if act=='analyze_factorial_terms' else act
-                            optimizer_models.add(canon); available_models.add(canon)
-                            rp=norm_r['parameters']; n_c=len(rp['predictor_indices']) if act=='multiple_regression' else len(rp['covariate_indices']) if act=='general_linear_model' else len(rp['factor_indices']) if act=='analyze_response_surface' else len(rp['continuous_indices']) if act=='fit_binary_logistic' else sum(1 for c_i in rp['factor_indices'] if 0<=c_i<len(sheet.columns) and sheet.columns[c_i].kind=='number')
-                            if n_c>=2:two_cont_models.add(canon)
-                        continue
-                    act=normalize_model_recipe(recipe)['action']
-                    optimizer_models.add('analyze_factorial' if act=='analyze_factorial_terms' else act)
-                    norm_rec=normalize_model_recipe(recipe); act=norm_rec['action']
-                    canon='analyze_factorial' if act=='analyze_factorial_terms' else act
-                    optimizer_models.add(canon); available_models.add(canon)
-                    p=norm_rec['parameters']
-                    n_cont=len(p['predictor_indices']) if act=='multiple_regression' else len(p['covariate_indices']) if act=='general_linear_model' else len(p['factor_indices']) if act=='analyze_response_surface' else len(p['continuous_indices']) if act=='fit_binary_logistic' else sum(1 for c_i in p['factor_indices'] if 0<=c_i<len(sheet.columns) and sheet.columns[c_i].kind=='number')
-                    if n_cont>=2:two_cont_models.add(canon)
-            except (ValueError,TypeError,KeyError,IndexError,OverflowError):pass
+        if self.presenter.history:
+            from .prediction import normalize_recipe
+            from .optimizer import normalize_model_recipe
+            for entry in self.presenter.history:
+                if entry.get('source_unavailable'):continue
+                try:
+                    if self.presenter.result_worksheet(entry) is sheet:
+                        from .native_mpx_models import resolve_entry_recipe
+                        recipe = resolve_entry_recipe(entry, sheet)
+                        if not isinstance(recipe, dict):
+                            continue
+                        if recipe.get('action') in ('predict_model','factorial_plots','model_contour_plot','model_surface_plot'):
+                            recipe=recipe.get('parameters',{}).get('model_recipe')
+                        if recipe.get('action')=='optimize_responses':
+                            for r_item in recipe.get('parameters',{}).get('responses',[]):
+                                norm_r=normalize_model_recipe(r_item.get('model_recipe')); act=norm_r['action']; canon='analyze_factorial' if act=='analyze_factorial_terms' else act
+                                optimizer_models.add(canon); available_models.add(canon)
+                                rp=norm_r['parameters']; n_c=len(rp['predictor_indices']) if act=='multiple_regression' else len(rp['covariate_indices']) if act=='general_linear_model' else len(rp['factor_indices']) if act=='analyze_response_surface' else len(rp['continuous_indices']) if act=='fit_binary_logistic' else sum(1 for c_i in rp['factor_indices'] if 0<=c_i<len(sheet.columns) and sheet.columns[c_i].kind=='number')
+                                if n_c>=2:two_cont_models.add(canon)
+                            continue
+                        act=normalize_model_recipe(recipe)['action']
+                        optimizer_models.add('analyze_factorial' if act=='analyze_factorial_terms' else act)
+                        norm_rec=normalize_model_recipe(recipe); act=norm_rec['action']
+                        canon='analyze_factorial' if act=='analyze_factorial_terms' else act
+                        optimizer_models.add(canon); available_models.add(canon)
+                        p=norm_rec['parameters']
+                        n_cont=len(p['predictor_indices']) if act=='multiple_regression' else len(p['covariate_indices']) if act=='general_linear_model' else len(p['factor_indices']) if act=='analyze_response_surface' else len(p['continuous_indices']) if act=='fit_binary_logistic' else sum(1 for c_i in p['factor_indices'] if 0<=c_i<len(sheet.columns) and sheet.columns[c_i].kind=='number')
+                        if n_cont>=2:two_cont_models.add(canon)
+                except (ValueError,TypeError,KeyError,IndexError,OverflowError):pass
         for name,action in self.predict_actions.items():action.setEnabled(name in available_models)
         for name,action in self.profiler_actions.items():action.setEnabled(name in available_models)
         for name,action in self.optimizer_actions.items():action.setEnabled(name in optimizer_models)
@@ -2260,8 +2320,11 @@ class ModernWindow(QMainWindow):
             frame.apply_appearance()
         self._sync_selection_highlights()
         if self.selected_entry is not None: self._update_result_state()
-        if hasattr(self, "jmp_panel"):
-            self.jmp_panel.refresh()
+        if getattr(self, "_jmp_panel", None) is not None:
+            self._jmp_panel.refresh()
+        if hasattr(self, "navigator"): self.navigator.setUpdatesEnabled(True)
+        if hasattr(self, "column_names"): self.column_names.setUpdatesEnabled(True)
+        if hasattr(self, "table"): self.table.setUpdatesEnabled(True)
 
     def _column_name_current_changed(self,row,column,*unused):
         if self._refreshing or column<0:return

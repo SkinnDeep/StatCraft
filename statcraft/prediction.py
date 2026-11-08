@@ -8,7 +8,7 @@ import itertools
 import math
 import copy
 import numpy as np
-from scipy import stats
+# scipy imported lazily
 from .model import finite_number
 
 DEFAULTS = dict(confidence=.95, intervals='both', side='two_sided', show_equation=True, show_table=True)
@@ -204,6 +204,7 @@ def predict(worksheet, model_recipe, input_mode='values', values=None, new_indic
                 fits = mean_y + unit*(coded@gamma)
                 transformed = (coded@vh.T)/singular
                 leverages = 1/n + np.sum(transformed*transformed, axis=1)
+                from scipy import stats
                 quantile = float(stats.t.ppf((1+o['confidence'])/2 if o['side']=='two_sided' else o['confidence'], result['df_error']))
                 for i, fit, h in zip(valid, fits, leverages):
                     row = out[i]; row.update(fit=float(fit), status=result['status'], extrapolated=any(bound and not bound[0] <= value <= bound[1] for value, bound in zip(inputs[i], ranges)))
