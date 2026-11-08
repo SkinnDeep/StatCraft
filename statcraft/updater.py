@@ -273,7 +273,7 @@ def download_file(
                     progress_callback(downloaded, total_size)
             out_f.flush()
 
-        if temp_dest.exists() and temp_dest.stat().st_size > 1000000:
+        if temp_dest.exists() and temp_dest.stat().st_size > 0:
             if destination.exists():
                 try:
                     destination.unlink()
@@ -305,7 +305,7 @@ def download_file(
                 url
             ]
             res = _run_hidden_subprocess(cmd, capture_output=True, text=True, timeout=180)
-            if res.returncode == 0 and temp_dest.exists() and temp_dest.stat().st_size > 1000000:
+            if res.returncode == 0 and temp_dest.exists() and temp_dest.stat().st_size > 0:
                 if destination.exists():
                     try:
                         destination.unlink()
@@ -347,7 +347,7 @@ def download_file(
                     progress_callback(downloaded, total_size)
             out_f.flush()
 
-        if temp_dest.exists() and temp_dest.stat().st_size > 1000000:
+        if temp_dest.exists() and temp_dest.stat().st_size > 0:
             if destination.exists():
                 try:
                     destination.unlink()

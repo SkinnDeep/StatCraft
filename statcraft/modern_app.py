@@ -7106,9 +7106,9 @@ class ModernWindow(QMainWindow):
         if entry is None: QMessageBox.information(self, "Rerun", "Select a supported result first."); return None
         return self._call(lambda: self.presenter.rerun_result(entry), result=True)
 
-    def check_for_updates_dialog(self):
+    def check_for_updates_dialog(self, auto_download: bool = False, update_info: dict | None = None):
         from .updater_dialog import CheckForUpdatesDialog
-        dlg = CheckForUpdatesDialog(self)
+        dlg = CheckForUpdatesDialog(self, auto_download=auto_download, initial_info=update_info)
         dlg.exec()
 
     def _check_startup_updates(self):
@@ -7155,7 +7155,7 @@ class ModernWindow(QMainWindow):
                 QMessageBox.StandardButton.Yes
             )
             if reply == QMessageBox.StandardButton.Yes:
-                self.check_for_updates_dialog()
+                self.check_for_updates_dialog(auto_download=True, update_info=info)
         else:
             if hasattr(self, "status_update_btn"):
                 self.status_update_btn.setVisible(False)
