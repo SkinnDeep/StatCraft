@@ -632,7 +632,7 @@ class ModernWindow(QMainWindow):
         self._create_actions(); self._create_status_bar(); self.refresh()
         self._show_welcome()
         self.set_ui_mode(self._ui_mode)
-        QTimer.singleShot(2500, self._check_startup_updates)
+        QTimer.singleShot(800, self._check_startup_updates)
 
     def _prepare_blank(self):
         sheet = self.presenter.worksheet
@@ -643,7 +643,8 @@ class ModernWindow(QMainWindow):
 
     def setWindowTitle(self, title: str):
         if getattr(self, "sandbox_mode", False) and not title.startswith("[🧪 LIVE SANDBOX"):
-            title = f"[🧪 LIVE SANDBOX · v112.0.0-dev] {title}"
+            from .updater import STATCRAFT_VERSION
+            title = f"[🧪 LIVE SANDBOX · v{STATCRAFT_VERSION}-dev] {title}"
         super().setWindowTitle(title)
 
     def _create_sandbox_banner(self, layout):
@@ -966,6 +967,29 @@ class ModernWindow(QMainWindow):
 
         self.status_sheet_label = QLabel("Worksheet 1")
         sb.addWidget(self.status_sheet_label)
+
+        # Update notification pill button
+        self.status_update_btn = QToolButton()
+        self.status_update_btn.setObjectName("statusUpdateBtn")
+        self.status_update_btn.setIcon(tool_icon("update"))
+        self.status_update_btn.setIconSize(QSize(14, 14))
+        self.status_update_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.status_update_btn.setStyleSheet("""
+            QToolButton#statusUpdateBtn {
+                background-color: #0284c7;
+                color: #ffffff;
+                font-weight: 600;
+                font-size: 8pt;
+                border-radius: 4px;
+                padding: 2px 8px;
+            }
+            QToolButton#statusUpdateBtn:hover {
+                background-color: #0369a1;
+            }
+        """)
+        self.status_update_btn.setVisible(False)
+        self.status_update_btn.clicked.connect(self.check_for_updates_dialog)
+        sb.addPermanentWidget(self.status_update_btn)
 
         # Right-side permanent StatCraft controls: pane layout buttons, zoom controls, Command Line toggle
         self.view_mode_buttons = {}
@@ -7089,13 +7113,13 @@ class ModernWindow(QMainWindow):
 
     def _check_startup_updates(self):
         import os
-        if getattr(self, "sandbox_mode", False) or os.environ.get("STATCRAFT_TESTING") or "unittest" in sys.modules or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        if os.environ.get("STATCRAFT_TESTING") or "unittest" in sys.modules or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
             return
         try:
+            self.statusBar().showMessage("Checking for updates...", 3000)
             from .updater_dialog import UpdateCheckWorker
-            from .updater import read_install_metadata, STATCRAFT_VERSION
-            installed = read_install_metadata()
-            cur_v = installed.get("version", STATCRAFT_VERSION)
+            from .updater import STATCRAFT_VERSION
+            cur_v = STATCRAFT_VERSION
             self._startup_worker = UpdateCheckWorker(cur_v)
             self._startup_worker.finished.connect(self._on_startup_update_finished)
             self._startup_worker.start()
@@ -7103,28 +7127,40 @@ class ModernWindow(QMainWindow):
             pass
 
     def _on_startup_update_finished(self, info: dict):
-        if not info or not info.get("update_available"):
+        if not info:
             return
 
-        # Only interrupt/prompt user automatically on startup if this is a MAJOR version upgrade (e.g. 104 -> 105).
-        # Minor patches, internal tweaks, and small changes never force existing users to reinstall.
-        from .updater import is_major_update
+        if info.get("error"):
+            self.statusBar().showMessage(f"Update check offline: {info['error']}", 4000)
+            return
+
         cur_v = info.get("current_version", "")
         latest_v = info.get("latest_version", "")
-        if not is_major_update(cur_v, latest_v):
-            return
 
-        name = info.get("release_name") or f"StatCraft v{latest_v}"
-        reply = QMessageBox.question(
-            self,
-            "StatCraft Major Update Available",
-            f"A major new version of StatCraft is available: {name}\n\n"
-            f"Would you like to review update details and install now?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.check_for_updates_dialog()
+        if info.get("update_available"):
+            name = info.get("release_name") or f"StatCraft v{latest_v}"
+            if hasattr(self, "status_update_btn"):
+                self.status_update_btn.setText(f"Update: v{latest_v}")
+                self.status_update_btn.setToolTip(f"A new version of StatCraft is available: {name}. Click to review and install.")
+                self.status_update_btn.setVisible(True)
+
+            self.statusBar().showMessage(f"A new version of StatCraft is available (v{latest_v})", 8000)
+            reply = QMessageBox.question(
+                self,
+                "StatCraft Update Available",
+                f"A new version of StatCraft is available: {name} (v{latest_v})\n\n"
+                f"Current installed/running version: v{cur_v}\n\n"
+                f"Would you like to review update details and install now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.check_for_updates_dialog()
+        else:
+            if hasattr(self, "status_update_btn"):
+                self.status_update_btn.setVisible(False)
+            from .updater import STATCRAFT_VERSION
+            self.statusBar().showMessage(f"✓ StatCraft is up to date (v{STATCRAFT_VERSION})", 6000)
 
     def about(self):
         from .updater import STATCRAFT_VERSION

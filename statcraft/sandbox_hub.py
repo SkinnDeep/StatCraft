@@ -177,6 +177,12 @@ class StatCraftSandboxHub(QDialog):
         btn_src.clicked.connect(self.open_source_dir)
         sec_bar.addWidget(btn_src)
 
+        btn_update = QPushButton("🔄 Check for Updates")
+        btn_update.setStyleSheet("padding: 6px 12px; font-size: 8.5pt;")
+        btn_update.setToolTip("Check for new StatCraft software updates.")
+        btn_update.clicked.connect(self.check_updates)
+        sec_bar.addWidget(btn_update)
+
         btn_close = QPushButton("Close")
         btn_close.setStyleSheet("padding: 6px 12px; font-size: 8.5pt;")
         btn_close.clicked.connect(self.accept)
@@ -252,6 +258,12 @@ class StatCraftSandboxHub(QDialog):
             os.startfile(str(self.repo_root))
         else:
             subprocess.run(["xdg-open", str(self.repo_root)])
+
+    def check_updates(self):
+        """Open the in-app Check for Updates dialog."""
+        from .updater_dialog import CheckForUpdatesDialog
+        dlg = CheckForUpdatesDialog(self)
+        dlg.exec()
 
 
 def main():
