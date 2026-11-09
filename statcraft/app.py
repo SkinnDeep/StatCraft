@@ -1631,6 +1631,24 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def acceptance_sampling_attributes(self, settings=None):
+        import copy
+        from .acceptance_sampling import compute_acceptance_sampling_attributes
+        st = copy.deepcopy(settings or {})
+        res = compute_acceptance_sampling_attributes(settings=st)
+        res["analysis"] = "acceptance_sampling_attributes"
+        res["graph"] = "acceptance_sampling_attributes"
+        n = res["sample_size"]
+        c = res["acceptance_number"]
+        title = f"Acceptance Sampling by Attributes (n={n}, c={c})"
+        recipe = {
+            "action": "acceptance_sampling_attributes",
+            "parameters": {
+                "settings": st,
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def tolerance_intervals(self, settings=None):
         settings = self._bound_settings("tolerance_intervals", settings)
         import copy
@@ -6217,6 +6235,9 @@ def format_entry(entry):
         from .symmetry_plot_report import generate_symmetry_plot_report
         c_name = result.get("column_name", "Variable")
         return title + generate_symmetry_plot_report(result, variable_name=c_name)
+    if isinstance(result, dict) and (result.get("analysis") == "acceptance_sampling_attributes" or result.get("graph") == "acceptance_sampling_attributes"):
+        from .acceptance_sampling_report import generate_acceptance_sampling_report
+        return title + generate_acceptance_sampling_report(result)
     if isinstance(result, dict) and (result.get("analysis") == "tolerance_intervals" or result.get("graph") == "tolerance_intervals"):
         from .tolerance_intervals_report import generate_tolerance_intervals_report
         return title + generate_tolerance_intervals_report(result)

@@ -104,6 +104,7 @@ FIELDS = {
     'type1_gage': {'measurement_index', 'measurement_name', 'reference', 'settings'},
     'attribute_gage': {'ref_col', 'acc_col', 'trials', 'part_col', 'ref_index', 'acc_index', 'trials_index', 'part_index', 'ref_name', 'acc_name', 'part_name', 'settings'},
     'symmetry_plot': {'column_index', 'column_name', 'settings'},
+    'acceptance_sampling_attributes': {'settings'},
     'tolerance_intervals': {'settings'},
     'trend_analysis': {'settings'},
     'decomposition': {'settings'},

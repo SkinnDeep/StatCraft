@@ -1377,6 +1377,7 @@ class ModernWindow(QMainWindow):
         self._action(sixpack_menu, "&Normal…", self.capability_sixpack, None, "capability", True)
 
         self._action(quality, "&Tolerance Intervals…", self.tolerance_intervals_dialog, None, "interval", True)
+        self._action(quality, "Acceptance &Sampling by Attributes…", self.acceptance_sampling_attributes_dialog, None, "chart", True)
 
         gage=quality.addMenu('Gage Study')
         self._action(gage,'&Type 1 Gage Study…',self.type1_gage_dialog,None,"chart",True)
@@ -3840,6 +3841,21 @@ class ModernWindow(QMainWindow):
             if entry:
                 self.show_result(entry)
 
+    def acceptance_sampling_attributes_dialog(self):
+        from .acceptance_sampling_dialogs import AcceptanceSamplingDialog
+        self._commit_editor()
+        self._last_dialog_action = self.acceptance_sampling_attributes_dialog
+        dlg = AcceptanceSamplingDialog(parent=self)
+        if dlg.exec():
+            p = dlg.result_params
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.acceptance_sampling_attributes(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
     def tolerance_intervals_dialog(self):
         from .tolerance_intervals_dialogs import ToleranceIntervalsDialog
         self._commit_editor()
@@ -5545,6 +5561,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'symmetry_plot' or result.get('graph') == 'symmetry_plot':
                     from .symmetry_plot_chart import SymmetryPlotChartWidget
                     chart = SymmetryPlotChartWidget(result)
+                elif result.get('analysis') == 'acceptance_sampling_attributes' or result.get('graph') == 'acceptance_sampling_attributes':
+                    from .acceptance_sampling_chart import AcceptanceSamplingChartWidget
+                    chart = AcceptanceSamplingChartWidget(result)
                 elif result.get('analysis') == 'cause_and_effect':
                     from .cause_and_effect_chart import CauseAndEffectChartWidget
                     chart = CauseAndEffectChartWidget(entry)
