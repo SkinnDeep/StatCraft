@@ -14,7 +14,10 @@ def destinations(presenter):
 def install(window, sheet, destination):
     target=data_prep.store_prepared(window.presenter,sheet,'worksheet' if destination=='New worksheet' else 'project')
     if target is window.presenter:
-        window.page=0;window.refresh()
+        if hasattr(window, 'page'):
+            window.page = 0
+        if hasattr(window, 'refresh'):
+            window.refresh()
     else:
         from .modern_app import ModernWindow
         from PySide6.QtWidgets import QApplication
@@ -109,7 +112,38 @@ class CombineDialog(QDialog):
         self.accept()
 
 
+
+
+class SplitWorksheetDialog(ProcedureDialog):
+    def __init__(self, window):
+        selectors = [dict(key='by_indices', label='By variables:', multiple=True, minimum=1, kinds=('number', 'text', 'date'))]
+        fields = [
+            dict(key='include_missing', label='Missing data:', boolean=True, text='Include missing values in By variables as separate group', default=True),
+        ]
+        super().__init__(
+            window,
+            "Split Worksheet",
+            window.presenter.worksheet,
+            selectors,
+            fields,
+            "Splits the current worksheet into multiple worksheets based on distinct values of the By variables."
+        )
+        self.window = window
+        self.prepared = None
+
+    def validate(self):
+        try:
+            values = self.values()
+            sheets = data_prep.split_worksheet(self.worksheet, values['by_indices'], include_missing=values.get('include_missing', True))
+            for s in sheets:
+                install(self.window, s, 'worksheet')
+            self.prepared = self.window.presenter
+        except (ValueError, TypeError, IndexError) as exc:
+            self.error.setText(str(exc))
+            return
+        self.accept()
+
 def open_dialog(window,operation):
     window._commit_editor()
-    dialog=CombineDialog(window,operation) if operation in ('stack_worksheets','merge') else ReshapeDialog(window,operation)
+    dialog=SplitWorksheetDialog(window) if operation=='split_worksheet' else (CombineDialog(window,operation) if operation in ('stack_worksheets','merge') else ReshapeDialog(window,operation))
     dialog.exec()

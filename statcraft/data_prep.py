@@ -145,3 +145,43 @@ def store_prepared(presenter, sheet, destination='worksheet'):
     target=presenter.add_worksheet(sheet.name)
     target.columns=sheet.columns;target.constants=[];target.matrices=[];target.metadata={}
     return presenter
+
+
+def split_worksheet(sheet, by_indices, include_missing=True):
+    """Split a worksheet into multiple worksheets based on distinct combinations of By columns."""
+    if not by_indices:
+        raise ValueError("Choose at least one By variable.")
+    by_cols = _columns(sheet, by_indices, 1)
+    row_count = sheet.row_count
+    groups = {}
+    for r in range(row_count):
+        vals = tuple(c.values[r] if r < len(c.values) else None for c in by_cols)
+        if not include_missing and any(v is None for v in vals):
+            continue
+        key_parts = []
+        for v in vals:
+            if v is None:
+                key_parts.append("*")
+            elif isinstance(v, float) and v.is_integer():
+                key_parts.append(str(int(v)))
+            else:
+                key_parts.append(str(v).strip())
+        key = " ".join(key_parts).strip()
+        if not key:
+            key = "Group"
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(r)
+
+    if not groups:
+        raise ValueError("No data rows remain to create split worksheets.")
+
+    new_sheets = []
+    for grp_name, rows in groups.items():
+        sub_cols = []
+        for c in sheet.columns:
+            new_vals = [c.values[r] if r < len(c.values) else None for r in rows]
+            sub_cols.append(Column(c.name, c.kind, new_vals, metadata=dict(c.metadata)))
+        sheet_title = f"{sheet.name} - {grp_name}"[:128]
+        new_sheets.append(_sheet(sheet_title, sub_cols))
+    return new_sheets

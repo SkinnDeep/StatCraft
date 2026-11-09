@@ -1185,6 +1185,7 @@ class ModernWindow(QMainWindow):
         worksheets_menu = data.addMenu("Worksheets")
         self.rename_sheet_action = self._action(worksheets_menu, "Rename Worksheet…", self.rename_worksheet, None, "rename_sheet")
         self.duplicate_sheet_action = self._action(worksheets_menu, "Duplicate Worksheet…", self.duplicate_worksheet, None, "duplicate_sheet")
+        self._action(worksheets_menu, "Split Worksheet…", lambda: prepare_dialog(self, "split_worksheet"), None, "split_worksheet", True)
         self.delete_sheet_action = self._action(worksheets_menu, "Delete Worksheet…", self.delete_worksheet, None, "delete_sheet")
 
         from .data_prep_dialogs import open_dialog as prepare_dialog
