@@ -927,6 +927,66 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    def best_subsets(
+        self,
+        response_index: int,
+        free_indices: list,
+        forced_indices: list = None,
+        models_per_subset: int = 2,
+        min_free: int = 1,
+        max_free: int = None,
+    ):
+        from .best_subsets import best_subsets_regression
+        forced_indices = list(forced_indices) if forced_indices else []
+        free_indices = list(free_indices)
+        if not free_indices:
+            raise ValueError("Choose at least one free predictor.")
+        if response_index in free_indices or response_index in forced_indices:
+            raise ValueError("Response variable cannot also be a predictor.")
+        if set(free_indices).intersection(set(forced_indices)):
+            raise ValueError("Predictors cannot be both free and forced.")
+
+        resp_col = self.worksheet.columns[response_index]
+        free_cols = [self.worksheet.columns[i] for i in free_indices]
+        forced_cols = [self.worksheet.columns[i] for i in forced_indices]
+
+        all_cols = [resp_col] + free_cols + forced_cols
+        if any(c.kind != "number" for c in all_cols):
+            raise ValueError("Best Subsets requires numeric response and predictor columns.")
+
+        size = max(len(c.values) for c in all_cols)
+        aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in all_cols]
+
+        resp_vals = aligned[0]
+        free_vals = aligned[1 : 1 + len(free_cols)]
+        forced_vals = aligned[1 + len(free_cols) :]
+
+        res = best_subsets_regression(
+            response=resp_vals,
+            free_predictors=free_vals,
+            free_names=[c.name for c in free_cols],
+            forced_predictors=forced_vals if forced_cols else None,
+            forced_names=[c.name for c in forced_cols] if forced_cols else None,
+            models_per_subset=models_per_subset,
+            min_free=min_free,
+            max_free=max_free,
+            response_name=resp_col.name,
+        )
+
+        title = f"Best Subsets Regression: {resp_col.name} versus {', '.join(c.name for c in free_cols)}"
+        recipe = {
+            "action": "best_subsets",
+            "parameters": {
+                "response_index": response_index,
+                "free_indices": list(free_indices),
+                "forced_indices": list(forced_indices),
+                "models_per_subset": models_per_subset,
+                "min_free": min_free,
+                "max_free": max_free,
+            },
+        }
+        return self._record(title, res, recipe=recipe)
+
     def fitted_line_plot(self, response_index, predictor_index, model_type="linear", confidence=0.95, options=None):
         from .fitted_line_plot import fit_fitted_line_plot
         if response_index == predictor_index:
@@ -6304,6 +6364,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "winters_method":
         from .winters_method_report import generate_winters_method_report
         return title + generate_winters_method_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "best_subsets_regression":
+        from .best_subsets_report import generate_best_subsets_report
+        return title + generate_best_subsets_report(result)
     if isinstance(result, dict) and result.get("analysis") == "autocorrelation":
         from .time_series_report import generate_autocorrelation_report
         return title + generate_autocorrelation_report(result)

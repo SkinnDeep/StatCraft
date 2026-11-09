@@ -1257,6 +1257,7 @@ class ModernWindow(QMainWindow):
         self._action(regression_root, "Simple regression…", lambda: self.inference_dialog("linear_regression"), None, "regression", True)
         regression=regression_root.addMenu('Regression')
         self._action(regression, "Fit regression model…", self.multiple_regression, None, "regression", True)
+        self._action(regression, "Best Subsets…", self.best_subsets_dialog, None, "regression", True)
         self.predict_actions['multiple_regression']=self._action(regression,'Predict…',lambda:self.predict_model('regression'),None,None,True)
         self.profiler_actions['multiple_regression']=self._action(regression,'Prediction Profiler…',lambda:self.prediction_profiler('regression'),None,None,True)
         self.factorial_plot_actions['multiple_regression']=self._action(regression,'Factorial Plots…',lambda:self.factorial_plots('regression'),None,None,True)

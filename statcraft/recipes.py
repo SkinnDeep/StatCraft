@@ -63,6 +63,7 @@ FIELDS = {
     'describe_columns': {'indices'}, 'describe_column': {'index'},
     'inference': {'method', 'indices', 'mu', 'confidence'},
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
+    'best_subsets': {'response_index', 'free_indices', 'forced_indices', 'models_per_subset', 'min_free', 'max_free'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
     'dist_id': {'column_index', 'distributions', 'subgroup_size', 'alpha', 'box_cox_lambda', 'johnson_p_threshold'},
@@ -346,6 +347,17 @@ def columns(recipe):
         if parameters.get('predictor_indices'):
             cols.extend([p for p in parameters['predictor_indices'] if isinstance(p, int) and p >= 0])
         return sorted(set(cols))
+    if action == 'best_subsets':
+        resp = parameters.get('response_index')
+        free_c = parameters.get('free_indices', [])
+        forced_c = parameters.get('forced_indices', []) or []
+        res_c = []
+        if isinstance(resp, int) and resp >= 0:
+            res_c.append(resp)
+        for idx in list(free_c) + list(forced_c):
+            if isinstance(idx, int) and idx >= 0:
+                res_c.append(idx)
+        return sorted(set(res_c))
     if action == 'cross_correlation':
         refs = (parameters['first_index'], parameters['second_index'])
         if refs[0] == refs[1] or any(type(i) is not int or i < 0 for i in refs):
