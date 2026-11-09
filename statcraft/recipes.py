@@ -74,6 +74,7 @@ FIELDS = {
     'orthogonal_regression': {'response_index', 'predictor_index', 'error_variance_ratio', 'confidence'},
     'stability_study': {'response_index', 'time_index', 'batch_index', 'lsl', 'usl', 'alpha_pool', 'confidence'},
     'life_regression': {'response_index', 'predictor_indices', 'censor_index', 'distribution', 'confidence'},
+    'factor_analysis': {'variable_indices', 'n_factors', 'rotation'},
     'probit_analysis': {'response_index', 'trials_index', 'dose_index', 'distribution', 'dose_transform', 'confidence'},
     'nonparametric_growth_curve': {'time_index', 'system_index', 'event_index', 'cost_index', 'confidence'},
     'parametric_growth_curve': {'time_index', 'system_index', 'event_index', 'confidence'},
@@ -209,6 +210,8 @@ def columns(recipe):
     elif action == 'reliability_arbitrary':
         cols = [parameters.get('start_index'), parameters.get('end_index'), parameters.get('frequency_index')]
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
+    if action == 'factor_analysis':
+        return sorted(set([c for c in parameters.get('variable_indices', []) if isinstance(c, int) and c >= 0]))
     if action == 'life_regression':
         cols = [parameters.get('response_index'), parameters.get('censor_index')]
         cols.extend(parameters.get('predictor_indices', []))

@@ -1257,6 +1257,49 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def factor_analysis(
+        self,
+        variable_columns=None,
+        n_factors=None,
+        rotation="varimax",
+        settings=None,
+    ):
+        import copy
+        from .factor_analysis import fit_factor_analysis
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            v_idxs = list(st.get("variable_indices", st.get("variable_columns", [])))
+            n_fac = st.get("n_factors")
+            rot = st.get("rotation", "varimax")
+        else:
+            v_idxs = list(variable_columns or [])
+            n_fac = n_factors
+            rot = rotation
+
+        if not v_idxs or len(v_idxs) < 2:
+            raise ValueError("Factor Analysis requires at least 2 variables.")
+
+        cols = [self.worksheet.columns[i] for i in v_idxs]
+        max_size = max(len(c.values) for c in cols)
+        data_vals = [c.numeric_values(True) + [None] * (max_size - len(c.values)) for c in cols]
+
+        res = fit_factor_analysis(
+            data_columns=data_vals,
+            n_factors=n_fac,
+            rotation=rot,
+            variable_names=[c.name for c in cols],
+        )
+        res["analysis"] = "factor_analysis"
+        recipe = {
+            "action": "factor_analysis",
+            "parameters": {
+                "variable_indices": v_idxs,
+                "n_factors": n_fac,
+                "rotation": rot,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def life_regression(
         self,
         response_column=None,
@@ -7331,6 +7374,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
         from .probit_report import generate_probit_report
         return title + generate_probit_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "factor_analysis":
+        from .factor_analysis_report import generate_factor_analysis_report
+        return title + generate_factor_analysis_report(result)
     if isinstance(result, dict) and result.get("analysis") == "life_regression":
         from .life_regression_report import generate_life_regression_report
         return title + generate_life_regression_report(result)

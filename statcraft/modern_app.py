@@ -1450,6 +1450,7 @@ class ModernWindow(QMainWindow):
         # 5e. Multivariate menu
         multivar = stat.addMenu("&Multivariate")
         self._action(multivar, "&Principal Components...", self.pca_dialog, None, None, True)
+        self._action(multivar, "&Factor Analysis...", self.factor_analysis_dialog, None, None, True)
         self._action(multivar, "&Item Analysis...", self.item_analysis_dialog, None, None, True)
         multivar.addSeparator()
         self._action(multivar, "Cluster &Observations...", self.cluster_observations_dialog, None, None, True)
@@ -6266,6 +6267,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.probit_analysis(**p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def factor_analysis_dialog(self):
+        from .factor_analysis_dialogs import FactorAnalysisDialog
+        self._commit_editor()
+        self._last_dialog_action = self.factor_analysis_dialog
+        dlg = FactorAnalysisDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.factor_analysis(**p),
                     result=True,
                 )
                 if entry:
