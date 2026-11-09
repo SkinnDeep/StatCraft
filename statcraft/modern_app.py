@@ -1413,6 +1413,7 @@ class ModernWindow(QMainWindow):
         arb_analysis = reliability.addMenu("Distribution Analysis (&Arbitrary Censoring)")
         self._action(arb_analysis, "Parametric &Distribution Analysis…", self.reliability_arbitrary_dialog, None, None, True)
         self._action(reliability, "Accelerated &Life Testing…", self.alt_dialog, None, None, True)
+        self._action(reliability, "Regression with &Life Data…", self.life_regression_dialog, None, "reliability", True)
         self._action(reliability, "&Probit Analysis…", self.probit_analysis_dialog, None, "reliability", True)
         repairable_menu = reliability.addMenu("Repairable &Systems Analysis")
         self._action(repairable_menu, "Nonparametric &Growth Curve…", self.nonparametric_growth_curve_dialog, None, "reliability", True)
@@ -6265,6 +6266,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.probit_analysis(**p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def life_regression_dialog(self):
+        from .life_regression_dialogs import LifeRegressionDialog
+        self._commit_editor()
+        self._last_dialog_action = self.life_regression_dialog
+        dlg = LifeRegressionDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.life_regression(**p),
                     result=True,
                 )
                 if entry:

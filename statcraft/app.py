@@ -1257,6 +1257,69 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def life_regression(
+        self,
+        response_column=None,
+        predictor_columns=None,
+        censor_column=None,
+        distribution="weibull",
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .life_regression import fit_life_regression
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            r_idx = st.get("response_index", st.get("response_column"))
+            p_idxs = list(st.get("predictor_indices", st.get("predictor_columns", [])))
+            c_idx = st.get("censor_index", st.get("censor_column"))
+            dist = st.get("distribution", "weibull")
+            conf_val = float(st.get("confidence", 0.95))
+        else:
+            r_idx = response_column
+            p_idxs = list(predictor_columns or [])
+            c_idx = censor_column
+            dist = distribution
+            conf_val = float(confidence)
+
+        if r_idx is None:
+            raise ValueError("Response lifetime variable is required.")
+        if not p_idxs:
+            raise ValueError("At least one predictor is required.")
+
+        r_col = self.worksheet.columns[r_idx]
+        p_cols = [self.worksheet.columns[i] for i in p_idxs]
+        c_col = self.worksheet.columns[c_idx] if c_idx is not None else None
+
+        all_cols = [r_col] + p_cols + ([c_col] if c_col else [])
+        size = max(len(c.values) for c in all_cols)
+
+        r_vals = r_col.numeric_values(True) + [None] * (size - len(r_col.values))
+        p_vals = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in p_cols]
+        c_vals = (c_col.numeric_values(True) + [None] * (size - len(c_col.values))) if c_col else None
+
+        res = fit_life_regression(
+            response=r_vals,
+            predictors=p_vals,
+            censor=c_vals,
+            distribution=dist,
+            confidence=conf_val,
+            response_name=r_col.name,
+            predictor_names=[c.name for c in p_cols],
+        )
+        res["analysis"] = "life_regression"
+        recipe = {
+            "action": "life_regression",
+            "parameters": {
+                "response_index": r_idx,
+                "predictor_indices": p_idxs,
+                "censor_index": c_idx,
+                "distribution": dist,
+                "confidence": conf_val,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def stability_study(
         self,
         response_column=None,
@@ -7268,6 +7331,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
         from .probit_report import generate_probit_report
         return title + generate_probit_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "life_regression":
+        from .life_regression_report import generate_life_regression_report
+        return title + generate_life_regression_report(result)
     if isinstance(result, dict) and result.get("analysis") == "stability_study":
         from .stability_study_report import generate_stability_study_report
         return title + generate_stability_study_report(result)
