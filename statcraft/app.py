@@ -1071,6 +1071,73 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def probit_analysis(
+        self,
+        response_column=None,
+        trials_column=None,
+        dose_column=None,
+        distribution="probit",
+        dose_transform="none",
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .probit import fit_probit_analysis
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            resp_idx = st.get("response_index", st.get("response_column"))
+            trials_idx = st.get("trials_index", st.get("trials_column"))
+            dose_idx = st.get("dose_index", st.get("dose_column"))
+            dist = st.get("distribution", "probit")
+            trans = st.get("dose_transform", "none")
+            conf = float(st.get("confidence", 0.95))
+        else:
+            resp_idx = response_column
+            trials_idx = trials_column
+            dose_idx = dose_column
+            dist = distribution
+            trans = dose_transform
+            conf = float(confidence)
+
+        if resp_idx is None:
+            raise ValueError("Response (events) variable is required.")
+        if dose_idx is None:
+            raise ValueError("Stress / stimulus (dose) variable is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        dose_col = self.worksheet.columns[dose_idx]
+        trials_col = self.worksheet.columns[trials_idx] if trials_idx is not None else None
+
+        size = max(len(resp_col.values), len(dose_col.values), len(trials_col.values) if trials_col else 0)
+        resp_vals = resp_col.numeric_values(True) + [None] * (size - len(resp_col.values))
+        dose_vals = dose_col.numeric_values(True) + [None] * (size - len(dose_col.values))
+        trials_vals = (trials_col.numeric_values(True) + [None] * (size - len(trials_col.values))) if trials_col else None
+
+        res = fit_probit_analysis(
+            events=resp_vals,
+            dose=dose_vals,
+            trials=trials_vals,
+            distribution=dist,
+            dose_transform=trans,
+            confidence=conf,
+            dose_name=dose_col.name,
+            events_name=resp_col.name,
+            trials_name=trials_col.name if trials_col else "Trials",
+        )
+        res["analysis"] = "probit_analysis"
+        recipe = {
+            "action": "probit_analysis",
+            "parameters": {
+                "response_index": resp_idx,
+                "trials_index": trials_idx,
+                "dose_index": dose_idx,
+                "distribution": dist,
+                "dose_transform": trans,
+                "confidence": conf,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def orthogonal_regression(
         self,
         response_column=None,
@@ -6937,6 +7004,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "reliability_arbitrary":
         from .reliability_arbitrary_report import generate_reliability_arbitrary_report
         return title + generate_reliability_arbitrary_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
+        from .probit_report import generate_probit_report
+        return title + generate_probit_report(result)
     if isinstance(result, dict) and result.get("analysis") == "orthogonal_regression":
         from .orthogonal_regression_report import generate_orthogonal_regression_report
         return title + generate_orthogonal_regression_report(result)

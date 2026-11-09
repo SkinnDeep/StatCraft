@@ -1410,6 +1410,7 @@ class ModernWindow(QMainWindow):
         arb_analysis = reliability.addMenu("Distribution Analysis (&Arbitrary Censoring)")
         self._action(arb_analysis, "Parametric &Distribution Analysis…", self.reliability_arbitrary_dialog, None, None, True)
         self._action(reliability, "Accelerated &Life Testing…", self.alt_dialog, None, None, True)
+        self._action(reliability, "&Probit Analysis…", self.probit_analysis_dialog, None, "reliability", True)
 
         # 5c. Time Series menu
         time_series = stat.addMenu("&Time Series")
@@ -6189,6 +6190,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.nonlinear_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def probit_analysis_dialog(self):
+        from .probit_dialogs import ProbitAnalysisDialog
+        self._commit_editor()
+        self._last_dialog_action = self.probit_analysis_dialog
+        dlg = ProbitAnalysisDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.probit_analysis(**p),
                     result=True,
                 )
                 if entry:
