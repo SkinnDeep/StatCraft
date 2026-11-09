@@ -1273,6 +1273,7 @@ class ModernWindow(QMainWindow):
         self._action(binary,'Fit Binary Logistic Model…',self.fit_binary_logistic,None,'regression',True)
         self._action(regression_root, "Ordinal Logistic Regression…", self.ordinal_logistic_regression_dialog, None, "regression", True)
         self._action(regression_root, "Nominal Logistic Regression…", self.nominal_logistic_regression_dialog, None, "regression", True)
+        self._action(regression_root, "Nonlinear Regression…", self.nonlinear_regression_dialog, None, "regression", True)
         self.predict_actions['fit_binary_logistic']=self._action(binary,'Predict…',lambda:self.predict_model('logistic'),None,None,True)
         self.profiler_actions['fit_binary_logistic']=self._action(binary,'Prediction Profiler…',lambda:self.prediction_profiler('logistic'),None,None,True)
         self.factorial_plot_actions['fit_binary_logistic']=self._action(binary,'Factorial Plots…',lambda:self.factorial_plots('logistic'),None,None,True)
@@ -6169,6 +6170,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.nominal_logistic_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def nonlinear_regression_dialog(self):
+        from .nonlinear_regression_dialogs import NonlinearRegressionDialog
+        self._commit_editor()
+        self._last_dialog_action = self.nonlinear_regression_dialog
+        dlg = NonlinearRegressionDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.nonlinear_regression(settings=p.get("settings")),
                     result=True,
                 )
                 if entry:
