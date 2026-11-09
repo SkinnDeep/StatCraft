@@ -1274,6 +1274,7 @@ class ModernWindow(QMainWindow):
         self._action(regression_root, "Ordinal Logistic Regression…", self.ordinal_logistic_regression_dialog, None, "regression", True)
         self._action(regression_root, "Nominal Logistic Regression…", self.nominal_logistic_regression_dialog, None, "regression", True)
         self._action(regression_root, "Nonlinear Regression…", self.nonlinear_regression_dialog, None, "regression", True)
+        self._action(regression_root, "Orthogonal Regression…", self.orthogonal_regression_dialog, None, "regression", True)
         self._action(regression_root, "Partial Least Squares…", self.pls_regression_dialog, None, "regression", True)
         self.predict_actions['fit_binary_logistic']=self._action(binary,'Predict…',lambda:self.predict_model('logistic'),None,None,True)
         self.profiler_actions['fit_binary_logistic']=self._action(binary,'Prediction Profiler…',lambda:self.prediction_profiler('logistic'),None,None,True)
@@ -6188,6 +6189,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.nonlinear_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def orthogonal_regression_dialog(self):
+        from .orthogonal_regression_dialogs import OrthogonalRegressionDialog
+        self._commit_editor()
+        self._last_dialog_action = self.orthogonal_regression_dialog
+        dlg = OrthogonalRegressionDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.orthogonal_regression(**p),
                     result=True,
                 )
                 if entry:

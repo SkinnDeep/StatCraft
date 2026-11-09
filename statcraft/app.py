@@ -1071,6 +1071,60 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def orthogonal_regression(
+        self,
+        response_column=None,
+        predictor_column=None,
+        error_variance_ratio=1.0,
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .orthogonal_regression import fit_orthogonal_regression
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            resp_idx = st.get("response_index", st.get("response_column"))
+            pred_idx = st.get("predictor_index", st.get("predictor_column"))
+            ratio = float(st.get("error_variance_ratio", 1.0))
+            conf = float(st.get("confidence", 0.95))
+        else:
+            resp_idx = response_column
+            pred_idx = predictor_column
+            ratio = float(error_variance_ratio)
+            conf = float(confidence)
+
+        if resp_idx is None:
+            raise ValueError("Response variable (Y) is required.")
+        if pred_idx is None:
+            raise ValueError("Predictor variable (X) is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        pred_col = self.worksheet.columns[pred_idx]
+
+        size = max(len(resp_col.values), len(pred_col.values))
+        resp_vals = resp_col.numeric_values(True) + [None] * (size - len(resp_col.values))
+        pred_vals = pred_col.numeric_values(True) + [None] * (size - len(pred_col.values))
+
+        res = fit_orthogonal_regression(
+            response=resp_vals,
+            predictor=pred_vals,
+            error_variance_ratio=ratio,
+            response_name=resp_col.name,
+            predictor_name=pred_col.name,
+            confidence=conf,
+        )
+        res["analysis"] = "orthogonal_regression"
+        recipe = {
+            "action": "orthogonal_regression",
+            "parameters": {
+                "response_index": resp_idx,
+                "predictor_index": pred_idx,
+                "error_variance_ratio": ratio,
+                "confidence": conf,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def pls_regression(self, settings=None):
         import copy
         from .pls import fit_pls_regression
@@ -6883,6 +6937,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "reliability_arbitrary":
         from .reliability_arbitrary_report import generate_reliability_arbitrary_report
         return title + generate_reliability_arbitrary_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "orthogonal_regression":
+        from .orthogonal_regression_report import generate_orthogonal_regression_report
+        return title + generate_orthogonal_regression_report(result)
     if isinstance(result, dict) and result.get("analysis") == "pls_regression":
         from .pls_report import generate_pls_report
         return title + generate_pls_report(result)
