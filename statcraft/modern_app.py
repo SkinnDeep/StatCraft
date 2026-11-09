@@ -1460,6 +1460,7 @@ class ModernWindow(QMainWindow):
         multivar.addSeparator()
         self._action(multivar, "&Discriminant Analysis...", self.discriminant_analysis_dialog, None, None, True)
         self._action(multivar, "&Simple Correspondence Analysis...", self.simple_correspondence_dialog, None, None, True)
+        self._action(multivar, "&Multiple Correspondence Analysis...", self.multiple_correspondence_dialog, None, None, True)
 
         # 5f. Equivalence Tests menu
         equiv = stat.addMenu("&Equivalence Tests")
@@ -6267,6 +6268,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.probit_analysis(**p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def multiple_correspondence_dialog(self):
+        from .multiple_correspondence_dialogs import MultipleCorrespondenceDialog
+        self._commit_editor()
+        self._last_dialog_action = self.multiple_correspondence_dialog
+        dlg = MultipleCorrespondenceDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.multiple_correspondence(**p),
                     result=True,
                 )
                 if entry:

@@ -1257,6 +1257,44 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def multiple_correspondence(
+        self,
+        variable_columns=None,
+        n_components=2,
+        settings=None,
+    ):
+        import copy
+        from .multiple_correspondence import fit_multiple_correspondence
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            v_idxs = list(st.get("variable_indices", st.get("variable_columns", [])))
+            n_comp = int(st.get("n_components", 2))
+        else:
+            v_idxs = list(variable_columns or [])
+            n_comp = int(n_components)
+
+        if not v_idxs or len(v_idxs) < 2:
+            raise ValueError("Multiple Correspondence Analysis requires at least 2 variables.")
+
+        cols = [self.worksheet.columns[i] for i in v_idxs]
+        max_size = max(len(c.values) for c in cols)
+        data_vals = [list(c.values) + [None] * (max_size - len(c.values)) for c in cols]
+
+        res = fit_multiple_correspondence(
+            data_columns=data_vals,
+            n_components=n_comp,
+            variable_names=[c.name for c in cols],
+        )
+        res["analysis"] = "multiple_correspondence"
+        recipe = {
+            "action": "multiple_correspondence",
+            "parameters": {
+                "variable_indices": v_idxs,
+                "n_components": n_comp,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def factor_analysis(
         self,
         variable_columns=None,
@@ -7374,6 +7412,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
         from .probit_report import generate_probit_report
         return title + generate_probit_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "multiple_correspondence":
+        from .multiple_correspondence_report import generate_multiple_correspondence_report
+        return title + generate_multiple_correspondence_report(result)
     if isinstance(result, dict) and result.get("analysis") == "factor_analysis":
         from .factor_analysis_report import generate_factor_analysis_report
         return title + generate_factor_analysis_report(result)
