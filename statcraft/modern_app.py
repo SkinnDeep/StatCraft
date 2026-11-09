@@ -1392,6 +1392,7 @@ class ModernWindow(QMainWindow):
         self._action(gage,'&Type 1 Gage Study…',self.type1_gage_dialog,None,"chart",True)
         self._action(gage,'Gage R&R Study (Crossed)…',self.gage_rr,None,"table",True)
         self._action(gage,'Gage R&R Study (&Nested)…',self.nested_gage_rr_dialog,None,"table",True)
+        self._action(gage,'Gage R&R Study (&Expanded)…',self.gage_rr_expanded_dialog,None,"table",True)
         self._action(gage,'Gage &Linearity and Bias Study…',self.gage_linearity_dialog,None,"line_plot",True)
         self._action(gage,'&Attribute Gage Study (Analytic Method)…',self.attribute_gage_dialog,None,"chart",True)
         self._action(gage,'Evaluating the &Measurement Process (EMP)…',self.emp_dialog,None,"run_chart",True)
@@ -6121,6 +6122,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.poisson_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def gage_rr_expanded_dialog(self):
+        from .gage_rr_expanded_dialogs import GageRRExpandedDialog
+        self._commit_editor()
+        self._last_dialog_action = self.gage_rr_expanded_dialog
+        dlg = GageRRExpandedDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.gage_rr_expanded(settings=p.get("settings")),
                     result=True,
                 )
                 if entry:

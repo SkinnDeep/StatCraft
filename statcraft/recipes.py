@@ -66,6 +66,7 @@ FIELDS = {
     'best_subsets': {'response_index', 'free_indices', 'forced_indices', 'models_per_subset', 'min_free', 'max_free'},
     'stepwise_regression': {'response_index', 'predictor_indices', 'method', 'alpha_to_enter', 'alpha_to_remove'},
     'poisson_regression': {'response_index', 'continuous_indices', 'categorical_indices', 'offset_index', 'confidence'},
+    'gage_rr_expanded': {'measurement_index', 'part_index', 'operator_index', 'additional_factor_indices', 'study_multiplier', 'tolerance', 'process_stdev'},
     'recode': {'source_indices', 'rules', 'target_kind', 'storage', 'default_action', 'default_value'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
@@ -192,7 +193,11 @@ def columns(recipe):
     elif action == 'symmetry_plot':
         if not {'column_index', 'settings'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
-    elif action == 'poisson_regression':
+    elif action == 'gage_rr_expanded':
+        cols = [parameters.get('measurement_index'), parameters.get('part_index'), parameters.get('operator_index')]
+        cols.extend(parameters.get('additional_factor_indices', []))
+        return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
+    if action == 'poisson_regression':
         if not expected - {'categorical_indices', 'continuous_indices', 'offset_index'} <= keys <= expected:
             raise ValueError('Unsupported Poisson Regression parameters.')
     elif keys != expected:

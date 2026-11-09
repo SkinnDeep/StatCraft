@@ -1027,6 +1027,60 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def gage_rr_expanded(self, settings=None):
+        import copy
+        from .gage_rr_expanded import analyze_gage_rr_expanded
+        if settings is None:
+            raise ValueError("Expanded Gage R&R requires settings.")
+        st = copy.deepcopy(settings)
+        meas_idx = st.get("measurement_index")
+        part_idx = st.get("part_index")
+        op_idx = st.get("operator_index")
+        add_idxs = list(st.get("additional_factor_indices", []))
+
+        if any(idx is None for idx in (meas_idx, part_idx, op_idx)):
+            raise ValueError("Measurement, part, and operator columns are required.")
+
+        meas_col = self.worksheet.columns[meas_idx]
+        part_col = self.worksheet.columns[part_idx]
+        op_col = self.worksheet.columns[op_idx]
+        add_cols = [self.worksheet.columns[i] for i in add_idxs]
+
+        all_cols = [meas_col, part_col, op_col] + add_cols
+        size = max(len(c.values) for c in all_cols)
+
+        meas_vals = meas_col.numeric_values(True) + [None] * (size - len(meas_col.values))
+        part_vals = list(part_col.values) + [None] * (size - len(part_col.values))
+        op_vals = list(op_col.values) + [None] * (size - len(op_col.values))
+        add_vals = [list(c.values) + [None] * (size - len(c.values)) for c in add_cols]
+
+        res = analyze_gage_rr_expanded(
+            measurements=meas_vals,
+            part_values=part_vals,
+            operator_values=op_vals,
+            additional_factors=add_vals if add_cols else None,
+            part_name=part_col.name,
+            operator_name=op_col.name,
+            additional_factor_names=[c.name for c in add_cols] if add_cols else None,
+            study_multiplier=st.get("study_multiplier", 6.0),
+            tolerance=st.get("tolerance"),
+            process_stdev=st.get("process_stdev"),
+        )
+        res["analysis"] = "gage_rr_expanded"
+        recipe = {
+            "action": "gage_rr_expanded",
+            "parameters": {
+                "measurement_index": meas_idx,
+                "part_index": part_idx,
+                "operator_index": op_idx,
+                "additional_factor_indices": add_idxs,
+                "study_multiplier": st.get("study_multiplier", 6.0),
+                "tolerance": st.get("tolerance"),
+                "process_stdev": st.get("process_stdev"),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def poisson_regression(self, settings=None):
         import copy
         from .poisson_regression import fit_poisson_regression
@@ -6594,6 +6648,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "arima":
         from .arima_report import generate_arima_report
         return title + generate_arima_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "gage_rr_expanded":
+        from .gage_rr_expanded_report import generate_gage_rr_expanded_report
+        return title + generate_gage_rr_expanded_report(result)
     if isinstance(result, dict) and result.get("analysis") == "poisson_regression":
         from .poisson_regression_report import generate_poisson_regression_report
         return title + generate_poisson_regression_report(result)
