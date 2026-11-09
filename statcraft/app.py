@@ -1027,6 +1027,49 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def pls_regression(self, settings=None):
+        import copy
+        from .pls import fit_pls_regression
+        if settings is None:
+            raise ValueError("Partial Least Squares requires settings.")
+        st = copy.deepcopy(settings)
+        resp_idx = st.get("response_index")
+        pred_idxs = list(st.get("predictor_indices", []))
+
+        if resp_idx is None:
+            raise ValueError("Response variable is required.")
+        if not pred_idxs:
+            raise ValueError("At least one predictor is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        pred_cols = [self.worksheet.columns[i] for i in pred_idxs]
+
+        all_cols = [resp_col] + pred_cols
+        size = max(len(c.values) for c in all_cols)
+
+        resp_vals = resp_col.numeric_values(True) + [None] * (size - len(resp_col.values))
+        pred_vals = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in pred_cols]
+
+        res = fit_pls_regression(
+            response=resp_vals,
+            predictors=pred_vals,
+            n_components=st.get("n_components"),
+            max_components=st.get("max_components", 10),
+            predictor_names=[c.name for c in pred_cols],
+            response_name=resp_col.name,
+        )
+        res["analysis"] = "pls_regression"
+        recipe = {
+            "action": "pls_regression",
+            "parameters": {
+                "response_index": resp_idx,
+                "predictor_indices": pred_idxs,
+                "n_components": st.get("n_components"),
+                "max_components": st.get("max_components", 10),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def nonlinear_regression(self, settings=None):
         import copy
         from .nonlinear_regression import fit_nonlinear_regression
@@ -6793,6 +6836,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "arima":
         from .arima_report import generate_arima_report
         return title + generate_arima_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "pls_regression":
+        from .pls_report import generate_pls_report
+        return title + generate_pls_report(result)
     if isinstance(result, dict) and result.get("analysis") == "nonlinear_regression":
         from .nonlinear_regression_report import generate_nonlinear_regression_report
         return title + generate_nonlinear_regression_report(result)
