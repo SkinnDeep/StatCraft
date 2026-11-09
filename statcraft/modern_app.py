@@ -1413,6 +1413,9 @@ class ModernWindow(QMainWindow):
         self._action(arb_analysis, "Parametric &Distribution Analysis…", self.reliability_arbitrary_dialog, None, None, True)
         self._action(reliability, "Accelerated &Life Testing…", self.alt_dialog, None, None, True)
         self._action(reliability, "&Probit Analysis…", self.probit_analysis_dialog, None, "reliability", True)
+        repairable_menu = reliability.addMenu("Repairable &Systems Analysis")
+        self._action(repairable_menu, "Nonparametric &Growth Curve…", self.nonparametric_growth_curve_dialog, None, "reliability", True)
+        self._action(repairable_menu, "&Parametric Growth Curve…", self.parametric_growth_curve_dialog, None, "reliability", True)
 
         # 5c. Time Series menu
         time_series = stat.addMenu("&Time Series")
@@ -6216,6 +6219,36 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.nonlinear_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def nonparametric_growth_curve_dialog(self):
+        from .repairable_systems_dialogs import NonparametricGrowthCurveDialog
+        self._commit_editor()
+        self._last_dialog_action = self.nonparametric_growth_curve_dialog
+        dlg = NonparametricGrowthCurveDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.nonparametric_growth_curve(**p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def parametric_growth_curve_dialog(self):
+        from .repairable_systems_dialogs import ParametricGrowthCurveDialog
+        self._commit_editor()
+        self._last_dialog_action = self.parametric_growth_curve_dialog
+        dlg = ParametricGrowthCurveDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.parametric_growth_curve(**p),
                     result=True,
                 )
                 if entry:

@@ -1071,6 +1071,125 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def nonparametric_growth_curve(
+        self,
+        time_column=None,
+        system_column=None,
+        event_column=None,
+        cost_column=None,
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .repairable_systems import fit_nonparametric_mcf
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            t_idx = st.get("time_index", st.get("time_column"))
+            s_idx = st.get("system_index", st.get("system_column"))
+            ev_idx = st.get("event_index", st.get("event_column"))
+            c_idx = st.get("cost_index", st.get("cost_column"))
+            conf = float(st.get("confidence", 0.95))
+        else:
+            t_idx = time_column
+            s_idx = system_column
+            ev_idx = event_column
+            c_idx = cost_column
+            conf = float(confidence)
+
+        if t_idx is None:
+            raise ValueError("Operating / event time variable is required.")
+        if s_idx is None:
+            raise ValueError("System ID variable is required.")
+
+        t_col = self.worksheet.columns[t_idx]
+        s_col = self.worksheet.columns[s_idx]
+        ev_col = self.worksheet.columns[ev_idx] if ev_idx is not None else None
+        c_col = self.worksheet.columns[c_idx] if c_idx is not None else None
+
+        size = max(len(t_col.values), len(s_col.values))
+        t_vals = t_col.numeric_values(True) + [None] * (size - len(t_col.values))
+        s_vals = list(s_col.values) + [None] * (size - len(s_col.values))
+        ev_vals = (ev_col.numeric_values(True) + [None] * (size - len(ev_col.values))) if ev_col else None
+        c_vals = (c_col.numeric_values(True) + [None] * (size - len(c_col.values))) if c_col else None
+
+        res = fit_nonparametric_mcf(
+            system=s_vals,
+            time=t_vals,
+            event=ev_vals,
+            cost=c_vals,
+            confidence=conf,
+            system_name=s_col.name,
+            time_name=t_col.name,
+        )
+        res["analysis"] = "nonparametric_growth_curve"
+        recipe = {
+            "action": "nonparametric_growth_curve",
+            "parameters": {
+                "time_index": t_idx,
+                "system_index": s_idx,
+                "event_index": ev_idx,
+                "cost_index": c_idx,
+                "confidence": conf,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
+    def parametric_growth_curve(
+        self,
+        time_column=None,
+        system_column=None,
+        event_column=None,
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .repairable_systems import fit_parametric_growth_curve
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            t_idx = st.get("time_index", st.get("time_column"))
+            s_idx = st.get("system_index", st.get("system_column"))
+            ev_idx = st.get("event_index", st.get("event_column"))
+            conf = float(st.get("confidence", 0.95))
+        else:
+            t_idx = time_column
+            s_idx = system_column
+            ev_idx = event_column
+            conf = float(confidence)
+
+        if t_idx is None:
+            raise ValueError("Operating / event time variable is required.")
+        if s_idx is None:
+            raise ValueError("System ID variable is required.")
+
+        t_col = self.worksheet.columns[t_idx]
+        s_col = self.worksheet.columns[s_idx]
+        ev_col = self.worksheet.columns[ev_idx] if ev_idx is not None else None
+
+        size = max(len(t_col.values), len(s_col.values))
+        t_vals = t_col.numeric_values(True) + [None] * (size - len(t_col.values))
+        s_vals = list(s_col.values) + [None] * (size - len(s_col.values))
+        ev_vals = (ev_col.numeric_values(True) + [None] * (size - len(ev_col.values))) if ev_col else None
+
+        res = fit_parametric_growth_curve(
+            system=s_vals,
+            time=t_vals,
+            event=ev_vals,
+            confidence=conf,
+            system_name=s_col.name,
+            time_name=t_col.name,
+        )
+        res["analysis"] = "parametric_growth_curve"
+        recipe = {
+            "action": "parametric_growth_curve",
+            "parameters": {
+                "time_index": t_idx,
+                "system_index": s_idx,
+                "event_index": ev_idx,
+                "confidence": conf,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def probit_analysis(
         self,
         response_column=None,
@@ -7069,6 +7188,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "reliability_arbitrary":
         from .reliability_arbitrary_report import generate_reliability_arbitrary_report
         return title + generate_reliability_arbitrary_report(result)
+    if isinstance(result, dict) and result.get("analysis") in ("nonparametric_growth_curve", "parametric_growth_curve"):
+        from .repairable_systems_report import generate_repairable_systems_report
+        return title + generate_repairable_systems_report(result)
     if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
         from .probit_report import generate_probit_report
         return title + generate_probit_report(result)

@@ -73,6 +73,8 @@ FIELDS = {
     'pls_regression': {'response_index', 'predictor_indices', 'n_components', 'max_components'},
     'orthogonal_regression': {'response_index', 'predictor_index', 'error_variance_ratio', 'confidence'},
     'probit_analysis': {'response_index', 'trials_index', 'dose_index', 'distribution', 'dose_transform', 'confidence'},
+    'nonparametric_growth_curve': {'time_index', 'system_index', 'event_index', 'cost_index', 'confidence'},
+    'parametric_growth_curve': {'time_index', 'system_index', 'event_index', 'confidence'},
     'reliability_arbitrary': {'start_index', 'end_index', 'frequency_index', 'distribution', 'confidence'},
     'recode': {'source_indices', 'rules', 'target_kind', 'storage', 'default_action', 'default_value'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
@@ -204,6 +206,9 @@ def columns(recipe):
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif action == 'reliability_arbitrary':
         cols = [parameters.get('start_index'), parameters.get('end_index'), parameters.get('frequency_index')]
+        return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
+    if action in ('nonparametric_growth_curve', 'parametric_growth_curve'):
+        cols = [parameters.get('time_index'), parameters.get('system_index'), parameters.get('event_index'), parameters.get('cost_index')]
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
     if action == 'probit_analysis':
         cols = [parameters.get('response_index'), parameters.get('trials_index'), parameters.get('dose_index')]
