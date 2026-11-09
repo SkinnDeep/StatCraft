@@ -6029,6 +6029,48 @@ class ModernWindow(QMainWindow):
     def multiple_regression_dialog(self):
         return self.multiple_regression()
 
+    def best_subsets_dialog(self):
+        from .best_subsets_dialogs import BestSubsetsDialog
+        dlg = BestSubsetsDialog(self)
+        self._last_dialog_action = self.best_subsets_dialog
+        if dlg.exec():
+            p = getattr(dlg, 'best_subsets_settings', None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.best_subsets(
+                        response_index=p['response_index'],
+                        free_indices=p['free_indices'],
+                        forced_indices=p.get('forced_indices'),
+                        models_per_subset=p.get('models_per_subset', 2),
+                        min_free=p.get('min_free', 1),
+                        max_free=p.get('max_free'),
+                    ),
+                    result=True,
+                )
+                if entry is not None:
+                    self._update_all()
+
+    def recode_dialog(self, target_kind: str = 'number'):
+        from .recode_dialogs import RecodeDialog
+        dlg = RecodeDialog(self.worksheet, target_kind=target_kind, parent=self)
+        self._last_dialog_action = lambda: self.recode_dialog(target_kind)
+        if dlg.exec():
+            p = getattr(dlg, 'settings', None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.recode(
+                        source_indices=p['source_indices'],
+                        rules=p['rules'],
+                        target_kind=p.get('target_kind', 'number'),
+                        storage=p.get('storage', 'new_columns'),
+                        default_action=p.get('default_action', 'original'),
+                        default_value=p.get('default_value'),
+                    ),
+                    result=True,
+                )
+                if entry is not None:
+                    self._update_all()
+
     def analyze_surface_dialog(self):
         return self.analyze_response_surface()
 
