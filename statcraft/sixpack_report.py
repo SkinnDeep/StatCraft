@@ -1,4 +1,4 @@
-"""Formatted session text report for Process Capability Sixpack (Normal Distribution)."""
+"""Formatted session text report for Process Capability Sixpack (Normal, Between/Within, Nonnormal)."""
 
 from typing import Any, Dict
 
@@ -7,7 +7,18 @@ def format_sixpack_report(res: Dict[str, Any]) -> str:
     """Formats full StatCraft Process Capability Sixpack Report."""
     lines = []
     col_name = res.get("column_name", "Data")
-    lines.append(f"Process Capability Sixpack Report for {col_name}")
+    analysis = res.get("analysis", "capability_sixpack_normal")
+    is_bw = (analysis == "capability_sixpack_between_within" or res.get("analysis_mode") == "between_within")
+    is_nonnormal = (analysis == "capability_sixpack_nonnormal")
+
+    if is_bw:
+        sub_title = "(Between/Within)"
+    elif is_nonnormal:
+        sub_title = f"({res.get('distribution', 'Nonnormal').capitalize()})"
+    else:
+        sub_title = "(Normal Distribution)"
+
+    lines.append(f"Process Capability Sixpack Report for {col_name} {sub_title}")
     lines.append("")
 
     # Process Data
@@ -22,8 +33,14 @@ def format_sixpack_report(res: Dict[str, Any]) -> str:
     lines.append(f"Sample N      {res['sample_n']}")
     lines.append(f"Subgroups     {res.get('subgroup_count', 0)}")
     lines.append(f"Subgroup Size {res.get('subgroup_avg_size', 1):.4g}")
-    lines.append(f"StDev(Within) {res['sigma_within']:.5g}")
-    lines.append(f"StDev(Overall){res['sigma_overall']:.5g}")
+
+    if not is_nonnormal:
+        if res.get("sigma_within") is not None:
+            lines.append(f"StDev(Within) {res['sigma_within']:.5g}")
+        if is_bw and res.get("stdev_between_within") is not None:
+            lines.append(f"StDev(B/W)    {res['stdev_between_within']:.5g}")
+    if res.get("sigma_overall") is not None:
+        lines.append(f"StDev(Overall){res['sigma_overall']:.5g}")
     lines.append("")
 
     # Control Chart Evaluation
@@ -46,9 +63,10 @@ def format_sixpack_report(res: Dict[str, Any]) -> str:
         lines.append("  * Test 1: No test failures observed.")
     lines.append("")
 
-    # Normality Test
+    # Goodness-of-Fit / Normality Test
     pnorm = res.get("panel_norm", {})
-    lines.append("Normality Assessment")
+    assessment_title = "Distribution Assessment" if is_nonnormal else "Normality Assessment"
+    lines.append(assessment_title)
     ad_val = pnorm.get("ad_stat")
     p_val = pnorm.get("p_value")
     ad_str = f"{ad_val:.3f}" if ad_val is not None else "*"
@@ -57,22 +75,26 @@ def format_sixpack_report(res: Dict[str, Any]) -> str:
     lines.append(f"P-Value:                   {p_str}")
     lines.append("")
 
-    # Potential (Within) Capability
     psum = res.get("panel_summary", {})
-    lines.append("Potential (Within) Capability")
-    if psum.get("cp") is not None:
-        lines.append(f"Cp            {psum['cp']:.2f}")
-    if psum.get("cpl") is not None:
-        lines.append(f"CPL           {psum['cpl']:.2f}")
-    if psum.get("cpu") is not None:
-        lines.append(f"CPU           {psum['cpu']:.2f}")
-    if psum.get("cpk") is not None:
-        lines.append(f"Cpk           {psum['cpk']:.2f}")
-    if psum.get("ccpk") is not None:
-        lines.append(f"CCpk          {psum['ccpk']:.2f}")
-    if psum.get("cpm") is not None:
-        lines.append(f"Cpm           {psum['cpm']:.2f}")
-    lines.append("")
+    if not is_nonnormal:
+        # Potential (Within) Capability
+        within_label = "Between/Within Capability" if is_bw else "Potential (Within) Capability"
+        lines.append(within_label)
+        cp_val = psum.get("cp_bw") if is_bw and psum.get("cp_bw") is not None else psum.get("cp")
+        cpk_val = psum.get("cpk_bw") if is_bw and psum.get("cpk_bw") is not None else psum.get("cpk")
+        if cp_val is not None:
+            lines.append(f"Cp            {cp_val:.2f}")
+        if psum.get("cpl") is not None:
+            lines.append(f"CPL           {psum['cpl']:.2f}")
+        if psum.get("cpu") is not None:
+            lines.append(f"CPU           {psum['cpu']:.2f}")
+        if cpk_val is not None:
+            lines.append(f"Cpk           {cpk_val:.2f}")
+        if psum.get("ccpk") is not None:
+            lines.append(f"CCpk          {psum['ccpk']:.2f}")
+        if psum.get("cpm") is not None:
+            lines.append(f"Cpm           {psum['cpm']:.2f}")
+        lines.append("")
 
     # Overall Capability
     lines.append("Overall Capability")
@@ -84,12 +106,17 @@ def format_sixpack_report(res: Dict[str, Any]) -> str:
         lines.append(f"PPU           {psum['ppu']:.2f}")
     if psum.get("ppk") is not None:
         lines.append(f"Ppk           {psum['ppk']:.2f}")
+    if psum.get("z_bench") is not None:
+        lines.append(f"Z.Bench       {psum['z_bench']:.2f}")
     lines.append("")
 
     # Performance
     lines.append("Performance (parts per million)")
     lines.append(f"Observed PPM:           {psum.get('ppm_observed', 0.0):.2f}")
-    lines.append(f"Expected Within PPM:    {psum.get('ppm_exp_within', 0.0):.2f}")
-    lines.append(f"Expected Overall PPM:   {psum.get('ppm_exp_overall', 0.0):.2f}")
+    if not is_nonnormal:
+        lines.append(f"Expected Within PPM:    {psum.get('ppm_exp_within', 0.0):.2f}")
+        lines.append(f"Expected Overall PPM:   {psum.get('ppm_exp_overall', 0.0):.2f}")
+    else:
+        lines.append(f"Expected PPM:           {psum.get('ppm_expected', 0.0):.2f}")
 
     return "\n".join(lines)

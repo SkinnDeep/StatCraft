@@ -3,7 +3,7 @@ import copy
 import math
 
 KEY = '_source_bindings'
-ACTIONS = frozenset({'normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'imr_chart',
+ACTIONS = frozenset({'normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'imr_chart',
     'attribute_control_chart', 'time_weighted_control_chart',
     'rare_event_control_chart', 'multivariate_control_chart',
     'pareto_chart', 'tolerance_intervals', 'trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'arima', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag', 'sign_test', 'one_sample_wilcoxon', 'mann_whitney', 'kruskal_wallis', 'moods_median', 'friedman_test', 'runs_test', 'paired_wilcoxon', 'pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence', 'one_sample_equivalence', 'two_sample_equivalence', 'paired_equivalence', 'crossover_equivalence', 'one_sample_z_power', 'one_sample_t_power', 'two_sample_t_power', 'paired_t_power', 'one_proportion_power', 'two_proportions_power', 'oneway_anova_power', 'factorial_power', 'cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'})
@@ -27,7 +27,7 @@ def _plan(action, settings):
     """Active selector roles: (reference, is_list, allowed kinds)."""
     number, any_kind = ('number',), ('number', 'text', 'date')
     roles = {}
-    if action in ('normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
+    if action in ('normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
         if settings.get('single_column', True):
             roles['column_name'] = (_preferred(settings, 'column_index', 'column_name'), False, number)
             sub = settings.get('subgroup_spec', 1)
@@ -211,7 +211,7 @@ def resolve(action, worksheet, settings):
     for role, (_, many, kinds) in _plan(action, result).items():
         for index in _validate_binding(bindings[role], many):
             _index(index, worksheet, kinds)
-    if action in ('normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
+    if action in ('normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
         if 'column_name' in bindings:
             i = bindings['column_name']
             result['column_name'] = i
@@ -319,7 +319,7 @@ def remap_settings(action, settings, mapping):
         mapped = [mapping[index] for index in _validate_binding(bindings[role], many)]
         updated[role] = mapped if many else mapped[0]
     result[KEY] = updated
-    if action in ('normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
+    if action in ('normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated'):
         if 'column_name' in updated:
             result['column_index'] = updated['column_name']
             if type(result.get('column_name')) is int:

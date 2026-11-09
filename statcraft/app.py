@@ -4367,6 +4367,70 @@ class Presenter:
             recipe={"action": "normal_capability", "parameters": {"index": index, "lsl": lsl, "usl": usl, "target": target}}
         )
 
+    def between_within_sixpack(self, settings=None):
+        settings = self._bound_settings("between_within_sixpack", settings)
+        if settings is not None:
+            settings["analysis_mode"] = "between_within"
+        return self.normal_sixpack(settings=settings)
+
+    def nonnormal_sixpack(self, settings=None):
+        settings = self._bound_settings("nonnormal_sixpack", settings)
+        from .sixpack_engine import run_nonnormal_sixpack
+        if settings is None:
+            raise ValueError("Nonnormal Capability Sixpack requires analysis settings.")
+
+        settings_rec = dict(settings)
+        col_ref = settings.get("column_name")
+        col = None
+        col_idx = None
+        if isinstance(col_ref, int):
+            col_idx = col_ref
+            col = self.worksheet.columns[col_ref]
+        else:
+            for ci, c in enumerate(self.worksheet.columns):
+                if c.name == col_ref:
+                    col = c
+                    col_idx = ci
+                    break
+        if col is None:
+            raise ValueError(f"Column '{col_ref}' not found in worksheet.")
+        settings_rec["column_index"] = col_idx
+
+        sub_spec = settings.get("subgroup_spec", 1)
+        settings_rec["subgroup_col_index"] = None
+        subgroup_data = None
+        if isinstance(sub_spec, str) and not sub_spec.isdigit():
+            for ci, c in enumerate(self.worksheet.columns):
+                if c.name == sub_spec:
+                    settings_rec["subgroup_col_index"] = ci
+                    subgroup_data = c.values
+                    break
+
+        col_data = col.numeric_values(True)
+        var_name = col.name
+        calc_settings = {
+            "data_mode": "single_column",
+            "column_name": var_name,
+            "column_data": col_data,
+            "subgroup_type": "column" if subgroup_data is not None else "size",
+            "subgroup_size": int(sub_spec) if (isinstance(sub_spec, int) or (isinstance(sub_spec, str) and sub_spec.isdigit())) else 1,
+            "subgroup_data": subgroup_data,
+            "distribution": settings.get("distribution", "weibull"),
+            "lsl": settings.get("lsl"),
+            "usl": settings.get("usl"),
+            "target": settings.get("target"),
+            "options": settings.get("options", {}),
+        }
+
+        res = run_nonnormal_sixpack(calc_settings)
+        res["graph"] = "capability_sixpack"
+        res["analysis"] = "capability_sixpack_nonnormal"
+        return self._record(
+            f"Nonnormal Capability Sixpack — {var_name}",
+            {"variable": var_name, **res},
+            recipe={"action": "nonnormal_sixpack", "parameters": {"settings": settings_rec}},
+        )
+
     def normal_sixpack(self, settings=None):
         settings = self._bound_settings("normal_sixpack", settings)
         from .sixpack_engine import run_normal_sixpack
@@ -4421,6 +4485,7 @@ class Presenter:
                 "target": settings.get("options", {}).get("target") or settings.get("target"),
                 "historical_mean": settings.get("historical_mean"),
                 "historical_stdev": settings.get("historical_stdev"),
+                "analysis_mode": settings.get("analysis_mode", settings.get("options", {}).get("analysis_mode", "normal")),
                 "options": settings.get("options", {}),
             }
         else:
@@ -4458,7 +4523,7 @@ class Presenter:
         return self._record(
             f"Capability Sixpack — {var_name}",
             {"variable": var_name, **res},
-            recipe={"action": "normal_sixpack", "parameters": {"settings": settings_rec}}
+            recipe={"action": "between_within_sixpack" if settings.get("analysis_mode") == "between_within" else "normal_sixpack", "parameters": {"settings": settings_rec}}
         )
 
     def describe_columns(self, indices):
@@ -7117,7 +7182,7 @@ def format_entry(entry):
             "Moving range: " + (", ".join(map(str, result["mr_signals"])) or "None"),
             "", "Missing gaps are not bridged when forming moving ranges."]
         return title + "\n".join(lines) + _report_notes(result)
-    if isinstance(result, dict) and result.get("analysis") == "capability_sixpack_normal":
+    if isinstance(result, dict) and result.get("analysis") in ("capability_sixpack_normal", "capability_sixpack_between_within", "capability_sixpack_nonnormal"):
         from .sixpack_report import format_sixpack_report
         return title + format_sixpack_report(result)
     if isinstance(result, dict) and result.get("analysis") == "reliability_distribution":

@@ -1388,6 +1388,8 @@ class ModernWindow(QMainWindow):
 
         sixpack_menu = quality.addMenu("Capability Sixpack")
         self._action(sixpack_menu, "&Normal…", self.capability_sixpack, None, "capability", True)
+        self._action(sixpack_menu, "Between/W&ithin…", self.capability_sixpack_between_within, None, "capability", True)
+        self._action(sixpack_menu, "Nonnorma&l…", self.capability_sixpack_nonnormal, None, "capability", True)
 
         self._action(quality, "&Tolerance Intervals…", self.tolerance_intervals_dialog, None, "interval", True)
         self._action(quality, "Acceptance &Sampling by Attributes…", self.acceptance_sampling_attributes_dialog, None, "chart", True)
@@ -4636,6 +4638,30 @@ class ModernWindow(QMainWindow):
             p = dlg.selected_params
             if p:
                 entry = self._call(lambda: self.presenter.acceptance_control_chart(settings=p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def capability_sixpack_between_within(self):
+        from .sixpack_dialogs import CapabilitySixpackDialog
+        self._commit_editor()
+        self._last_dialog_action = self.capability_sixpack_between_within
+        dlg = CapabilitySixpackDialog(self.presenter.worksheet, self, analysis_mode="between_within")
+        if dlg.exec():
+            p = dlg.selected_params
+            if p:
+                entry = self._call(lambda: self.presenter.between_within_sixpack(settings=p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def capability_sixpack_nonnormal(self):
+        from .sixpack_dialogs import CapabilitySixpackNonnormalDialog
+        self._commit_editor()
+        self._last_dialog_action = self.capability_sixpack_nonnormal
+        dlg = CapabilitySixpackNonnormalDialog(self.presenter.worksheet, self)
+        if dlg.exec():
+            p = dlg.selected_params
+            if p:
+                entry = self._call(lambda: self.presenter.nonnormal_sixpack(settings=p), result=True)
                 if entry:
                     self.show_result(entry)
 

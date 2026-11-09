@@ -43,7 +43,7 @@ class CapabilitySixpackWidget(QWidget):
         painter.fillRect(rect, QColor("#FFFFFF"))
 
         res = self.entry.get("result", {})
-        if not res or res.get("analysis") != "capability_sixpack_normal":
+        if not res or (res.get("analysis") not in ("capability_sixpack_normal", "capability_sixpack_between_within", "capability_sixpack_nonnormal") and res.get("graph") != "capability_sixpack"):
             return
 
         col_name = res.get("column_name", "Data")

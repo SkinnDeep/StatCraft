@@ -99,6 +99,8 @@ FIELDS = {
     'one_sample_proportion': {'settings'},
     'paired_t': {'settings'},
     'normal_sixpack': {'settings'},
+    'between_within_sixpack': {'settings'},
+    'nonnormal_sixpack': {'settings'},
     'acceptance_control_chart': {'settings'},
     'capability_nonnormal': {'settings'},
     'reliability_distribution': {'settings'},
@@ -182,7 +184,7 @@ def columns(recipe):
         optional = 'block_index' if action=='analyze_response_surface' else 'include_blocks'
         if keys not in (expected, expected | {optional}):
             raise ValueError('Unsupported analysis recipe or parameters.')
-    elif action in ('one_variance', 'normal_capability', 'normal_sixpack', 'acceptance_control_chart'):
+    elif action in ('one_variance', 'normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart'):
         if keys not in (expected, {'settings'}):
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif action == 'cross_correlation':
@@ -303,7 +305,7 @@ def columns(recipe):
             return [c for c in cols if isinstance(c, int) and c >= 0]
         else:
             return []
-    if action in ('normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'reliability_distribution', 'capability_nonparametric', 'capability_automated'):
+    if action in ('normal_capability', 'normal_sixpack', 'between_within_sixpack', 'nonnormal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'reliability_distribution', 'capability_nonparametric', 'capability_automated'):
         if 'settings' in parameters:
             st = parameters.get('settings', {})
             cols = []

@@ -87,11 +87,13 @@ class SixpackTestsDialog(QDialog):
 
 
 class CapabilitySixpackDialog(QDialog):
-    """Main dialog for Stat > Quality Tools > Capability Sixpack > Normal... (MenuID 40168)."""
+    """Main dialog for Stat > Quality Tools > Capability Sixpack > Normal / Between/Within."""
 
-    def __init__(self, worksheet=None, parent=None):
+    def __init__(self, worksheet=None, parent=None, analysis_mode: str = "normal"):
         super().__init__(parent)
-        self.setWindowTitle("Capability Sixpack (Normal Distribution)")
+        self.analysis_mode = analysis_mode
+        title_mode = "Between/Within" if analysis_mode == "between_within" else "Normal Distribution"
+        self.setWindowTitle(f"Capability Sixpack ({title_mode})")
         self.resize(580, 430)
         self.worksheet = worksheet
         self.columns: List[str] = []
@@ -366,6 +368,7 @@ class CapabilitySixpackDialog(QDialog):
 
         self.selected_params = {
             "single_column": single,
+            "analysis_mode": self.analysis_mode,
             "column_name": col_name if single else (cols_across_list[0] if cols_across_list else "Data"),
             "subgroup_spec": sub_size_text if single else None,
             "cols_across": cols_across_list if not single else None,
@@ -378,4 +381,162 @@ class CapabilitySixpackDialog(QDialog):
             "options": dict(self.options),
         }
 
+        self.accept()
+
+
+
+class CapabilitySixpackNonnormalDialog(QDialog):
+    """Main dialog for Stat > Quality Tools > Capability Sixpack > Nonnormal..."""
+
+    def __init__(self, worksheet=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Capability Sixpack (Nonnormal Distribution)")
+        self.resize(560, 400)
+        self.worksheet = worksheet
+        self.columns: List[str] = []
+        if worksheet and hasattr(worksheet, "columns"):
+            self.columns = [c.name for c in worksheet.columns]
+
+        self.selected_params: Optional[Dict[str, Any]] = None
+
+        main_layout = QHBoxLayout(self)
+        main_layout.setSpacing(12)
+
+        # Left Column List
+        left_layout = QVBoxLayout()
+        lbl_cols = QLabel("Columns:")
+        left_layout.addWidget(lbl_cols)
+
+        self.col_list = QListWidget()
+        for c in self.columns:
+            self.col_list.addItem(c)
+        self.col_list.itemDoubleClicked.connect(self._insert_selected_column)
+        left_layout.addWidget(self.col_list)
+
+        btn_select = QPushButton("Select")
+        btn_select.clicked.connect(self._insert_selected_column)
+        left_layout.addWidget(btn_select)
+        main_layout.addLayout(left_layout, 1)
+
+        # Center Controls Layout
+        center_layout = QVBoxLayout()
+        center_layout.setSpacing(10)
+
+        # Single column data
+        box_data = QGroupBox("Data arrangement")
+        form_data = QGridLayout(box_data)
+        lbl_col = QLabel("Single column:")
+        self.edit_col = QLineEdit()
+        form_data.addWidget(lbl_col, 0, 0)
+        form_data.addWidget(self.edit_col, 0, 1)
+
+        lbl_sub = QLabel("Subgroup size:")
+        self.edit_sub = QLineEdit("1")
+        form_data.addWidget(lbl_sub, 1, 0)
+        form_data.addWidget(self.edit_sub, 1, 1)
+        center_layout.addWidget(box_data)
+
+        # Distribution selection
+        box_dist = QGroupBox("Fit Distribution")
+        form_dist = QGridLayout(box_dist)
+        lbl_d = QLabel("Distribution:")
+        self.cbo_dist = QComboBox()
+        self.cbo_dist.addItems(["Weibull", "Lognormal", "Exponential", "Gamma", "Normal"])
+        form_dist.addWidget(lbl_d, 0, 0)
+        form_dist.addWidget(self.cbo_dist, 0, 1)
+        center_layout.addWidget(box_dist)
+
+        # Spec Limits Group
+        spec_box = QGroupBox("Specification limits")
+        spec_grid = QGridLayout(spec_box)
+        lbl_lsl = QLabel("Lower spec (LSL):")
+        self.edit_lsl = QLineEdit()
+        lbl_usl = QLabel("Upper spec (USL):")
+        self.edit_usl = QLineEdit()
+        lbl_tgt = QLabel("Target (optional):")
+        self.edit_tgt = QLineEdit()
+
+        spec_grid.addWidget(lbl_lsl, 0, 0)
+        spec_grid.addWidget(self.edit_lsl, 0, 1)
+        spec_grid.addWidget(lbl_usl, 1, 0)
+        spec_grid.addWidget(self.edit_usl, 1, 1)
+        spec_grid.addWidget(lbl_tgt, 2, 0)
+        spec_grid.addWidget(self.edit_tgt, 2, 1)
+        center_layout.addWidget(spec_box)
+
+        main_layout.addLayout(center_layout, 2)
+
+        # Action Buttons Layout (Right side)
+        right_layout = QVBoxLayout()
+        btn_ok = QPushButton("OK")
+        btn_ok.setDefault(True)
+        btn_ok.clicked.connect(self._accept)
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+
+        right_layout.addWidget(btn_ok)
+        right_layout.addWidget(btn_cancel)
+        right_layout.addStretch()
+        main_layout.addLayout(right_layout)
+
+    def _insert_selected_column(self):
+        item = self.col_list.currentItem()
+        if not item:
+            return
+        col_text = item.text()
+        if " " in col_text:
+            col_text = f"'{col_text}'"
+        self.edit_col.setText(col_text)
+
+    def _accept(self):
+        col_name = self.edit_col.text().strip()
+        if not col_name:
+            QMessageBox.warning(self, "StatCraft", "Please specify a data column.")
+            return
+
+        import re
+        m = re.match(r"^'([^']*)'$|^\"([^\"]*)\"$", col_name)
+        if m:
+            col_name = m.group(1) or m.group(2)
+
+        lsl_val = None
+        if self.edit_lsl.text().strip():
+            try:
+                lsl_val = float(self.edit_lsl.text().strip())
+            except ValueError:
+                QMessageBox.warning(self, "StatCraft", "Invalid Lower Spec Limit.")
+                return
+
+        usl_val = None
+        if self.edit_usl.text().strip():
+            try:
+                usl_val = float(self.edit_usl.text().strip())
+            except ValueError:
+                QMessageBox.warning(self, "StatCraft", "Invalid Upper Spec Limit.")
+                return
+
+        tgt_val = None
+        if self.edit_tgt.text().strip():
+            try:
+                tgt_val = float(self.edit_tgt.text().strip())
+            except ValueError:
+                QMessageBox.warning(self, "StatCraft", "Invalid Target.")
+                return
+
+        if lsl_val is None and usl_val is None:
+            QMessageBox.warning(self, "StatCraft", "At least one specification limit (LSL or USL) must be provided.")
+            return
+
+        sub_spec = self.edit_sub.text().strip() or "1"
+        dist = self.cbo_dist.currentText().lower()
+
+        self.selected_params = {
+            "single_column": True,
+            "column_name": col_name,
+            "subgroup_spec": sub_spec,
+            "distribution": dist,
+            "lsl": lsl_val,
+            "usl": usl_val,
+            "target": tgt_val,
+        }
         self.accept()

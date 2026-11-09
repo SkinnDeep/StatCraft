@@ -166,6 +166,8 @@ def run_normal_sixpack(settings: Dict[str, Any]) -> Dict[str, Any]:
             sub_arg = settings.get("subgroup_size", 1)
         var_name = settings.get("column_name", "Data")
 
+    mode = settings.get("analysis_mode", opts.get("analysis_mode", "normal"))
+    is_bw = (mode == "between_within")
     capa_res = run_normal_capability(
         data=capa_data,
         subgroup_spec=sub_arg,
@@ -174,6 +176,7 @@ def run_normal_sixpack(settings: Dict[str, Any]) -> Dict[str, Any]:
         target=target_val,
         historical_mean=settings.get("historical_mean"),
         historical_stdev=settings.get("historical_stdev"),
+        analysis_mode=mode,
         estimate_method_gt1=opts.get("estimate_method_gt1", opts.get("within_subgroup_method", "pooled")),
         estimate_method_eq1=opts.get("estimate_method_eq1", "amr"),
         moving_range_len=opts.get("moving_range_len", 2),
@@ -419,9 +422,17 @@ def run_normal_sixpack(settings: Dict[str, Any]) -> Dict[str, Any]:
         "target": capa_res["target"],
     }
 
+    stdev_bw = capa_res.get("stdev_between_within")
+    if is_bw and stdev_bw:
+        panel_summary["stdev_between_within"] = stdev_bw
+        panel_summary["cp_bw"] = capa_res.get("cp")
+        panel_summary["cpk_bw"] = capa_res.get("cpk")
+
     # Bundle complete sixpack payload
     sixpack_result = {
-        "analysis": "capability_sixpack_normal",
+        "analysis": "capability_sixpack_between_within" if is_bw else "capability_sixpack_normal",
+        "analysis_mode": mode,
+        "stdev_between_within": stdev_bw,
         "column_name": var_name,
         "sample_n": capa_res["sample_n"],
         "subgroup_count": k,
@@ -443,3 +454,166 @@ def run_normal_sixpack(settings: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     return sixpack_result
+
+
+
+def run_nonnormal_sixpack(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Compute complete Process Capability Sixpack analysis for Nonnormal distributions."""
+    subgroups, all_values = extract_subgroups_from_settings(settings)
+    k = len(subgroups)
+    if k == 0 or len(all_values) == 0:
+        raise ValueError("Nonnormal Capability Sixpack requires valid numeric observations.")
+
+    from .capability_nonnormal_engine import run_nonnormal_capability
+
+    lsl_val = settings.get("lsl")
+    usl_val = settings.get("usl")
+    target_val = settings.get("target") or settings.get("options", {}).get("target")
+    var_name = settings.get("column_name", "Data")
+    dist_name = settings.get("distribution", "weibull").lower()
+
+    capa_res = run_nonnormal_capability(
+        values=all_values,
+        dist_or_transform=dist_name,
+        lsl=lsl_val,
+        usl=usl_val,
+        target=target_val,
+    )
+
+    avg_n = float(np.mean([sg.n for sg in subgroups]))
+    is_individual = (avg_n == 1.0)
+
+    overall_mean = float(np.mean(all_values))
+    sigma_overall = float(np.std(all_values, ddof=1)) if len(all_values) > 1 else 0.0
+
+    # Panel 1: Xbar Chart (or I Chart)
+    subgroup_indices = list(range(1, k + 1))
+    means = [sg.mean for sg in subgroups]
+    mrs = [abs(all_values[i] - all_values[i - 1]) for i in range(1, len(all_values))]
+    mean_mr = float(np.mean(mrs)) if mrs else 0.0
+    sigma_mr = mean_mr / 1.128 if mean_mr > 0 else (sigma_overall or 1.0)
+
+    xbar_center = overall_mean
+    xbar_ucl = [xbar_center + 3.0 * (sigma_mr / math.sqrt(sg.n)) for sg in subgroups]
+    xbar_lcl = [xbar_center - 3.0 * (sigma_mr / math.sqrt(sg.n)) for sg in subgroups]
+    xbar_test1 = [i + 1 for i, m in enumerate(means) if m > xbar_ucl[i] or m < xbar_lcl[i]]
+
+    panel_xbar = {
+        "title": "I Chart" if is_individual else "Xbar Chart",
+        "x": subgroup_indices,
+        "y": means,
+        "center": xbar_center,
+        "ucl": xbar_ucl,
+        "lcl": xbar_lcl,
+        "ucl_val": xbar_ucl[0] if xbar_ucl else None,
+        "lcl_val": xbar_lcl[0] if xbar_lcl else None,
+        "test1_failures": xbar_test1,
+        "ylabel": "Individual Value" if is_individual else "Sample Mean",
+    }
+
+    # Panel 2: MR Chart (or R Chart)
+    if is_individual:
+        disp_title = "Moving Range Chart"
+        disp_values = [None] + mrs
+        mr_ucl = 3.267 * mean_mr
+        disp_ucl = [mr_ucl] * len(all_values)
+        disp_lcl = [0.0] * len(all_values)
+        disp_test1 = [i + 1 for i, mr in enumerate(mrs) if mr > mr_ucl]
+        disp_center = mean_mr
+    else:
+        disp_title = "R Chart"
+        disp_values = [sg.range for sg in subgroups]
+        disp_center = float(np.mean(disp_values)) if disp_values else 0.0
+        disp_ucl = [2.114 * disp_center] * k
+        disp_lcl = [0.0] * k
+        disp_test1 = [i + 1 for i, r in enumerate(disp_values) if r > disp_ucl[i]]
+
+    panel_disp = {
+        "title": disp_title,
+        "x": list(range(1, len(disp_values) + 1)),
+        "y": disp_values,
+        "center": disp_center,
+        "ucl": disp_ucl,
+        "lcl": disp_lcl,
+        "ucl_val": disp_ucl[0] if disp_ucl else None,
+        "lcl_val": 0.0,
+        "test1_failures": disp_test1,
+        "ylabel": "Moving Range" if is_individual else "Sample Range",
+    }
+
+    # Panel 3: Last 25 subgroups
+    recent_sgs = subgroups[-25:] if len(subgroups) > 25 else subgroups
+    panel_last25 = {
+        "title": "Last 25 Subgroups",
+        "subgroups": [list(sg.values) for sg in recent_sgs],
+        "means": [sg.mean for sg in recent_sgs],
+        "overall_mean": overall_mean,
+        "start_idx": max(1, k - len(recent_sgs) + 1),
+    }
+
+    # Panel 4: Capability Histogram
+    counts, bin_edges = np.histogram(all_values, bins="auto")
+    panel_hist = {
+        "title": "Capability Histogram",
+        "counts": counts.tolist(),
+        "bin_edges": bin_edges.tolist(),
+        "lsl": lsl_val,
+        "usl": usl_val,
+        "target": target_val,
+        "distribution": dist_name,
+        "fit_info": capa_res.get("fit_info", {}),
+    }
+
+    # Panel 5: Nonnormal Probability Plot
+    sorted_vals = np.sort(all_values)
+    n_sorted = len(sorted_vals)
+    blom_pcts = [((i + 1 - 0.375) / (n_sorted + 0.25)) * 100.0 for i in range(n_sorted)]
+    ad_stat = capa_res.get("fit_info", {}).get("anderson_darling", 0.0)
+    p_val = capa_res.get("fit_info", {}).get("p_value")
+
+    panel_norm = {
+        "title": f"Probability Plot ({dist_name.capitalize()})",
+        "observed": sorted_vals.tolist(),
+        "percentiles": blom_pcts,
+        "distribution": dist_name,
+        "ad_stat": ad_stat,
+        "p_value": p_val,
+    }
+
+    # Panel 6: Capability Summary
+    indices = capa_res.get("indices", {})
+    panel_summary = {
+        "title": "Capability Plot",
+        "distribution": dist_name,
+        "pp": indices.get("pp"),
+        "ppl": indices.get("ppl"),
+        "ppu": indices.get("ppu"),
+        "ppk": indices.get("ppk"),
+        "z_bench": capa_res.get("benchmark_z", {}).get("z_bench"),
+        "ppm_observed": capa_res.get("observed_ppm", {}).get("total", 0.0),
+        "ppm_expected": capa_res.get("expected_ppm", {}).get("total", 0.0),
+        "lsl": lsl_val,
+        "usl": usl_val,
+        "target": target_val,
+    }
+
+    return {
+        "analysis": "capability_sixpack_nonnormal",
+        "distribution": dist_name,
+        "column_name": var_name,
+        "sample_n": len(all_values),
+        "subgroup_count": k,
+        "subgroup_avg_size": avg_n,
+        "mean": overall_mean,
+        "sigma_overall": sigma_overall,
+        "lsl": lsl_val,
+        "usl": usl_val,
+        "target": target_val,
+        "capa_res": capa_res,
+        "panel_xbar": panel_xbar,
+        "panel_disp": panel_disp,
+        "panel_last25": panel_last25,
+        "panel_hist": panel_hist,
+        "panel_norm": panel_norm,
+        "panel_summary": panel_summary,
+    }
