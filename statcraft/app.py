@@ -1027,6 +1027,102 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def nominal_logistic_regression(self, settings=None):
+        import copy
+        from .nominal_logistic import fit_nominal_logistic_regression
+        if settings is None:
+            raise ValueError("Nominal Logistic Regression requires settings.")
+        st = copy.deepcopy(settings)
+        resp_idx = st.get("response_index")
+        cont_idxs = list(st.get("continuous_indices", []))
+        cat_idxs = list(st.get("categorical_indices", []))
+
+        if resp_idx is None:
+            raise ValueError("Response variable is required.")
+        if not cont_idxs and not cat_idxs:
+            raise ValueError("At least one predictor is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        cont_cols = [self.worksheet.columns[i] for i in cont_idxs]
+        cat_cols = [self.worksheet.columns[i] for i in cat_idxs]
+
+        all_cols = [resp_col] + cont_cols + cat_cols
+        size = max(len(c.values) for c in all_cols)
+
+        resp_vals = list(resp_col.values) + [None] * (size - len(resp_col.values))
+        cont_vals = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in cont_cols]
+        cat_vals = [list(c.values) + [None] * (size - len(c.values)) for c in cat_cols]
+
+        res = fit_nominal_logistic_regression(
+            response=resp_vals,
+            continuous_predictors=cont_vals if cont_cols else None,
+            categorical_predictors=cat_vals if cat_cols else None,
+            continuous_names=[c.name for c in cont_cols] if cont_cols else None,
+            categorical_names=[c.name for c in cat_cols] if cat_cols else None,
+            reference_level=st.get("reference_level"),
+            response_name=resp_col.name,
+            confidence=st.get("confidence", 0.95),
+        )
+        res["analysis"] = "nominal_logistic_regression"
+        recipe = {
+            "action": "nominal_logistic_regression",
+            "parameters": {
+                "response_index": resp_idx,
+                "continuous_indices": cont_idxs,
+                "categorical_indices": cat_idxs,
+                "reference_level": st.get("reference_level"),
+                "confidence": st.get("confidence", 0.95),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
+    def ordinal_logistic_regression(self, settings=None):
+        import copy
+        from .ordinal_logistic import fit_ordinal_logistic_regression
+        if settings is None:
+            raise ValueError("Ordinal Logistic Regression requires settings.")
+        st = copy.deepcopy(settings)
+        resp_idx = st.get("response_index")
+        cont_idxs = list(st.get("continuous_indices", []))
+        cat_idxs = list(st.get("categorical_indices", []))
+
+        if resp_idx is None:
+            raise ValueError("Response variable is required.")
+        if not cont_idxs and not cat_idxs:
+            raise ValueError("At least one predictor is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        cont_cols = [self.worksheet.columns[i] for i in cont_idxs]
+        cat_cols = [self.worksheet.columns[i] for i in cat_idxs]
+
+        all_cols = [resp_col] + cont_cols + cat_cols
+        size = max(len(c.values) for c in all_cols)
+
+        resp_vals = list(resp_col.values) + [None] * (size - len(resp_col.values))
+        cont_vals = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in cont_cols]
+        cat_vals = [list(c.values) + [None] * (size - len(c.values)) for c in cat_cols]
+
+        res = fit_ordinal_logistic_regression(
+            response=resp_vals,
+            continuous_predictors=cont_vals if cont_cols else None,
+            categorical_predictors=cat_vals if cat_cols else None,
+            continuous_names=[c.name for c in cont_cols] if cont_cols else None,
+            categorical_names=[c.name for c in cat_cols] if cat_cols else None,
+            response_name=resp_col.name,
+            confidence=st.get("confidence", 0.95),
+        )
+        res["analysis"] = "ordinal_logistic_regression"
+        recipe = {
+            "action": "ordinal_logistic_regression",
+            "parameters": {
+                "response_index": resp_idx,
+                "continuous_indices": cont_idxs,
+                "categorical_indices": cat_idxs,
+                "confidence": st.get("confidence", 0.95),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def gage_rr_expanded(self, settings=None):
         import copy
         from .gage_rr_expanded import analyze_gage_rr_expanded
@@ -6648,6 +6744,12 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "arima":
         from .arima_report import generate_arima_report
         return title + generate_arima_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "nominal_logistic_regression":
+        from .nominal_logistic_report import generate_nominal_logistic_report
+        return title + generate_nominal_logistic_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "ordinal_logistic_regression":
+        from .ordinal_logistic_report import generate_ordinal_logistic_report
+        return title + generate_ordinal_logistic_report(result)
     if isinstance(result, dict) and result.get("analysis") == "gage_rr_expanded":
         from .gage_rr_expanded_report import generate_gage_rr_expanded_report
         return title + generate_gage_rr_expanded_report(result)
