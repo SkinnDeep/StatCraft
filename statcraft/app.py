@@ -1027,6 +1027,50 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def reliability_arbitrary(self, settings=None):
+        import copy
+        from .reliability_arbitrary import fit_parametric_arbitrary_censoring
+        if settings is None:
+            raise ValueError("Arbitrary Censoring requires settings.")
+        st = copy.deepcopy(settings)
+        s_idx = st.get("start_index")
+        e_idx = st.get("end_index")
+        f_idx = st.get("frequency_index")
+
+        if s_idx is None and e_idx is None:
+            raise ValueError("Start or End time column is required.")
+
+        s_col = self.worksheet.columns[s_idx] if s_idx is not None else None
+        e_col = self.worksheet.columns[e_idx] if e_idx is not None else None
+        f_col = self.worksheet.columns[f_idx] if f_idx is not None else None
+
+        all_cols = [c for c in (s_col, e_col, f_col) if c is not None]
+        size = max(len(c.values) for c in all_cols)
+
+        s_vals = (s_col.numeric_values(True) + [None] * (size - len(s_col.values))) if s_col else [None] * size
+        e_vals = (e_col.numeric_values(True) + [None] * (size - len(e_col.values))) if e_col else [None] * size
+        f_vals = (f_col.numeric_values(True) + [None] * (size - len(f_col.values))) if f_col else None
+
+        res = fit_parametric_arbitrary_censoring(
+            start_times=s_vals,
+            end_times=e_vals,
+            frequencies=f_vals,
+            distribution=st.get("distribution", "weibull"),
+            confidence=st.get("confidence", 0.95),
+        )
+        res["analysis"] = "reliability_arbitrary"
+        recipe = {
+            "action": "reliability_arbitrary",
+            "parameters": {
+                "start_index": s_idx,
+                "end_index": e_idx,
+                "frequency_index": f_idx,
+                "distribution": st.get("distribution", "weibull"),
+                "confidence": st.get("confidence", 0.95),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def pls_regression(self, settings=None):
         import copy
         from .pls import fit_pls_regression
@@ -6836,6 +6880,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "arima":
         from .arima_report import generate_arima_report
         return title + generate_arima_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "reliability_arbitrary":
+        from .reliability_arbitrary_report import generate_reliability_arbitrary_report
+        return title + generate_reliability_arbitrary_report(result)
     if isinstance(result, dict) and result.get("analysis") == "pls_regression":
         from .pls_report import generate_pls_report
         return title + generate_pls_report(result)

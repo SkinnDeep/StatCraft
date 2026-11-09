@@ -1406,6 +1406,8 @@ class ModernWindow(QMainWindow):
         reliability = stat.addMenu("&Reliability/Survival")
         dist_analysis = reliability.addMenu("&Distribution Analysis (Right Censoring)")
         self._action(dist_analysis, "Parametric &Distribution Analysis…", self.reliability_distribution_dialog, None, None, True)
+        arb_analysis = reliability.addMenu("Distribution Analysis (&Arbitrary Censoring)")
+        self._action(arb_analysis, "Parametric &Distribution Analysis…", self.reliability_arbitrary_dialog, None, None, True)
         self._action(reliability, "Accelerated &Life Testing…", self.alt_dialog, None, None, True)
 
         # 5c. Time Series menu
@@ -6201,6 +6203,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.pls_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def reliability_arbitrary_dialog(self):
+        from .reliability_arbitrary_dialogs import ArbitraryCensoringDialog
+        self._commit_editor()
+        self._last_dialog_action = self.reliability_arbitrary_dialog
+        dlg = ArbitraryCensoringDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.reliability_arbitrary(settings=p.get("settings")),
                     result=True,
                 )
                 if entry:
