@@ -1257,6 +1257,80 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    def stability_study(
+        self,
+        response_column=None,
+        time_column=None,
+        batch_column=None,
+        lsl=None,
+        usl=None,
+        alpha_pool=0.25,
+        confidence=0.95,
+        settings=None,
+    ):
+        import copy
+        from .stability_study import fit_stability_study
+        if settings is not None:
+            st = copy.deepcopy(settings)
+            r_idx = st.get("response_index", st.get("response_column"))
+            t_idx = st.get("time_index", st.get("time_column"))
+            b_idx = st.get("batch_index", st.get("batch_column"))
+            lsl_val = st.get("lsl")
+            usl_val = st.get("usl")
+            alpha_val = float(st.get("alpha_pool", 0.25))
+            conf_val = float(st.get("confidence", 0.95))
+        else:
+            r_idx = response_column
+            t_idx = time_column
+            b_idx = batch_column
+            lsl_val = lsl
+            usl_val = usl
+            alpha_val = float(alpha_pool)
+            conf_val = float(confidence)
+
+        if r_idx is None:
+            raise ValueError("Response variable is required.")
+        if t_idx is None:
+            raise ValueError("Time variable is required.")
+        if b_idx is None:
+            raise ValueError("Batch variable is required.")
+
+        r_col = self.worksheet.columns[r_idx]
+        t_col = self.worksheet.columns[t_idx]
+        b_col = self.worksheet.columns[b_idx]
+
+        size = max(len(r_col.values), len(t_col.values), len(b_col.values))
+        r_vals = r_col.numeric_values(True) + [None] * (size - len(r_col.values))
+        t_vals = t_col.numeric_values(True) + [None] * (size - len(t_col.values))
+        b_vals = list(b_col.values) + [None] * (size - len(b_col.values))
+
+        res = fit_stability_study(
+            response=r_vals,
+            time=t_vals,
+            batch=b_vals,
+            lsl=lsl_val,
+            usl=usl_val,
+            alpha_pool=alpha_val,
+            confidence=conf_val,
+            response_name=r_col.name,
+            time_name=t_col.name,
+            batch_name=b_col.name,
+        )
+        res["analysis"] = "stability_study"
+        recipe = {
+            "action": "stability_study",
+            "parameters": {
+                "response_index": r_idx,
+                "time_index": t_idx,
+                "batch_index": b_idx,
+                "lsl": lsl_val,
+                "usl": usl_val,
+                "alpha_pool": alpha_val,
+                "confidence": conf_val,
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
     def orthogonal_regression(
         self,
         response_column=None,
@@ -7194,6 +7268,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "probit_analysis":
         from .probit_report import generate_probit_report
         return title + generate_probit_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "stability_study":
+        from .stability_study_report import generate_stability_study_report
+        return title + generate_stability_study_report(result)
     if isinstance(result, dict) and result.get("analysis") == "orthogonal_regression":
         from .orthogonal_regression_report import generate_orthogonal_regression_report
         return title + generate_orthogonal_regression_report(result)

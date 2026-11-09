@@ -1275,6 +1275,7 @@ class ModernWindow(QMainWindow):
         self._action(regression_root, "Nominal Logistic Regression…", self.nominal_logistic_regression_dialog, None, "regression", True)
         self._action(regression_root, "Nonlinear Regression…", self.nonlinear_regression_dialog, None, "regression", True)
         self._action(regression_root, "Orthogonal Regression…", self.orthogonal_regression_dialog, None, "regression", True)
+        self._action(regression_root, "&Stability Study…", self.stability_study_dialog, None, "regression", True)
         self._action(regression_root, "Partial Least Squares…", self.pls_regression_dialog, None, "regression", True)
         self.predict_actions['fit_binary_logistic']=self._action(binary,'Predict…',lambda:self.predict_model('logistic'),None,None,True)
         self.profiler_actions['fit_binary_logistic']=self._action(binary,'Prediction Profiler…',lambda:self.prediction_profiler('logistic'),None,None,True)
@@ -6264,6 +6265,21 @@ class ModernWindow(QMainWindow):
             if p:
                 entry = self._call(
                     lambda: self.presenter.probit_analysis(**p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def stability_study_dialog(self):
+        from .stability_study_dialogs import StabilityStudyDialog
+        self._commit_editor()
+        self._last_dialog_action = self.stability_study_dialog
+        dlg = StabilityStudyDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.stability_study(**p),
                     result=True,
                 )
                 if entry:
