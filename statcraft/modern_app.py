@@ -1161,18 +1161,18 @@ class ModernWindow(QMainWindow):
         self._action(data, "Add Rows…", self.add_rows, None, "insert_rows", True)
         self.move_columns_action = self._action(data, "Move Columns…", self.move_columns_dialog, None, "move_columns", True)
         data.addSeparator()
-        self._action(data, "Sort…", self.sort_dialog, None, None, True)
-        self._action(data, "Rank…", self.rank_dialog, None, None, True)
+        self._action(data, "Sort…", self.sort_dialog, None, "sort", True)
+        self._action(data, "Rank…", self.rank_dialog, None, "rank", True)
         self._action(data, "Delete Rows…", self.delete_rows_dialog, None, "delete", True)
         self._action(data, "Erase Variables…", self.erase_variables_dialog, None, "erase", True)
         data.addSeparator()
-        self._action(data, "Rename Column…", self.rename_column, None, None, True)
-        self._action(data, "Change Data Type…", self.change_type, None, None, True)
+        self._action(data, "Rename Column…", self.rename_column, None, "rename_sheet", True)
+        self._action(data, "Change Data Type…", self.change_type, None, "format_column", True)
         col_prop_menu = data.addMenu("Column Properties")
-        self._action(col_prop_menu, "Value Order…", self.column_value_order_dialog, None, None, True)
-        self._action(col_prop_menu, "Description…", self.column_description_dialog, None, None, True)
+        self._action(col_prop_menu, "Value Order…", self.column_value_order_dialog, None, "sort", True)
+        self._action(col_prop_menu, "Description…", self.column_description_dialog, None, "worksheet", True)
         self._action(col_prop_menu, "Assign Formula…", self.assign_formula_dialog, None, "assign_formula", True)
-        self._action(col_prop_menu, "Conditional Formatting…", self.conditional_formatting_dialog, None, None, True)
+        self._action(col_prop_menu, "Conditional Formatting…", self.conditional_formatting_dialog, None, "format_column", True)
         self._action(data, "Worksheet Information", self.show_worksheet_information, None, "worksheet")
         self._action(data, "Stored Constants…", self.stored_constants, None, "constants", True)
         data.addSeparator()
@@ -1187,11 +1187,11 @@ class ModernWindow(QMainWindow):
         from .data_prep_dialogs import open_dialog as prepare_dialog
         data.addSeparator()
         stack_menu=data.addMenu("Stack")
-        self._action(stack_menu,"Columns…",lambda:prepare_dialog(self,'stack'),None,None,True)
-        self._action(stack_menu,"Stack Worksheets…",lambda:prepare_dialog(self,'stack_worksheets'),None,None,True)
-        self._action(data,"Unstack Columns…",lambda:prepare_dialog(self,'unstack'),None,None,True)
-        self._action(data,"Transpose Columns…",lambda:prepare_dialog(self,'transpose'),None,None,True)
-        self._action(data,"Merge Worksheets…",lambda:prepare_dialog(self,'merge'),None,None,True)
+        self._action(stack_menu,"Columns…",lambda:prepare_dialog(self,'stack'),None,"table",True)
+        self._action(stack_menu,"Stack Worksheets…",lambda:prepare_dialog(self,'stack_worksheets'),None,"table",True)
+        self._action(data,"Unstack Columns…",lambda:prepare_dialog(self,'unstack'),None,"subset",True)
+        self._action(data,"Transpose Columns…",lambda:prepare_dialog(self,'transpose'),None,"transpose",True)
+        self._action(data,"Merge Worksheets…",lambda:prepare_dialog(self,'merge'),None,"merge",True)
 
         # 4. Calc menu
         calc = bar.addMenu("&Calc")
@@ -1362,19 +1362,19 @@ class ModernWindow(QMainWindow):
         self.dist_id_action = self._action(quality, "&Individual Distribution Identification…", self.dist_id_dialog, None, "chart", True)
         self.johnson_action = self._action(quality, "&Johnson Transformation…", self.johnson_dialog, None, "chart", True)
         capa_menu = quality.addMenu("Capability Analysis")
-        self._action(capa_menu, "&Normal…", self.capability, None, "histogram", True)
-        self._action(capa_menu, "Between/W&ithin…", self.capability_between_within, None, "histogram", True)
-        self._action(capa_menu, "&Machine (Normal)…", self.capability_machine, None, "histogram", True)
-        self._action(capa_menu, "Nonnorma&l…", self.capability_nonnormal_dialog, None, "histogram", True)
-        self._action(capa_menu, "Non&parametric…", self.capability_nonparametric_dialog, None, "histogram", True)
-        self._action(capa_menu, "&Automated…", self.capability_automated_dialog, None, "histogram", True)
-        self._action(capa_menu, "&Multiple Variables (Normal)…", lambda: self.multiple_capability_dialog('normal'), None, "histogram", True)
-        self._action(capa_menu, "Multiple &Variables (Nonnormal)…", lambda: self.multiple_capability_dialog('nonnormal'), None, "histogram", True)
+        self._action(capa_menu, "&Normal…", self.capability, None, "capability", True)
+        self._action(capa_menu, "Between/W&ithin…", self.capability_between_within, None, "capability", True)
+        self._action(capa_menu, "&Machine (Normal)…", self.capability_machine, None, "capability", True)
+        self._action(capa_menu, "Nonnorma&l…", self.capability_nonnormal_dialog, None, "capability", True)
+        self._action(capa_menu, "Non&parametric…", self.capability_nonparametric_dialog, None, "capability", True)
+        self._action(capa_menu, "&Automated…", self.capability_automated_dialog, None, "capability", True)
+        self._action(capa_menu, "&Multiple Variables (Normal)…", lambda: self.multiple_capability_dialog('normal'), None, "capability", True)
+        self._action(capa_menu, "Multiple &Variables (Nonnormal)…", lambda: self.multiple_capability_dialog('nonnormal'), None, "capability", True)
         self._action(capa_menu, "&Binomial…", lambda: self.attribute_capability_dialog('binomial'), None, "pie_chart", True)
         self._action(capa_menu, "Poiss&on…", lambda: self.attribute_capability_dialog('poisson'), None, "histogram", True)
 
         sixpack_menu = quality.addMenu("Capability Sixpack")
-        self._action(sixpack_menu, "&Normal…", self.capability_sixpack, None, "matrix_plot", True)
+        self._action(sixpack_menu, "&Normal…", self.capability_sixpack, None, "capability", True)
 
         self._action(quality, "&Tolerance Intervals…", self.tolerance_intervals_dialog, None, "interval", True)
 
@@ -4815,6 +4815,20 @@ class ModernWindow(QMainWindow):
                     entry['graph_presentation']=presentation
                 return entry
             self._call(create,result=True);return
+        if method == 'symmetry_plot':
+            self._commit_editor()
+            from .symmetry_plot_dialogs import SymmetryPlotDialog
+            dialog = SymmetryPlotDialog(self.presenter.worksheet, parent=self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            p = dialog.result_params
+            if p:
+                for col_idx in p['columns']:
+                    self._call(lambda c=col_idx: self.presenter.symmetry_plot(
+                        column_index=c,
+                        settings=p.get('settings'),
+                    ), result=True)
+            return
         if method == 'stem_leaf':
             self._commit_editor()
             from .stem_leaf_dialogs import StemLeafDialog
@@ -5528,6 +5542,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'attribute_gage' or result.get('graph') == 'attribute_gage':
                     from .attribute_gage_chart import AttributeGageChartWidget
                     chart = AttributeGageChartWidget(result)
+                elif result.get('analysis') == 'symmetry_plot' or result.get('graph') == 'symmetry_plot':
+                    from .symmetry_plot_chart import SymmetryPlotChartWidget
+                    chart = SymmetryPlotChartWidget(result)
                 elif result.get('analysis') == 'cause_and_effect':
                     from .cause_and_effect_chart import CauseAndEffectChartWidget
                     chart = CauseAndEffectChartWidget(entry)

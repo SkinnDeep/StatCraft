@@ -11,8 +11,8 @@ from test_mpx import scratch
 class ExpandedGraphAppTests(unittest.TestCase):
     def test_menu_inventory_has_working_backend_for_every_choice(self):
         items=[item for item in MENU if item]
-        self.assertEqual(len(items),26)
-        self.assertEqual({method for title,method in items},set(LABELS)|{'builder','histogram','scatter','boxplot'})
+        self.assertEqual(len(items),27)
+        self.assertEqual({method for title,method in items},set(LABELS)|{'builder','histogram','scatter','boxplot','symmetry_plot'})
 
     def test_every_expanded_recipe_roundtrips_and_reruns(self):
         p=Presenter();p.worksheet=sheet()

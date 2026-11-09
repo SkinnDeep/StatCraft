@@ -1606,6 +1606,31 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def symmetry_plot(self, column_index=0, settings=None, column_name=None):
+        import copy
+        from .symmetry_plot import compute_symmetry_plot
+        if not (0 <= column_index < len(self.worksheet.columns)):
+            raise ValueError(f"Invalid column index {column_index} for Symmetry Plot.")
+        col = self.worksheet.columns[column_index]
+        if col.kind != "number":
+            raise ValueError("Symmetry Plot requires a numeric column.")
+        c_name = column_name or col.name or f"C{column_index+1}"
+        res = compute_symmetry_plot(col.values, settings=settings)
+        res["analysis"] = "symmetry_plot"
+        res["graph"] = "symmetry_plot"
+        res["column_index"] = column_index
+        res["column_name"] = c_name
+        title = f"Symmetry Plot for {c_name}"
+        recipe = {
+            "action": "symmetry_plot",
+            "parameters": {
+                "column_index": column_index,
+                "column_name": c_name,
+                "settings": copy.deepcopy(settings or {}),
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def tolerance_intervals(self, settings=None):
         settings = self._bound_settings("tolerance_intervals", settings)
         import copy
@@ -6188,6 +6213,10 @@ def format_entry(entry):
         r_name = entry.get("recipe", {}).get("parameters", {}).get("ref_name", "Reference")
         a_name = entry.get("recipe", {}).get("parameters", {}).get("acc_name", "Acceptances")
         return title + generate_attribute_gage_report(result, r_name, a_name)
+    if isinstance(result, dict) and (result.get("analysis") == "symmetry_plot" or result.get("graph") == "symmetry_plot"):
+        from .symmetry_plot_report import generate_symmetry_plot_report
+        c_name = result.get("column_name", "Variable")
+        return title + generate_symmetry_plot_report(result, variable_name=c_name)
     if isinstance(result, dict) and (result.get("analysis") == "tolerance_intervals" or result.get("graph") == "tolerance_intervals"):
         from .tolerance_intervals_report import generate_tolerance_intervals_report
         return title + generate_tolerance_intervals_report(result)

@@ -30,6 +30,7 @@ ICON_KEYS = (
     'chart', 'code_view', 'connect', 'covariance', 'graphical_summary',
     'multivari', 'outlier_test', 'report', 'run_chart', 'select_all',
     'standardize', 'subset', 'table', 'update', 'workflow',
+    'sort', 'rank', 'capability', 'control_chart', 'symmetry', 'split', 'merge', 'transpose',
 )
 _ALIASES = {
     'new': 'new_project', 'save_as': 'save_copy', 'plot': 'scatter',
@@ -50,6 +51,13 @@ _ALIASES = {
     'delete_x': 'delete_red_x',
     'distribution': 'graphical_summary', 'check_for_updates': 'update',
     'r_code': 'code_view', 'r_script': 'code_view',
+    'sort_columns': 'sort', 'rank_columns': 'rank',
+    'change_data_type': 'format_column', 'rename_column': 'rename_sheet',
+    'conditional_formatting': 'format_column', 'stack': 'table', 'unstack': 'subset',
+    'transpose_columns': 'transpose', 'merge_worksheets': 'merge',
+    'split_worksheet': 'split', 'symmetry_plot': 'symmetry',
+    'capability_analysis': 'capability', 'control_charts': 'control_chart',
+    'gage_rr': 'chart', 'attribute_agreement': 'table',
 }
 
 
@@ -462,6 +470,47 @@ def _draw(p, kind):
         poly([(13, 3), (17, 5.5), (15, 9.5)], blue, fill=blue, closed=True)
         style(green, 1.6); p.drawArc(QRectF(4, 4, 16, 16), int(215 * 16), int(135 * 16))
         poly([(11, 21), (7, 18.5), (9, 14.5)], green, fill=green, closed=True)
+    elif kind == 'sort':
+        line(5, 5, 5, 18, blue, 1.6)
+        poly([(3, 15), (5, 19), (7, 15)], blue, fill=blue, closed=True)
+        line(9, 6, 14, 6, ink, 1.8)
+        line(9, 11, 17, 11, ink, 1.8)
+        line(9, 16, 20, 16, ink, 1.8)
+    elif kind == 'rank':
+        rect(9.5, 5, 5, 15, blue, '#dbeafe')
+        rect(4, 9, 5, 11, amber, '#fef3c7')
+        rect(15, 13, 5, 7, green, '#dcfce7')
+        line(2, 20, 22, 20, ink, 1.2)
+    elif kind == 'capability':
+        line(4.5, 3, 4.5, 21, red, 1.1)
+        line(19.5, 3, 19.5, 21, red, 1.1)
+        poly([(4.5, 20), (7, 19), (9.5, 15), (12, 5), (14.5, 15), (17, 19), (19.5, 20)], blue, width=1.6)
+        line(3, 20, 21, 20, ink, 1.0)
+    elif kind == 'control_chart':
+        line(3, 5, 21, 5, red, 1.0)
+        line(3, 12, 21, 12, green, 1.1)
+        line(3, 19, 21, 19, red, 1.0)
+        poly([(4, 14), (7, 8), (11, 15), (15, 7), (18, 11), (20, 9)], blue, width=1.4)
+        for x, y in ((4, 14), (7, 8), (11, 15), (15, 7), (18, 11), (20, 9)): dot(x, y, 1.1, blue)
+    elif kind == 'symmetry':
+        axes()
+        line(4, 20, 20, 4, red, 1.2)
+        for x, y in ((7, 16), (9, 14), (12, 11), (15, 8), (17, 6)): dot(x, y, 1.2, blue)
+        for x, y in ((10, 15), (14, 9)): dot(x, y, 1.0, ink)
+    elif kind == 'split':
+        rect(3, 4, 8, 16, ink, '#ffffff')
+        rect(13, 4, 8, 16, blue, '#f0f9ff')
+        line(11, 3, 11, 21, red, 1.1)
+    elif kind == 'merge':
+        rect(3, 4, 6, 16, ink, '#ffffff')
+        rect(10, 4, 6, 16, ink, '#ffffff')
+        line(17, 12, 20.5, 12, blue, 1.4)
+        poly([(19, 10), (21.5, 12), (19, 14)], blue, fill=blue, closed=True)
+    elif kind == 'transpose':
+        rect(3, 6, 18, 12, ink, '#ffffff')
+        line(3, 10, 21, 10, blue, 1.0); line(9, 6, 9, 18, ink, 1.0)
+        poly([(15, 3), (18, 3), (18, 6)], blue, fill=blue, closed=True)
+        poly([(9, 21), (6, 21), (6, 18)], blue, fill=blue, closed=True)
     else:
         # A neutral sheet for unknown action identifiers, never a misleading graph.
         page(); line(8,11,16,11); line(8,15,16,15)

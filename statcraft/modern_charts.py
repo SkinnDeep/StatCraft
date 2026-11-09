@@ -63,7 +63,7 @@ def supported(entry):
         options = r.get('options') if isinstance(r.get('options'), dict) else {}
         graphs = r.get('graphs', options.get('graphs', 'four'))
         return graphs != 'none'
-    if isinstance(r, dict) and (r.get('graph') == 'attribute_capability' or r.get('analysis') in ('attribute_control', 'time_weighted_control', 'rare_event_control', 'multivariate_control', 'pareto_chart', 'type1_gage', 'tolerance_intervals', 'acceptance_control')):
+    if isinstance(r, dict) and (r.get('graph') in ('attribute_capability', 'attribute_gage', 'symmetry_plot') or r.get('analysis') in ('attribute_control', 'time_weighted_control', 'rare_event_control', 'multivariate_control', 'pareto_chart', 'type1_gage', 'tolerance_intervals', 'acceptance_control', 'attribute_gage', 'symmetry_plot')):
         return True
     if isinstance(r, dict) and r.get('analysis') == 'oneway_anova':
         from .oneway_chart import supported as oneway_supported

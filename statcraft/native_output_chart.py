@@ -430,7 +430,12 @@ class NativeOutputChart(SnapshotChartWidget):
         return QSize(660, 470)
 
     def resizeEvent(self, event):
-        self.graph_selector.setGeometry(10, 4, max(220, min(650, self.width() - 20)), 28)
+        if getattr(self, '_frame_managed', False):
+            self.graph_selector.hide()
+        else:
+            right_margin = 130 if (hasattr(self, '_has_3d_panel') and self._has_3d_panel()) else 20
+            w = max(180, min(400, self.width() - 10 - right_margin))
+            self.graph_selector.setGeometry(10, 4, w, 28)
         super().resizeEvent(event)
 
     def select_graph(self, index):

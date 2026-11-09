@@ -17,6 +17,7 @@ class GraphFrame(QWidget):
     def __init__(self,chart,entry,parent=None):
         super().__init__(parent);self.chart=chart;self.entry=entry
         chart._frame_managed=True
+        if hasattr(chart, 'graph_selector'): chart.graph_selector.hide()
         chart.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Ignored)
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Ignored)
         self.base_panels=copy.deepcopy(getattr(chart, 'panels', []));self.export_hidden=[]

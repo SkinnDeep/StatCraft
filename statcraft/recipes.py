@@ -103,6 +103,7 @@ FIELDS = {
     'pareto_chart': {'settings'},
     'type1_gage': {'measurement_index', 'measurement_name', 'reference', 'settings'},
     'attribute_gage': {'ref_col', 'acc_col', 'trials', 'part_col', 'ref_index', 'acc_index', 'trials_index', 'part_index', 'ref_name', 'acc_name', 'part_name', 'settings'},
+    'symmetry_plot': {'column_index', 'column_name', 'settings'},
     'tolerance_intervals': {'settings'},
     'trend_analysis': {'settings'},
     'decomposition': {'settings'},
@@ -179,6 +180,9 @@ def columns(recipe):
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif action == 'attribute_gage':
         if not {'ref_index', 'acc_index', 'trials', 'settings'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'symmetry_plot':
+        if not {'column_index', 'settings'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
@@ -701,6 +705,10 @@ def columns(recipe):
             idx = parameters.get(k)
             if isinstance(idx, int) and idx >= 0:
                 indices.append(idx)
+    if action == 'symmetry_plot':
+        c_idx = parameters.get('column_index')
+        if isinstance(c_idx, int) and c_idx >= 0:
+            indices.append(c_idx)
     if action == 'tolerance_intervals':
         st = parameters.get('settings', {})
         if not isinstance(st, dict):
