@@ -1766,6 +1766,31 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def acceptance_sampling_variables(self, settings=None):
+        import copy
+        from .acceptance_sampling_variables import solve_variables_sampling_plan
+        st = copy.deepcopy(settings or {})
+        res = solve_variables_sampling_plan(
+            aql=st.get("aql", 0.015),
+            rql=st.get("rql", 0.05),
+            alpha=st.get("alpha", 0.05),
+            beta=st.get("beta", 0.10),
+            lsl=st.get("lsl"),
+            usl=st.get("usl"),
+            sigma=st.get("sigma"),
+            lot_size=st.get("lot_size"),
+        )
+        res["analysis"] = "acceptance_sampling_variables"
+        res["graph"] = "acceptance_sampling_variables"
+        title = "Acceptance Sampling by Variables"
+        recipe = {
+            "action": "acceptance_sampling_variables",
+            "parameters": {
+                "settings": st,
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def tolerance_intervals(self, settings=None):
         settings = self._bound_settings("tolerance_intervals", settings)
         import copy
@@ -6400,6 +6425,9 @@ def format_entry(entry):
     if isinstance(result, dict) and (result.get("analysis") == "acceptance_sampling_attributes" or result.get("graph") == "acceptance_sampling_attributes"):
         from .acceptance_sampling_report import generate_acceptance_sampling_report
         return title + generate_acceptance_sampling_report(result)
+    if isinstance(result, dict) and (result.get("analysis") == "acceptance_sampling_variables" or result.get("graph") == "acceptance_sampling_variables"):
+        from .acceptance_sampling_variables_report import generate_acceptance_sampling_variables_report
+        return title + generate_acceptance_sampling_variables_report(result)
     if isinstance(result, dict) and (result.get("analysis") == "tolerance_intervals" or result.get("graph") == "tolerance_intervals"):
         from .tolerance_intervals_report import generate_tolerance_intervals_report
         return title + generate_tolerance_intervals_report(result)
