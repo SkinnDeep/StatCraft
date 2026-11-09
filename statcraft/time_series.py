@@ -881,3 +881,6 @@ def cross_correlation(first, second, lags=0):
     ]
     return {"analysis": "cross_correlation", "graph": "cross_correlation", "n": size,
             "lags": correlations}
+
+
+from .winters_method import winters_method

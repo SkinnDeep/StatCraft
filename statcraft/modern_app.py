@@ -5519,7 +5519,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('graph') == 'tolerance_intervals' or result.get('analysis') == 'tolerance_intervals':
                     from .tolerance_intervals_chart import ToleranceIntervalChartWidget
                     chart = ToleranceIntervalChartWidget(entry)
-                elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation', 'cross_correlation'):
+                elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'autocorrelation', 'partial_autocorrelation', 'cross_correlation'):
                     from .time_series_chart import TimeSeriesChartWidget
                     chart = TimeSeriesChartWidget(entry)
                 elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence'):

@@ -235,3 +235,6 @@ def generate_partial_autocorrelation_report(result: Dict[str, Any]) -> str:
         lines.append(f"  {lag:<6} {_fmt(pacf, 4):>12} {_fmt(t, 2):>10}")
     lines.append("")
     return "\n" + "\n".join(lines)
+
+
+from .winters_method_report import generate_winters_method_report

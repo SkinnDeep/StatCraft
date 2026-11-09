@@ -111,6 +111,7 @@ FIELDS = {
     'moving_average': {'settings'},
     'single_exp_smoothing': {'settings'},
     'double_exp_smoothing': {'settings'},
+    'winters_method': {'settings'},
     'autocorrelation': {'settings'},
     'partial_autocorrelation': {'settings'},
     'cross_correlation': {'first_index', 'second_index', 'lags', 'title', 'store_ccf'},
@@ -775,7 +776,7 @@ def columns(recipe):
             idx = st.get(k)
             if isinstance(idx, int) and idx >= 0:
                 indices.append(idx)
-    if action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag'):
+    if action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag'):
         st = parameters.get('settings', {})
         idx = st.get('series_index') or st.get('variable_index')
         if isinstance(idx, int) and idx >= 0:

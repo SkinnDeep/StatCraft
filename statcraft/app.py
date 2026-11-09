@@ -1892,6 +1892,51 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def winters_method(self, settings=None):
+        settings = self._bound_settings("winters_method", settings)
+        import copy
+        from .winters_method import winters_method
+        from .model import Column
+        if settings is None:
+            raise ValueError("Winters' Method requires settings.")
+        st = copy.deepcopy(settings)
+        idx = st.get("series_index")
+        if idx is None or not (0 <= idx < len(self.worksheet.columns)):
+            raise ValueError("Winters' Method requires a valid series column.")
+        col = self.worksheet.columns[idx]
+        var_name = col.name or f"C{idx+1}"
+        res = winters_method(
+            values=col.values,
+            season_length=st.get("season_length", 4),
+            model=st.get("model", "multiplicative"),
+            alpha=st.get("alpha"),
+            gamma=st.get("gamma"),
+            delta=st.get("delta"),
+            forecasts=st.get("forecasts", 0),
+            conf_level=st.get("conf_level", 95.0),
+            variable_name=var_name,
+            title=st.get("title", ""),
+        )
+        res["analysis"] = "winters_method"
+        res["graph"] = "winters_method"
+        title = res["title"]
+
+        if st.get("store_fits"):
+            self.worksheet.columns.append(Column(name=f"SMOO_{var_name}", kind="number", values=res["fitted"]))
+        if st.get("store_residuals"):
+            self.worksheet.columns.append(Column(name=f"RESI_{var_name}", kind="number", values=res["residuals"]))
+        if st.get("store_forecasts") and res["forecasts"]:
+            fc_vals = [f["forecast"] for f in res["forecasts"]]
+            self.worksheet.columns.append(Column(name=f"FORE_{var_name}", kind="number", values=fc_vals))
+
+        recipe = {
+            "action": "winters_method",
+            "parameters": {
+                "settings": copy.deepcopy(settings)
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def autocorrelation(self, settings=None):
         settings = self._bound_settings("autocorrelation", settings)
         import copy
@@ -6256,6 +6301,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "double_exp_smoothing":
         from .time_series_report import generate_double_exp_smoothing_report
         return title + generate_double_exp_smoothing_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "winters_method":
+        from .winters_method_report import generate_winters_method_report
+        return title + generate_winters_method_report(result)
     if isinstance(result, dict) and result.get("analysis") == "autocorrelation":
         from .time_series_report import generate_autocorrelation_report
         return title + generate_autocorrelation_report(result)

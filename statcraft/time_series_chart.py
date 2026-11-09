@@ -126,6 +126,9 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
             subtitle = f"Single Exponential Smoothing (Alpha: {_fmt(self.result.get('alpha'), 4)})"
         elif self.analysis == "double_exp_smoothing":
             subtitle = f"Double Exponential Smoothing (Alpha: {_fmt(self.result.get('alpha'), 4)}, Gamma: {_fmt(self.result.get('gamma'), 4)})"
+        elif self.analysis == "winters_method":
+            m_name = self.result.get('model', 'multiplicative').capitalize()
+            subtitle = f"Winters' Method ({m_name}) - Alpha: {_fmt(self.result.get('alpha'), 4)}, Gamma: {_fmt(self.result.get('gamma'), 4)}, Delta: {_fmt(self.result.get('delta'), 4)}" 
 
         painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
         painter.setPen(QColor(MUTED))
@@ -335,6 +338,21 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
             painter.setPen(QColor(INK))
             painter.drawText(QRectF(cx + 24, cy, 100, 16), f"{self.result.get('conf_level', 95.0):g}% Limits")
             cy += 22
+
+        if self.analysis == "winters_method":
+            cy += 4
+            painter.setPen(QPen(QColor(BORDER), 1))
+            painter.drawLine(QPointF(cx, cy), QPointF(card_rect.right() - 10, cy))
+            cy += 6
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            painter.setPen(QColor(INK))
+            painter.drawText(QRectF(cx, cy, card_rect.width() - 20, 16), "Smoothing Constants")
+            cy += 18
+            painter.setFont(QFont("Segoe UI", 8))
+            for lbl, k in [("Alpha", "alpha"), ("Gamma", "gamma"), ("Delta", "delta")]:
+                painter.drawText(QRectF(cx, cy, 60, 15), lbl)
+                painter.drawText(QRectF(cx + 60, cy, card_rect.width() - 80, 15), Qt.AlignmentFlag.AlignRight, _fmt(self.result.get(k), 4))
+                cy += 16
 
         # Accuracy Box
         cy += 6

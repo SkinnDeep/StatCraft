@@ -735,3 +735,5 @@ class LagDialog(_TimeSeriesBaseDialog):
             "store_col": self.edit_store.text().strip() or f"LAG_{txt}",
         }
         self.accept()
+
+
