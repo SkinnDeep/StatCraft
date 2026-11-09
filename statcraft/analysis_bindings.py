@@ -6,7 +6,7 @@ KEY = '_source_bindings'
 ACTIONS = frozenset({'normal_capability', 'normal_sixpack', 'acceptance_control_chart', 'capability_nonnormal', 'capability_nonparametric', 'capability_automated', 'reliability_distribution', 'imr_chart',
     'attribute_control_chart', 'time_weighted_control_chart',
     'rare_event_control_chart', 'multivariate_control_chart',
-    'pareto_chart', 'tolerance_intervals', 'trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag', 'sign_test', 'one_sample_wilcoxon', 'mann_whitney', 'kruskal_wallis', 'moods_median', 'friedman_test', 'runs_test', 'paired_wilcoxon', 'pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence', 'one_sample_equivalence', 'two_sample_equivalence', 'paired_equivalence', 'crossover_equivalence', 'one_sample_z_power', 'one_sample_t_power', 'two_sample_t_power', 'paired_t_power', 'one_proportion_power', 'two_proportions_power', 'oneway_anova_power', 'factorial_power', 'cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'})
+    'pareto_chart', 'tolerance_intervals', 'trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'arima', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag', 'sign_test', 'one_sample_wilcoxon', 'mann_whitney', 'kruskal_wallis', 'moods_median', 'friedman_test', 'runs_test', 'paired_wilcoxon', 'pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence', 'one_sample_equivalence', 'two_sample_equivalence', 'paired_equivalence', 'crossover_equivalence', 'one_sample_z_power', 'one_sample_t_power', 'two_sample_t_power', 'paired_t_power', 'one_proportion_power', 'two_proportions_power', 'oneway_anova_power', 'factorial_power', 'cross_tabulation', 'chi_square_goodness_of_fit', 'chi_square_association_table', 'tally_variables'})
 
 
 def _constant(value):
@@ -70,7 +70,7 @@ def _plan(action, settings):
             roles['by_column'] = (settings['by_column'], False, any_kind)
     elif action == 'tolerance_intervals' and not settings.get('is_summarized', False):
         roles['variable_indices'] = (settings.get('variable_indices', []), True, number)
-    elif action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag'):
+    elif action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'arima', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag'):
         roles['series_index'] = (_preferred(settings, 'series_index', 'series_name'), False, number)
     elif action in ('sign_test', 'one_sample_wilcoxon', 'runs_test'):
         roles['variable_indices'] = (settings.get('variable_indices', []), True, number)
@@ -251,7 +251,7 @@ def resolve(action, worksheet, settings):
             result[role] = index
     elif action == 'tolerance_intervals' and 'variable_indices' in bindings:
         result['variable_indices'] = list(bindings['variable_indices'])
-    elif action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag') and 'series_index' in bindings:
+    elif action in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'arima', 'autocorrelation', 'partial_autocorrelation', 'differences', 'lag') and 'series_index' in bindings:
         result['series_index'] = bindings['series_index']
         result['series_name'] = worksheet.columns[bindings['series_index']].name
     elif action in ('sign_test', 'one_sample_wilcoxon', 'runs_test') and 'variable_indices' in bindings:

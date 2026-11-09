@@ -2079,6 +2079,54 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def arima(self, settings=None):
+        settings = self._bound_settings("arima", settings)
+        import copy
+        from .arima import fit_arima
+        from .model import Column
+        if settings is None:
+            raise ValueError("ARIMA requires settings.")
+        st = copy.deepcopy(settings)
+        idx = st.get("series_index")
+        if idx is None or not (0 <= idx < len(self.worksheet.columns)):
+            raise ValueError("ARIMA requires a valid series column.")
+        col = self.worksheet.columns[idx]
+        var_name = col.name or f"C{idx+1}"
+        res = fit_arima(
+            values=col.values,
+            p=st.get("p", 1),
+            d=st.get("d", 0),
+            q=st.get("q", 0),
+            P=st.get("P", 0),
+            D=st.get("D", 0),
+            Q=st.get("Q", 0),
+            S=st.get("S", 1),
+            include_constant=st.get("include_constant", True),
+            forecasts=st.get("forecasts", 0),
+            conf_level=st.get("conf_level", 95.0),
+            variable_name=var_name,
+            title=st.get("title", ""),
+        )
+        res["analysis"] = "arima"
+        res["graph"] = "arima"
+        title = res["title"]
+
+        if st.get("store_fits"):
+            self.worksheet.columns.append(Column(name=f"FITT_{var_name}", kind="number", values=res["fitted"]))
+        if st.get("store_residuals"):
+            self.worksheet.columns.append(Column(name=f"RESI_{var_name}", kind="number", values=res["residuals"]))
+        if st.get("store_forecasts") and res["forecasts"]:
+            fc_vals = [f["forecast"] for f in res["forecasts"]]
+            self.worksheet.columns.append(Column(name=f"FORE_{var_name}", kind="number", values=fc_vals))
+
+        recipe = {
+            "action": "arima",
+            "parameters": {
+                "settings": copy.deepcopy(settings)
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def autocorrelation(self, settings=None):
         settings = self._bound_settings("autocorrelation", settings)
         import copy
@@ -6449,6 +6497,9 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "winters_method":
         from .winters_method_report import generate_winters_method_report
         return title + generate_winters_method_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "arima":
+        from .arima_report import generate_arima_report
+        return title + generate_arima_report(result)
     if isinstance(result, dict) and result.get("analysis") == "best_subsets_regression":
         from .best_subsets_report import generate_best_subsets_report
         return title + generate_best_subsets_report(result)

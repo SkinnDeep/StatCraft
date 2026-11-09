@@ -124,6 +124,8 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
             subtitle = f"Moving Average (Length: {self.result.get('ma_length', 3)})"
         elif self.analysis == "single_exp_smoothing":
             subtitle = f"Single Exponential Smoothing (Alpha: {_fmt(self.result.get('alpha'), 4)})"
+        elif self.analysis == "arima":
+            subtitle = f"ARIMA({self.result.get('p')},{self.result.get('d')},{self.result.get('q')}) - SS: {_fmt(self.result.get('ss'), 3)}, MS: {_fmt(self.result.get('ms'), 4)}"
         elif self.analysis == "double_exp_smoothing":
             subtitle = f"Double Exponential Smoothing (Alpha: {_fmt(self.result.get('alpha'), 4)}, Gamma: {_fmt(self.result.get('gamma'), 4)})"
         elif self.analysis == "winters_method":

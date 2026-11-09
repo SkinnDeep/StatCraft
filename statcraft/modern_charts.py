@@ -33,7 +33,7 @@ def supported(entry):
         "fitted_line_plot",
         "anom",
         "cause_and_effect",
-        "winters_method", "trend_analysis", "decomposition", "moving_average", "single_exp_smoothing", "double_exp_smoothing",
+        "winters_method", "arima", "trend_analysis", "decomposition", "moving_average", "single_exp_smoothing", "double_exp_smoothing",
         "jmp_distribution", "control_chart_builder", "process_screening",
     ):
         return True
