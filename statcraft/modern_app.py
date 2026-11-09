@@ -1383,6 +1383,7 @@ class ModernWindow(QMainWindow):
         self._action(gage,'Gage R&R Study (Crossed)…',self.gage_rr,None,"table",True)
         self._action(gage,'Gage R&R Study (&Nested)…',self.nested_gage_rr_dialog,None,"table",True)
         self._action(gage,'Gage &Linearity and Bias Study…',self.gage_linearity_dialog,None,"line_plot",True)
+        self._action(gage,'&Attribute Gage Study (Analytic Method)…',self.attribute_gage_dialog,None,"chart",True)
         self._action(gage,'Evaluating the &Measurement Process (EMP)…',self.emp_dialog,None,"run_chart",True)
         self._action(quality, '&Attribute Agreement Analysis…', self.attribute_agreement_dialog, None, "table", True)
 
@@ -3808,6 +3809,27 @@ class ModernWindow(QMainWindow):
                 if entry:
                     self.show_result(entry)
 
+    def attribute_gage_dialog(self):
+        from .attribute_gage_dialogs import AttributeGageDialog
+        self._commit_editor()
+        self._last_dialog_action = self.attribute_gage_dialog
+        dlg = AttributeGageDialog(self.presenter.worksheet, parent=self)
+        if dlg.exec():
+            p = dlg.result_params
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.attribute_gage(
+                        ref_index=p["ref_column"],
+                        acc_index=p["acc_column"],
+                        trials=p["trials"],
+                        part_index=p.get("part_column"),
+                        settings=p.get("settings"),
+                    ),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
     def attribute_capability_dialog(self, method='binomial'):
         from .attribute_capability_dialogs import AttributeCapabilityDialog
         self._last_dialog_action = lambda: self.attribute_capability_dialog(method)
@@ -5503,6 +5525,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'dist_id':
                     from .dist_id_chart import DistIdChartWidget
                     chart = DistIdChartWidget(entry)
+                elif result.get('analysis') == 'attribute_gage' or result.get('graph') == 'attribute_gage':
+                    from .attribute_gage_chart import AttributeGageChartWidget
+                    chart = AttributeGageChartWidget(result)
                 elif result.get('analysis') == 'cause_and_effect':
                     from .cause_and_effect_chart import CauseAndEffectChartWidget
                     chart = CauseAndEffectChartWidget(entry)
@@ -5528,7 +5553,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis')=='gage_rr':chart.setMinimumHeight(1000)
                 elif result.get('analysis')=='attribute_control':chart.setMinimumHeight(480)
                 elif result.get('analysis') == 'multiple_regression': chart.setMinimumHeight(620)
-                elif result.get('analysis') in ('dist_id', 'johnson_transformation'): chart.setMinimumHeight(480)
+                elif result.get('analysis') in ('dist_id', 'johnson_transformation', 'attribute_gage'): chart.setMinimumHeight(480)
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):

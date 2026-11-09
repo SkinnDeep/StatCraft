@@ -1556,6 +1556,56 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def attribute_gage(self, ref_index, acc_index, trials=20, part_index=None, settings=None, ref_name=None, acc_name=None, part_name=None, trials_index=None):
+        import copy
+        from .attribute_gage import compute_attribute_gage_study
+        if not (0 <= ref_index < len(self.worksheet.columns)):
+            raise ValueError("Reference column index out of range.")
+        if not (0 <= acc_index < len(self.worksheet.columns)):
+            raise ValueError("Acceptances column index out of range.")
+        ref_col = self.worksheet.columns[ref_index]
+        acc_col = self.worksheet.columns[acc_index]
+        if ref_col.kind != "number":
+            raise ValueError("Attribute Gage Study requires a numeric reference column.")
+        if acc_col.kind != "number":
+            raise ValueError("Attribute Gage Study requires a numeric acceptances column.")
+
+        trials_val = trials
+        if trials_index is not None and 0 <= trials_index < len(self.worksheet.columns):
+            trials_val = self.worksheet.columns[trials_index].values
+        elif isinstance(trials, int) and 0 <= trials < len(self.worksheet.columns) and trials != 20:
+            trials_index = trials
+            trials_val = self.worksheet.columns[trials].values
+
+        part_vals = None
+        if part_index is not None and 0 <= part_index < len(self.worksheet.columns):
+            part_vals = self.worksheet.columns[part_index].values
+
+        r_name = ref_name or ref_col.name or f"C{ref_index+1}"
+        a_name = acc_name or acc_col.name or f"C{acc_index+1}"
+        p_name = part_name or (self.worksheet.columns[part_index].name if part_index is not None and 0 <= part_index < len(self.worksheet.columns) else None)
+
+        res = compute_attribute_gage_study(ref_col.values, acc_col.values, trials=trials_val, part_labels=part_vals, settings=settings)
+        res["analysis"] = "attribute_gage"
+        res["graph"] = "attribute_gage"
+        title = f"Attribute Gage Study for {r_name}"
+
+        recipe = {
+            "action": "attribute_gage",
+            "parameters": {
+                "ref_index": ref_index,
+                "acc_index": acc_index,
+                "trials": trials if trials_index is None else trials_index,
+                "trials_index": trials_index,
+                "part_index": part_index,
+                "ref_name": r_name,
+                "acc_name": a_name,
+                "part_name": p_name,
+                "settings": copy.deepcopy(settings or {}),
+            }
+        }
+        return self._record(title, res, recipe=recipe)
+
     def tolerance_intervals(self, settings=None):
         settings = self._bound_settings("tolerance_intervals", settings)
         import copy
@@ -6133,6 +6183,11 @@ def format_entry(entry):
         from .type1_gage_report import generate_type1_gage_report
         meas_name = entry.get("recipe", {}).get("parameters", {}).get("measurement_name", "Measurement")
         return title + generate_type1_gage_report(result, meas_name)
+    if isinstance(result, dict) and (result.get("analysis") == "attribute_gage" or result.get("graph") == "attribute_gage"):
+        from .attribute_gage_report import generate_attribute_gage_report
+        r_name = entry.get("recipe", {}).get("parameters", {}).get("ref_name", "Reference")
+        a_name = entry.get("recipe", {}).get("parameters", {}).get("acc_name", "Acceptances")
+        return title + generate_attribute_gage_report(result, r_name, a_name)
     if isinstance(result, dict) and (result.get("analysis") == "tolerance_intervals" or result.get("graph") == "tolerance_intervals"):
         from .tolerance_intervals_report import generate_tolerance_intervals_report
         return title + generate_tolerance_intervals_report(result)

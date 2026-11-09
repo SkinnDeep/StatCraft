@@ -102,6 +102,7 @@ FIELDS = {
     'multivariate_control_chart': {'settings'},
     'pareto_chart': {'settings'},
     'type1_gage': {'measurement_index', 'measurement_name', 'reference', 'settings'},
+    'attribute_gage': {'ref_col', 'acc_col', 'trials', 'part_col', 'ref_index', 'acc_index', 'trials_index', 'part_index', 'ref_name', 'acc_name', 'part_name', 'settings'},
     'tolerance_intervals': {'settings'},
     'trend_analysis': {'settings'},
     'decomposition': {'settings'},
@@ -175,6 +176,9 @@ def columns(recipe):
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif action == 'johnson_transformation':
         if not expected - {'store_column_name', 'p_threshold'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'attribute_gage':
+        if not {'ref_index', 'acc_index', 'trials', 'settings'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
@@ -594,6 +598,8 @@ def columns(recipe):
             continue
         elif key == 'factor2_index' and value is None and action == 'anom':
             continue
+        elif action == 'attribute_gage' and key in ('trials_index', 'part_index') and value is None:
+            continue
         elif action == 'dist_id' and key in ('distributions', 'box_cox_lambda', 'johnson_p_threshold', 'alpha'):
             continue
         elif action == 'johnson_transformation' and key in ('store_column_name', 'p_threshold'):
@@ -690,6 +696,11 @@ def columns(recipe):
         meas_idx = parameters.get('measurement_index')
         if isinstance(meas_idx, int) and meas_idx >= 0:
             indices.append(meas_idx)
+    if action == 'attribute_gage':
+        for k in ('ref_index', 'acc_index', 'trials_index', 'part_index'):
+            idx = parameters.get(k)
+            if isinstance(idx, int) and idx >= 0:
+                indices.append(idx)
     if action == 'tolerance_intervals':
         st = parameters.get('settings', {})
         if not isinstance(st, dict):
