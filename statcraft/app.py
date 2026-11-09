@@ -987,6 +987,100 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def stepwise_regression(self, settings=None):
+        import copy
+        from .stepwise import stepwise_regression
+        if settings is None:
+            raise ValueError("Stepwise Regression requires settings.")
+        resp_idx = settings.get("response_index")
+        pred_idxs = list(settings.get("predictor_indices", []))
+        if resp_idx is None:
+            raise ValueError("Please select a response variable.")
+        if not pred_idxs:
+            raise ValueError("Please select at least one predictor variable.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        pred_cols = [self.worksheet.columns[i] for i in pred_idxs]
+        all_cols = [resp_col] + pred_cols
+        if any(c.kind != "number" for c in all_cols):
+            raise ValueError("Stepwise Regression requires numeric response and predictor columns.")
+
+        size = max(len(c.values) for c in all_cols)
+        aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in all_cols]
+        resp_vals = aligned[0]
+        pred_vals = aligned[1:]
+
+        res = stepwise_regression(
+            response=resp_vals,
+            predictors=pred_vals,
+            predictor_names=[c.name for c in pred_cols],
+            response_name=resp_col.name,
+            method=settings.get("method", "stepwise"),
+            alpha_to_enter=settings.get("alpha_to_enter", 0.15),
+            alpha_to_remove=settings.get("alpha_to_remove", 0.15),
+            forced_indices=settings.get("forced_indices"),
+        )
+        res["analysis"] = "stepwise_regression"
+        recipe = {
+            "action": "stepwise_regression",
+            "parameters": dict(settings),
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
+    def poisson_regression(self, settings=None):
+        import copy
+        from .poisson_regression import fit_poisson_regression
+        if settings is None:
+            raise ValueError("Poisson Regression requires settings.")
+        st = copy.deepcopy(settings)
+        resp_idx = st.get("response_index")
+        cont_idxs = list(st.get("continuous_indices", []))
+        cat_idxs = list(st.get("categorical_indices", []))
+        off_idx = st.get("offset_index")
+
+        if resp_idx is None:
+            raise ValueError("Response variable is required.")
+        if not cont_idxs and not cat_idxs:
+            raise ValueError("At least one predictor is required.")
+
+        resp_col = self.worksheet.columns[resp_idx]
+        cont_cols = [self.worksheet.columns[i] for i in cont_idxs]
+        cat_cols = [self.worksheet.columns[i] for i in cat_idxs]
+        off_col = self.worksheet.columns[off_idx] if off_idx is not None else None
+
+        all_cols = [resp_col] + cont_cols + cat_cols + ([off_col] if off_col else [])
+        size = max(len(c.values) for c in all_cols)
+
+        resp_vals = resp_col.numeric_values(True) + [None] * (size - len(resp_col.values))
+        cont_vals = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in cont_cols]
+        cat_vals = [list(c.values) + [None] * (size - len(c.values)) for c in cat_cols]
+        off_vals = (off_col.numeric_values(True) + [None] * (size - len(off_col.values))) if off_col else None
+
+        res = fit_poisson_regression(
+            response=resp_vals,
+            continuous_predictors=cont_vals if cont_cols else None,
+            categorical_predictors=cat_vals if cat_cols else None,
+            continuous_names=[c.name for c in cont_cols] if cont_cols else None,
+            categorical_names=[c.name for c in cat_cols] if cat_cols else None,
+            offset=off_vals,
+            offset_name=off_col.name if off_col else None,
+            response_name=resp_col.name,
+            confidence=st.get("confidence", 0.95),
+        )
+        res["analysis"] = "poisson_regression"
+        recipe = {
+            "action": "poisson_regression",
+            "parameters": {
+                "response_index": resp_idx,
+                "continuous_indices": cont_idxs,
+                "categorical_indices": cat_idxs,
+                "offset_index": off_idx,
+                "confidence": st.get("confidence", 0.95),
+            },
+        }
+        return self._record(res["title"], res, recipe=recipe)
+
+
     def recode(
         self,
         source_indices: list,
@@ -6500,6 +6594,12 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "arima":
         from .arima_report import generate_arima_report
         return title + generate_arima_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "poisson_regression":
+        from .poisson_regression_report import generate_poisson_regression_report
+        return title + generate_poisson_regression_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "stepwise_regression":
+        from .stepwise_report import generate_stepwise_report
+        return title + generate_stepwise_report(result)
     if isinstance(result, dict) and result.get("analysis") == "best_subsets_regression":
         from .best_subsets_report import generate_best_subsets_report
         return title + generate_best_subsets_report(result)

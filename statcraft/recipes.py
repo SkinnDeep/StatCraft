@@ -64,6 +64,8 @@ FIELDS = {
     'inference': {'method', 'indices', 'mu', 'confidence'},
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
     'best_subsets': {'response_index', 'free_indices', 'forced_indices', 'models_per_subset', 'min_free', 'max_free'},
+    'stepwise_regression': {'response_index', 'predictor_indices', 'method', 'alpha_to_enter', 'alpha_to_remove'},
+    'poisson_regression': {'response_index', 'continuous_indices', 'categorical_indices', 'offset_index', 'confidence'},
     'recode': {'source_indices', 'rules', 'target_kind', 'storage', 'default_action', 'default_value'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
@@ -190,6 +192,9 @@ def columns(recipe):
     elif action == 'symmetry_plot':
         if not {'column_index', 'settings'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'poisson_regression':
+        if not expected - {'categorical_indices', 'continuous_indices', 'offset_index'} <= keys <= expected:
+            raise ValueError('Unsupported Poisson Regression parameters.')
     elif keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
     if action in ('predict_mixture_process','mixture_process_contour','optimize_mixture_process','optimize_mixture_joint'):
@@ -350,6 +355,21 @@ def columns(recipe):
         if parameters.get('predictor_indices'):
             cols.extend([p for p in parameters['predictor_indices'] if isinstance(p, int) and p >= 0])
         return sorted(set(cols))
+    if action == 'poisson_regression':
+        cols = [parameters.get('response_index'), parameters.get('offset_index')]
+        cols.extend(parameters.get('continuous_indices', []))
+        cols.extend(parameters.get('categorical_indices', []))
+        return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
+    if action == 'stepwise_regression':
+        resp = parameters.get('response_index')
+        preds = parameters.get('predictor_indices', [])
+        res_c = []
+        if isinstance(resp, int) and resp >= 0:
+            res_c.append(resp)
+        for idx in preds:
+            if isinstance(idx, int) and idx >= 0:
+                res_c.append(idx)
+        return sorted(set(res_c))
     if action == 'best_subsets':
         resp = parameters.get('response_index')
         free_c = parameters.get('free_indices', [])

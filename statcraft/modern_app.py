@@ -1262,6 +1262,7 @@ class ModernWindow(QMainWindow):
         regression=regression_root.addMenu('Regression')
         self._action(regression, "Fit regression model…", self.multiple_regression, None, "regression", True)
         self._action(regression, "Best Subsets…", self.best_subsets_dialog, None, "regression", True)
+        self._action(regression, "Stepwise…", self.stepwise_regression_dialog, None, "regression", True)
         self.predict_actions['multiple_regression']=self._action(regression,'Predict…',lambda:self.predict_model('regression'),None,None,True)
         self.profiler_actions['multiple_regression']=self._action(regression,'Prediction Profiler…',lambda:self.prediction_profiler('regression'),None,None,True)
         self.factorial_plot_actions['multiple_regression']=self._action(regression,'Factorial Plots…',lambda:self.factorial_plots('regression'),None,None,True)
@@ -1276,6 +1277,8 @@ class ModernWindow(QMainWindow):
         self.contour_plot_actions['fit_binary_logistic']=self._action(binary,'Contour Plot…',lambda:self.model_contour_plot('logistic'),None,None,True)
         self.surface_plot_actions['fit_binary_logistic']=self._action(binary,'Surface Plot…',lambda:self.model_surface_plot('logistic'),None,None,True)
         self.optimizer_actions['fit_binary_logistic']=self._action(binary,'Response Optimizer…',lambda:self.optimize_responses('logistic'),None,None,True)
+        poisson_menu = regression_root.addMenu("Poisson Regression")
+        self._action(poisson_menu, "Fit Poisson Model…", self.poisson_regression_dialog, None, "regression", True)
         doe = stat.addMenu("DOE")
         self._action(doe,'DOE Planner…',self.doe_planner,None,'doe',True)
         doe.addSeparator(); factorial = doe.addMenu("Factorial")
@@ -1383,6 +1386,7 @@ class ModernWindow(QMainWindow):
 
         self._action(quality, "&Tolerance Intervals…", self.tolerance_intervals_dialog, None, "interval", True)
         self._action(quality, "Acceptance &Sampling by Attributes…", self.acceptance_sampling_attributes_dialog, None, "chart", True)
+        self._action(quality, "Acceptance Sampling by &Variables…", self.acceptance_sampling_variables_dialog, None, "chart", True)
 
         gage=quality.addMenu('Gage Study')
         self._action(gage,'&Type 1 Gage Study…',self.type1_gage_dialog,None,"chart",True)
@@ -1406,6 +1410,8 @@ class ModernWindow(QMainWindow):
         self._action(time_series, "&Moving Average…", self.moving_average_dialog, None, None, True)
         self._action(time_series, "&Single Exp Smoothing…", self.single_exp_smoothing_dialog, None, None, True)
         self._action(time_series, "&Double Exp Smoothing…", self.double_exp_smoothing_dialog, None, None, True)
+        self._action(time_series, "&Winters' Method…", self.winters_method_dialog, None, None, True)
+        self._action(time_series, "&ARIMA…", self.arima_dialog, None, None, True)
         time_series.addSeparator()
         self._action(time_series, "&Autocorrelation…", self.autocorrelation_dialog, None, None, True)
         self._action(time_series, "&Partial Autocorrelation…", self.partial_autocorrelation_dialog, None, None, True)
@@ -3861,6 +3867,21 @@ class ModernWindow(QMainWindow):
                 if entry:
                     self.show_result(entry)
 
+    def acceptance_sampling_variables_dialog(self):
+        from .acceptance_sampling_variables_dialogs import AcceptanceSamplingVariablesDialog
+        self._commit_editor()
+        self._last_dialog_action = self.acceptance_sampling_variables_dialog
+        dlg = AcceptanceSamplingVariablesDialog(parent=self)
+        if dlg.exec():
+            p = getattr(dlg, "settings", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.acceptance_sampling_variables(settings=p),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
     def tolerance_intervals_dialog(self):
         from .tolerance_intervals_dialogs import ToleranceIntervalsDialog
         self._commit_editor()
@@ -3933,6 +3954,30 @@ class ModernWindow(QMainWindow):
             p = getattr(dlg, "settings", None)
             if p:
                 entry = self._call(lambda: self.presenter.double_exp_smoothing(settings=p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def winters_method_dialog(self):
+        from .winters_method_dialogs import WintersMethodDialog
+        self._commit_editor()
+        self._last_dialog_action = self.winters_method_dialog
+        dlg = WintersMethodDialog(self.presenter.worksheet, parent=self)
+        if dlg.exec():
+            p = getattr(dlg, "settings", None)
+            if p:
+                entry = self._call(lambda: self.presenter.winters_method(settings=p), result=True)
+                if entry:
+                    self.show_result(entry)
+
+    def arima_dialog(self):
+        from .arima_dialogs import ARIMADialog
+        self._commit_editor()
+        self._last_dialog_action = self.arima_dialog
+        dlg = ARIMADialog(self.presenter.worksheet, parent=self)
+        if dlg.exec():
+            p = getattr(dlg, "settings", None)
+            if p:
+                entry = self._call(lambda: self.presenter.arima(settings=p), result=True)
                 if entry:
                     self.show_result(entry)
 
@@ -6050,6 +6095,36 @@ class ModernWindow(QMainWindow):
                 )
                 if entry is not None:
                     self._update_all()
+
+    def stepwise_regression_dialog(self):
+        from .stepwise_dialogs import StepwiseRegressionDialog
+        self._commit_editor()
+        self._last_dialog_action = self.stepwise_regression_dialog
+        dlg = StepwiseRegressionDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.stepwise_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
+
+    def poisson_regression_dialog(self):
+        from .poisson_regression_dialogs import PoissonRegressionDialog
+        self._commit_editor()
+        self._last_dialog_action = self.poisson_regression_dialog
+        dlg = PoissonRegressionDialog(self)
+        if dlg.exec():
+            p = getattr(dlg, "result_params", None)
+            if p:
+                entry = self._call(
+                    lambda: self.presenter.poisson_regression(settings=p.get("settings")),
+                    result=True,
+                )
+                if entry:
+                    self.show_result(entry)
 
     def recode_dialog(self, target_kind: str = 'number'):
         from .recode_dialogs import RecodeDialog
