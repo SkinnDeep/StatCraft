@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, universal R code translation (Tidyverse, ggplot2, Base R), interactive 3D CAD response surfaces, and complete offline privacy.**
 
-[![Version](https://img.shields.io/badge/version-113.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-114.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v113.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v113.0.0) •
+[Download Release (v114.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v114.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -86,42 +86,78 @@ StatCraft delivers identical statistical reporting and diagnostic rigor to Minit
   - Pearson correlation and covariance matrices.
   - Grubbs' and Dixon's tests for outlier identification.
 
-### 2. Analysis of Variance (ANOVA) & Linear Models
-- **One-Way ANOVA**: Multiple comparisons via Tukey, Fisher LSD, Dunnett (with control), Hsu MCB, and Games-Howell.
-- **Two-Way ANOVA**: Full factorial ($A, B, A \times B$) and additive models with Main Effects and Interaction Plots.
-- **General Linear Model (GLM)**: Handles continuous covariates, categorical factors, and custom interaction terms.
-- **Fitted Line Plot**: Linear, Quadratic, and Cubic polynomial regression with 95% Confidence and Prediction bands, sequential ANOVA decomposition, PRESS, $R^2_{pred}$, and Unusual Observation flags ($R$ for large residuals, $X$ for high leverage).
-- **Multiple Linear Regression (OLS)**: Full Minitab 22 parity with PRESS, Predicted R-squared, Unusual Observations, and publication 4-in-1 residual plots.
-- **Analysis of Means (ANOM)**: One-Way and Two-Way ANOM for Normal data (Nelson critical values, pooled $s_p$, interaction effects), Binomial proportions, and Poisson flaw rates with Upper and Lower Decision Limits (UDL/LDL).
+### 2. Advanced Regression & Linear Models
+- **Multiple Linear Regression (OLS)**: Full Minitab 22 parity with PRESS, Predicted R-squared, Unusual Observations ($R, X, RX$), and publication 4-in-1 residual plots.
+- **Stepwise & Best Subsets Regression**: Automated model selection via Stepwise, Forward, Backward, Forward/Backward AIC, and Forward/Backward BIC; Mallows' $C_p$, $R^2_{adj}$, and PRESS.
+- **Poisson Regression**: Log-link generalized linear models (GLM) for event counts with continuous and categorical predictors, exposure/offset terms, deviance/Pearson goodness-of-fit, and relative rate ratios with 95% CIs.
+- **Binary, Ordinal & Nominal Logistic Regression**:
+  * Binary Logistic with logit link, odds ratios, and classification tables.
+  * Ordinal Logistic proportional odds cumulative logit model with threshold cutpoints and Somers' $D$, Gamma, Kendall's $\tau_a$.
+  * Nominal Logistic generalized logit multinomial model with baseline reference event.
+- **Nonlinear Regression**: Levenberg-Marquardt optimizer with built-in growth catalog (Asymptotic, Michaelis-Menten, Logistic, Gompertz, Power) and user-defined formulas.
+- **Orthogonal Regression (Deming)**: Fits linear models when both response and predictor contain measurement error; configurable error variance ratio $\delta$, jackknife standard errors, and slope $= 1$ hypothesis testing.
+- **Partial Least Squares (PLS)**: NIPALS and SIMPLS cross-validated PLS regression with leave-one-out cross-validation PRESS, predicted $R^2$, and Variable Importance in Projection (VIP) scores.
+- **Stability Study (ICH Q1E)**: Pharmaceutical shelf life expiration determination across manufacturing batches with ANCOVA slope and intercept poolability tests and 95% one-sided confidence bands.
+- **Analysis of Variance (ANOVA)**: One-Way (Tukey, Fisher LSD, Dunnett, Hsu MCB, Games-Howell), Two-Way, Balanced ANOVA, Fully Nested ANOVA, and General Linear Model (GLM).
+- **Analysis of Means (ANOM)**: One-Way and Two-Way ANOM for Normal, Binomial, and Poisson data with decision limits.
 - **Test for Equal Variances**: Bartlett's test, Levene's test, and Multiple Comparisons confidence intervals.
 
 ### 3. Statistical Process Control (SPC) & Six Sigma Quality
-- **Variables Control Charts for Subgroups**: Xbar-R, Xbar-S, Xbar, R, and S charts with Nelson Rules 1–8 signal detection.
-- **Variables Control Charts for Individuals**: I-MR (Individual-Moving Range) charts.
-- **Attributes Control Charts**: P, NP, U, and C charts with variable subgroup sample size weighting.
-- **Time-Weighted Charts**: EWMA and CUSUM charts.
+- **Variables Control Charts for Subgroups**: Xbar-R, Xbar-S, I-MR-R/S (Between/Within), Xbar, R, and S charts with Nelson Rules 1–8 signal detection.
+- **Variables Control Charts for Individuals**: I-MR (Individual-Moving Range) and Z-MR charts.
+- **Attributes Control Charts**: P, NP, U, and C charts, plus Laney P' and Laney U' overdispersion charts.
+- **Time-Weighted & Rare Event Charts**: EWMA, CUSUM, Moving Average, G Chart, and T Chart.
 - **Process Capability Analysis**:
-  - Normal Capability ($C_p, C_{pk}, P_p, P_{pk}, C_{pm}$, and expected PPM).
-  - Non-Normal Capability (Weibull, Lognormal, Exponential, Gamma).
-  - Capability Sixpack comprehensive dashboard.
+  * Normal Capability ($C_p, C_{pk}, P_p, P_{pk}, C_{pm}$, and expected PPM).
+  * Between/Within Capability ($C_p, C_{pk}$, StDev Between/Within).
+  * Nonnormal Capability (Weibull, Lognormal, Exponential, Gamma, Box-Cox, Johnson).
+  * Multiple Variables Capability (Normal and Nonnormal).
+  * Binomial and Poisson Attribute Capability.
+- **Capability Sixpack**: Full 6-panel diagnostics dashboard across Normal, Between/Within, and Nonnormal distributions.
+- **Tolerance Intervals**: Normal and Nonnormal tolerance intervals for parts with confidence/coverage bounds.
+- **Acceptance Sampling**: Acceptance Sampling by Attributes and Acceptance Sampling by Variables (AQL, RQL, OC Curves).
 - **Measurement Systems Analysis (MSA)**:
-  - Gage R&R (Crossed & Nested ANOVA methods, Study Variation %, Tolerance %).
-  - Type 1 Gage Study ($C_g, C_{gk}$, run charts).
-  - Gage Linearity and Bias Study.
-  - Attribute Agreement Analysis (Fleiss' kappa, Kendall's concordance).
-- **Cause-and-Effect (Fishbone / Ishikawa) Diagram**: Standard 6M industrial categories (Personnel, Machines, Materials, Methods, Measurements, Environment), custom branch labels, empty branch suppression, and interactive vector diagram with hover HUD inspection.
-- **Johnson Transformation**: Transform nonnormal process data into a standard normal distribution using the optimal Johnson curve system ($S_B$ bounded, $S_L$ lognormal, $S_U$ unbounded). Evaluates Anderson-Darling goodness-of-fit and p-values before and after transformation, stores transformed values directly to a worksheet column, and outputs side-by-side normal probability comparison plots.
-- **Individual Distribution Identification**: Evaluate data against 16 continuous distributions and transformations (Normal, Box-Cox, Lognormal, 3-Parameter Lognormal, Weibull, 3-Parameter Weibull, Exponential, 2-Parameter Exponential, Gamma, 3-Parameter Gamma, Logistic, Loglogistic, 3-Parameter Loglogistic, Smallest Extreme Value, Largest Extreme Value, and Johnson Transformation). Features Anderson-Darling goodness-of-fit stats, calibrated p-values, Likelihood Ratio Tests (LRT) for 3-parameter threshold models, ML parameter estimates, and 4-in-1 probability plot layouts with 95% confidence intervals.
+  * Gage R&R (Crossed, Nested, and Expanded ANOVA models with up to 10 factors and $ndc$).
+  * Type 1 Gage Study ($C_g, C_{gk}$, run charts).
+  * Gage Linearity and Bias Study.
+  * Evaluating the Measurement Process (EMP / Wheeler).
+  * Attribute Agreement Analysis (Fleiss' kappa, Kendall's concordance, Cohen's kappa).
+- **Cause-and-Effect (Fishbone / Ishikawa) Diagram**: Standard 6M industrial categories, custom branch labels, empty branch suppression, and interactive vector diagram with hover HUD inspection.
+- **Johnson Transformation**: Transform nonnormal process data into a standard normal distribution using the optimal Johnson curve system ($S_B, S_L, S_U$).
+- **Individual Distribution Identification**: Evaluate data against 16 continuous distributions and transformations with Anderson-Darling tests, calibrated p-values, LRT, and 4-in-1 probability plots.
 - **Pareto Charts**: Defect frequency bars, cumulative percentage curves, and 80/20 reference markers.
 
-### 4. Design of Experiments (DOE)
+### 4. Reliability & Survival Analysis
+- **Distribution Analysis (Right & Arbitrary Censoring)**: Parametric (Weibull, Lognormal, Exponential, Normal, Loglogistic) and Nonparametric (Kaplan-Meier / Turnbull) estimation with delta-method percentile standard errors.
+- **Accelerated Life Testing (ALT)**: Arrhenius, Power, and Exponential acceleration models for temperature and stress extrapolation.
+- **Probit Analysis**: Bioassay and dose-response modeling with Probit, Logit, Weibull, and Gompertz links; LD10/LD50/LD90 lethal doses with Fieller's fiducial confidence limits.
+- **Repairable Systems Analysis**:
+  * Nonparametric Growth Curve: Mean Cumulative Function (MCF) via Nelson / Lawless-Nadeau estimator with pointwise confidence limits.
+  * Parametric Growth Curve: Crow-AMSAA / Power Law NHPP modeling, MIL-HDBK-189 & Laplace trend tests, instantaneous failure rates, and MTBF horizons.
+- **Regression with Life Data**: Parametric Accelerated Failure Time (AFT) survival regression with right censoring, log-likelihood optimization, and quantile predictions.
+
+### 5. Multivariate Analysis & Categorical Tables
+- **Principal Component Analysis (PCA)**: Scree plots, eigenvalues, eigenvectors, and score/loading biplots.
+- **Factor Analysis**: Principal components extraction with orthogonal rotations (Varimax with Kaiser normalization, Quartimax, Equamax), communalities, variance explained, and Thomson factor score coefficients.
+- **Multiple Correspondence Analysis (MCA)**: Indicator matrix and Burt contingency table decomposition for multi-way categorical data.
+- **Item Analysis & Cronbach's Alpha**: Survey reliability assessment with item-deleted statistics.
+- **Cluster Analysis**: Hierarchical clustering of observations, variables, and K-Means partitioning.
+- **Discriminant Analysis**: Linear (LDA) and quadratic (QDA) classification with cross-validation summary.
+
+### 6. Time Series Analysis
+- **Trend Analysis & Decomposition**: Linear, quadratic, exponential growth, and S-curve trends; additive and multiplicative seasonal decomposition.
+- **Smoothing Methods**: Moving Average, Single Exponential Smoothing, Double Exponential Smoothing (Holt's method), and Winters' 3-Parameter Additive/Multiplicative Smoothing.
+- **ARIMA Modeling**: Full seasonal autoregressive integrated moving average $(p, d, q) \times (P, D, Q)_s$ forecasting.
+- **Correlation**: Autocorrelation (ACF), Partial Autocorrelation (PACF), and Cross-Correlation (CCF).
+
+### 7. Design of Experiments (DOE)
 - **Factorial Designs**: 2-Level Full and Fractional factorials ($2^{k-p}$), General Full Factorials, Plackett-Burman screening designs.
 - **Response Surface Methodology (RSM)**: Central Composite Designs (CCD) and Box-Behnken designs with full quadratic regression and 3D CAD visualization.
 - **Mixture Designs**: Simplex Centroid, Simplex Lattice, Extreme Vertices designs with Scheffé canonical polynomials.
 - **Taguchi Robust Designs**: Orthogonal arrays ($L_4$ to $L_{36}$) with S/N ratios (Larger-is-better, Smaller-is-better, Nominal-is-best).
 - **Definitive Screening Designs (DSD)**: Main effects unconfounded with two-factor interactions.
 
-### 5. Native File Compatibility & Data Prep
+### 8. Native File Compatibility & Data Prep
 - **MPX / MWX Compatibility**: Read, edit, and save native Minitab project and worksheet containers with column types, formatting, and formulas preserved.
 - **Office Export**: Export worksheets and high-resolution reports to Microsoft Excel (`.xlsx`), Word (`.docx`), PowerPoint (`.pptx`), and PDF.
 - **Data Calculator & Transformations**: Formula evaluation, pattern generation, stacking/unstacking, transposing, sorting, and standardization.
@@ -172,7 +208,7 @@ StatCraft is built on the cross-platform Qt6 (PySide6) framework:
 
 | Platform | Current Status | Release Artifact |
 |---|---|---|
-| **Windows x64** | **Available (v113.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
+| **Windows x64** | **Available (v114.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
 | **macOS (Apple Silicon & Intel)** | *In Preparation* | `.dmg` installer & standalone `.app` bundle |
 | **Linux (x86_64)** | *In Preparation* | `AppImage` & `.deb` package |
 
