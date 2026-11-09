@@ -64,6 +64,7 @@ FIELDS = {
     'inference': {'method', 'indices', 'mu', 'confidence'},
     'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
     'best_subsets': {'response_index', 'free_indices', 'forced_indices', 'models_per_subset', 'min_free', 'max_free'},
+    'recode': {'source_indices', 'rules', 'target_kind', 'storage', 'default_action', 'default_value'},
     'fitted_line_plot': {'response_index', 'predictor_index', 'model_type', 'confidence', 'options'},
     'anom': {'response_index', 'factor1_index', 'factor2_index', 'distribution', 'sample_size', 'alpha', 'title'},
     'dist_id': {'column_index', 'distributions', 'subgroup_size', 'alpha', 'box_cox_lambda', 'johnson_p_threshold'},
@@ -358,6 +359,8 @@ def columns(recipe):
             if isinstance(idx, int) and idx >= 0:
                 res_c.append(idx)
         return sorted(set(res_c))
+    if action == 'recode':
+        return sorted(set([i for i in parameters.get('source_indices', []) if isinstance(i, int) and i >= 0]))
     if action == 'cross_correlation':
         refs = (parameters['first_index'], parameters['second_index'])
         if refs[0] == refs[1] or any(type(i) is not int or i < 0 for i in refs):

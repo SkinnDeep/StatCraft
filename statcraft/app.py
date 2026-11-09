@@ -987,6 +987,63 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    def recode(
+        self,
+        source_indices: list,
+        rules: list,
+        target_kind: str = "number",
+        storage: str = "new_columns",
+        default_action: str = "original",
+        default_value=None,
+    ):
+        from .recode import recode_column
+        from .model import Column
+        source_indices = list(source_indices)
+        if not source_indices:
+            raise ValueError("Select at least one column to recode.")
+        cols = [self.worksheet.columns[i] for i in source_indices]
+
+        recoded_columns = []
+        for col in cols:
+            new_vals = recode_column(
+                col.values,
+                rules=rules,
+                target_kind=target_kind,
+                default_action=default_action,
+                default_value=default_value,
+            )
+            if storage == "original":
+                col.values = new_vals
+                col.kind = target_kind
+                recoded_columns.append(col.name)
+            else:
+                new_name = f"RECODE_{col.name}" if col.name else f"RECODE_C{self.worksheet.columns.index(col)+1}"
+                new_col = Column(name=new_name, kind=target_kind, values=new_vals)
+                self.worksheet.columns.append(new_col)
+                recoded_columns.append(new_name)
+
+        title = f"Recode — {', '.join(c.name for c in cols)}"
+        result = {
+            "analysis": "recode",
+            "source_columns": [c.name for c in cols],
+            "recoded_columns": recoded_columns,
+            "target_kind": target_kind,
+            "storage": storage,
+            "rules": rules,
+        }
+        recipe = {
+            "action": "recode",
+            "parameters": {
+                "source_indices": source_indices,
+                "rules": rules,
+                "target_kind": target_kind,
+                "storage": storage,
+                "default_action": default_action,
+                "default_value": default_value,
+            },
+        }
+        return self._record(title, result, recipe=recipe)
+
     def fitted_line_plot(self, response_index, predictor_index, model_type="linear", confidence=0.95, options=None):
         from .fitted_line_plot import fit_fitted_line_plot
         if response_index == predictor_index:
@@ -6367,6 +6424,25 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get("analysis") == "best_subsets_regression":
         from .best_subsets_report import generate_best_subsets_report
         return title + generate_best_subsets_report(result)
+    if isinstance(result, dict) and result.get("analysis") == "recode":
+        lines = [
+            title,
+            "=" * len(title),
+            "",
+            f"Target Data Type: {result.get('target_kind', 'number').capitalize()}",
+            f"Storage Location: {result.get('storage', 'new_columns')}",
+            f"Source Columns: {', '.join(result.get('source_columns', []))}",
+            f"Result Columns: {', '.join(result.get('recoded_columns', []))}",
+            "",
+            f"Rules Applied ({len(result.get('rules', []))} rules):",
+        ]
+        for r in result.get("rules", []):
+            if r.get("type") == "missing":
+                lines.append(f"  Missing (*) -> {r.get('recoded')}")
+            else:
+                lines.append(f"  {r.get('current')} -> {r.get('recoded')}")
+        lines.append("")
+        return "\n" + "\n".join(lines)
     if isinstance(result, dict) and result.get("analysis") == "autocorrelation":
         from .time_series_report import generate_autocorrelation_report
         return title + generate_autocorrelation_report(result)
