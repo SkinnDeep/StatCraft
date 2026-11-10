@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, universal R code translation (Tidyverse, ggplot2, Base R), interactive 3D CAD response surfaces, and complete offline privacy.**
 
-[![Version](https://img.shields.io/badge/version-114.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-115.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v114.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v114.0.0) •
+[Download Release (v115.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v115.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -86,6 +86,66 @@ StatCraft breaks free from the rigid, static 1990s desktop paradigm with modern,
 10. **100% Air-Gapped Zero-Install Portability**: Runs standalone with zero telemetry, zero licensing daemons, and zero network pings—fully compliant with classified defense networks, cleanrooms, and air-gapped industrial SCADA environments.
 
 ---
+
+---
+
+## ⚡ 40 Make-or-Break Usability Parity Enhancements (v115.0.0)
+
+StatCraft v115.0.0 introduces 40 targeted usability fixes and full behavioral parity with Minitab, ensuring the application responds precisely as experienced practitioners expect:
+
+### 1. Authentic Worksheet Navigation & Cell Editing
+- **In-Editor Arrow Traversal**: Pressing Up/Down/Left/Right inside a cell editor now commits cleanly and moves to the adjacent cell without getting trapped or requiring extra mouse clicks.
+- **Seamless Column Name Traversal**: Seamlessly navigate between row 1 and the column header name row using vertical arrow keys.
+- **Type-Over Cell Entry**: Typing any alphanumeric character immediately overwrites the cell and begins inline editing, matching desktop spreadsheet standards.
+- **Backspace Quick-Edit**: Pressing `Backspace` on a selected cell clears its contents and opens the inline editor at once.
+- **Clean Missing Value Editing**: Missing cells displayed as `*` open with a clean empty string `""` instead of forcing manual deletion of the asterisk.
+- **Eliminate Navigation Flicker**: Optimized table rendering removes screen flashing during rapid arrow key traversal.
+- **Ctrl+D Fill Down**: Duplicate and project the active cell value downward across selections.
+- **Corner Button Synchronization**: The worksheet corner button updates immediately to reflect column and row selection states.
+
+### 2. Smart Clipboard & Data Ingestion
+- **Smart Paste with Header Detection**: Automatically detects whether clipboard data contains column headers (strings vs numeric data rows) and prompts to populate column names or prepend as data.
+- **Missing Value Sentinel Conversion**: Automatically converts standard missing sentinels (`NA`, `N/A`, `NaN`, `None`, `-`, `.`) into statistical nulls while auto-detecting column types.
+- **1-Click "Copy Table (TSV for Excel)"**: Copies clean tab-separated values formatted for flawless pasting into Microsoft Excel and Google Sheets.
+- **"Copy with Column Names" (`Ctrl+Shift+C`)**: Copy cell selections with header labels included.
+- **Full-Dataset `Ctrl+A`**: Selects across all pages so copies and clears operate on the entire dataset.
+- **Full Column Clear Across All Rows**: Clearing or deleting columns wipes data across all pages, not just the visible page.
+- **Selection Shortcuts (`Ctrl+Space` & `Shift+Space`)**: Instantly select entire columns or entire rows via standard keyboard shortcuts.
+
+### 3. Intelligent Sequence Auto-Fill Engine
+- **Auto-Fill / Drag-to-Fill Sequence Engine**: Predicts and extends numerical progressions, geometric intervals, date schedules, and alphanumeric patterns (e.g. `Lot-01, Lot-02`).
+- **Autofill Dialog**: Accessible directly from the column header context menu to project series across thousands of rows in milliseconds.
+
+### 4. Universal Dialog Ergonomics
+- **Universal Dialog State Memory (`Ctrl+E`)**: Pressing `Ctrl+E` reopens the last used statistical dialog with all previous selections, checkboxes, and options perfectly remembered.
+- **Dialog Reset Button (`F3`)**: Instantly clears all fields back to their defaults without closing and reopening the dialog.
+- **Column Range Expansion**: Type shorthand column ranges such as `C1-C5` or `C1 - C5` in any variable selector to automatically expand to all intermediate columns.
+- **Column Filter / Search Box**: Rapidly filter variable lists in complex datasets with hundreds of columns.
+- **Dialog Auto-Advance**: Selecting a variable in single-variable dialogs automatically advances focus to the next field.
+- **Auto-Select on Focus**: Selector inputs automatically select all text when tabbed into for effortless replacement.
+- **Validation Error Auto-Focus**: Form validation errors automatically focus and highlight the offending input field.
+
+### 5. Workspace Intelligence & Modern UI
+- **Instant Status Bar Statistics**: Live statistical summary bar showing `Count`, `Sum`, `Mean`, `Min`, and `Max` for any active cell selection.
+- **Double-Click Auto-Fit Columns**: Double-clicking header dividers automatically resizes columns to fit their widest content.
+- **Movable & Reorderable Worksheet Tabs**: Drag and drop worksheet tabs to reorder sheets within the project workbook.
+- **Duplicate Worksheet from Tab Menu**: Right-click any worksheet tab to instantly clone the sheet and its metadata.
+- **Rich Column Tooltips**: Hover over column headers to inspect column names, types, formulas, and engineer descriptions.
+- **Recent Projects Menu (`File > Open Recent`)**: Quick access to recent `.mpx` and `.statcraft` projects persisted via system settings.
+- **1-Click "Subset Worksheet by Value"**: Right-click any cell value to generate a subset worksheet filtered by that exact level.
+- **Resilient Mixed-Type Transpose**: Transpose datasets with mixed data types gracefully without type coercion errors.
+
+### 6. Publication Graphics & Session Power
+- **Lossless Vector SVG in Save Dialog**: Save publication-grade vector SVG files directly from the `Save Graph As…` dialog.
+- **1-Click Copy Vector SVG**: Copy vector SVG code straight to the clipboard from the chart context menu.
+- **Direct `Ctrl+C` on Graphs**: Copy high-resolution graph images to the clipboard with a standard keypress.
+- **Export All Graphs in Project (`File > Export All Graphs…`)**: 1-click batch export of all session graphs into a designated folder.
+- **Context-Sensitive Find (`Ctrl+F` in Output & ReportPad)**: Search text directly inside Session Output, ANOVA tables, and ReportPad.
+- **Multi-Column Sorting Engine**: Sort worksheets across multiple primary and secondary column keys.
+- **Duplicate Column Action**: Clone any column along with its metadata and formulas with 1 click.
+- **Keyboard Output Tab Navigation (`Ctrl+Tab` / `Ctrl+Shift+Tab`)**: Cycle through generated analysis tabs without touching the mouse.
+- **Clear Session Output (`Edit > Clear Session Output`)**: Reset session history with a single confirmation.
+- **Clear Formats Full Column**: Wipes cell highlights and comments across all rows when entire columns are selected.
 
 ## Capabilities & Features
 
@@ -225,7 +285,7 @@ StatCraft is built on the cross-platform Qt6 (PySide6) framework:
 
 | Platform | Current Status | Release Artifact |
 |---|---|---|
-| **Windows x64** | **Available (v114.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
+| **Windows x64** | **Available (v115.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
 | **macOS (Apple Silicon & Intel)** | *In Preparation* | `.dmg` installer & standalone `.app` bundle |
 | **Linux (x86_64)** | *In Preparation* | `AppImage` & `.deb` package |
 
