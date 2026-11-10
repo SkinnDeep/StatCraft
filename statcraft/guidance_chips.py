@@ -74,6 +74,20 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
             "description": "Brainstorm root causes for detected special cause alarms"
         })
 
+    # 6. Predictive Analytics cross-model exploration
+    if analysis in ("random_forest", "treenet_gbm", "mars_regression"):
+        chips.append({
+            "label": "🏆 Discover Best Model (AutoML)",
+            "action": "discover_best_model",
+            "description": "Benchmark CART, Random Forests, TreeNet, MARS, and Linear/Logistic side-by-side"
+        })
+    if analysis in ("multiple_regression", "linear_regression") and (result.get("r_sq") or 1.0) < 0.70:
+        chips.append({
+            "label": "🌲 Try Random Forests / MARS",
+            "action": "random_forest",
+            "description": "Capture non-linear curvature and interactions missed by linear regression"
+        })
+
     return chips
 
 

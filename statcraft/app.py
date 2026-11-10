@@ -4189,6 +4189,37 @@ class Presenter:
         recipe = {"action": "rolled_throughput_yield", "parameters": {"step_yields": yields, "index": index, "process_name": process_name}}
         return self._record(f"Six Sigma Product Report (RTY): {process_name}", res, recipe=recipe)
 
+    def random_forest(self, response_index, predictor_indices, task="auto", n_trees=80, max_depth=8, min_samples_leaf=2, max_features="auto", seed=42):
+        from .predictive_ml import random_forest_fit as _fn
+        preds = list(predictor_indices)
+        res = _fn(self.worksheet, response_index, preds, task=task, n_trees=int(n_trees), max_depth=int(max_depth), min_samples_leaf=int(min_samples_leaf), max_features=max_features, seed=int(seed))
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
+        recipe = {"action": "random_forest", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "max_depth": int(max_depth), "min_samples_leaf": int(min_samples_leaf), "max_features": max_features, "seed": int(seed)}}
+        return self._record(f"Random Forests ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
+
+    def treenet_gbm(self, response_index, predictor_indices, task="auto", n_trees=100, learning_rate=0.08, max_depth=3, subsample=0.8, loss="ls", validation_fraction=0.2, seed=42):
+        from .predictive_ml import treenet_fit as _fn
+        preds = list(predictor_indices)
+        res = _fn(self.worksheet, response_index, preds, task=task, n_trees=int(n_trees), learning_rate=float(learning_rate), max_depth=int(max_depth), subsample=float(subsample), loss=loss, validation_fraction=float(validation_fraction), seed=int(seed))
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
+        recipe = {"action": "treenet_gbm", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "learning_rate": float(learning_rate), "max_depth": int(max_depth), "subsample": float(subsample), "loss": loss, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
+        return self._record(f"TreeNet Gradient Boosting ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
+
+    def mars_regression(self, response_index, predictor_indices, task="auto", max_terms=16, max_degree=2, penalty=2.0):
+        from .predictive_ml import mars_fit as _fn
+        preds = list(predictor_indices)
+        res = _fn(self.worksheet, response_index, preds, task=task, max_terms=int(max_terms), max_degree=int(max_degree), penalty=float(penalty))
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
+        recipe = {"action": "mars_regression", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "max_terms": int(max_terms), "max_degree": int(max_degree), "penalty": float(penalty)}}
+        return self._record(f"MARS Splines ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
+
+    def discover_best_model(self, response_index, predictor_indices, task="auto", validation_fraction=0.25, seed=42):
+        from .predictive_ml import discover_best_model as _fn
+        preds = list(predictor_indices)
+        res = _fn(self.worksheet, response_index, preds, task=task, validation_fraction=float(validation_fraction), seed=int(seed))
+        recipe = {"action": "discover_best_model", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
+        return self._record(f"Discover Best Model ({res['task'].title()}): {res['response']}", res, recipe=recipe)
+
     def cross_tabulation(self, settings=None):
         settings = self._bound_settings("cross_tabulation", settings)
         import copy
@@ -7494,6 +7525,10 @@ def format_entry(entry):
             'warranty_analysis': ('.survival_advanced', 'format_survival_advanced_report'),
             'six_sigma_process_report': ('.six_sigma', 'format_six_sigma_report'),
             'six_sigma_product_report': ('.six_sigma', 'format_six_sigma_report'),
+            'random_forest': ('.predictive_ml', 'format_predictive_ml_report'),
+            'treenet_gbm': ('.predictive_ml', 'format_predictive_ml_report'),
+            'mars_regression': ('.predictive_ml', 'format_predictive_ml_report'),
+            'discover_best_model': ('.predictive_ml', 'format_predictive_ml_report'),
         }
         _p3_key = result.get('analysis')
         if _p3_key in _p3_formatters:

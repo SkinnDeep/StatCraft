@@ -193,6 +193,10 @@ FIELDS = {
     'warranty_analysis': {'ages_index', 'fails_index', 'at_risk_total', 'forecast_horizon'},
     'six_sigma_process_report': {'index', 'lsl', 'usl', 'subgroup_size', 'sigma_shift'},
     'rolled_throughput_yield': {'step_yields', 'index', 'process_name'},
+    'random_forest': {'response_index', 'predictor_indices', 'task', 'n_trees', 'max_depth', 'min_samples_leaf', 'max_features', 'seed'},
+    'treenet_gbm': {'response_index', 'predictor_indices', 'task', 'n_trees', 'learning_rate', 'max_depth', 'subsample', 'loss', 'validation_fraction', 'seed'},
+    'mars_regression': {'response_index', 'predictor_indices', 'task', 'max_terms', 'max_degree', 'penalty'},
+    'discover_best_model': {'response_index', 'predictor_indices', 'task', 'validation_fraction', 'seed'},
 }
 
 
@@ -248,6 +252,10 @@ def columns(recipe):
         'warranty_analysis': (('ages_index', 'fails_index'), ()),
         'six_sigma_process_report': (('index',), ()),
         'rolled_throughput_yield': (('index',), ()),
+        'random_forest': (('response_index',), ('predictor_indices',)),
+        'treenet_gbm': (('response_index',), ('predictor_indices',)),
+        'mars_regression': (('response_index',), ('predictor_indices',)),
+        'discover_best_model': (('response_index',), ('predictor_indices',)),
     }
     if action in _p3_col_keys:
         if action not in ('extended_power',) and not isinstance(parameters, dict):

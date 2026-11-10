@@ -1541,6 +1541,11 @@ class ModernWindow(QMainWindow):
         predictive = stat.addMenu("&Predictive Analytics")
         self._action(predictive, "Fit &Y by X (Bivariate / Oneway / Contingency)…", self.fit_y_by_x_dialog, None, "scatter", True)
         self._action(predictive, "CART® / &Partition Decision Tree…", self.cart_tree_dialog, None, None, True)
+        self._action(predictive, "Random &Forests® (Classification && Regression)…", self.random_forest_dialog, None, "regression", True)
+        self._action(predictive, "&TreeNet® Gradient Boosting…", self.treenet_dialog, None, "regression", True)
+        self._action(predictive, "&MARS® Regression && Classification…", self.mars_dialog, None, "regression", True)
+        predictive.addSeparator()
+        self._action(predictive, "&Discover Best Model® (AutoML Leaderboard)…", self.discover_best_model_dialog, None, "table", True)
         self._action(predictive, "Fit &Regression Model…", self.multiple_regression, None, "regression", True)
         self._action(predictive, "&Correlation Matrix…", self.correlation, None, "correlation", True)
 
@@ -1647,6 +1652,8 @@ class ModernWindow(QMainWindow):
 
         # 9. Assistant menu (`RT_MENU 8445` guided workflow shortcuts)
         assistant = bar.addMenu("Assista&nt")
+        self._action(assistant, "Guided Analysis &Assistant Wizard…", self.guided_assistant_dialog, None, "help", True)
+        assistant.addSeparator()
         self._action(assistant, "Graphical Analysis (Graph Builder)…", lambda: self.graph("builder"), None, "graph_builder", True)
         self._action(assistant, "Hypothesis Tests (1-Sample / 2-Sample t)…", lambda: self.inference_dialog("two_sample_t"), None, None, True)
         self._action(assistant, "Regression…", self.multiple_regression, None, "regression", True)
@@ -5140,6 +5147,99 @@ class ModernWindow(QMainWindow):
             lambda p: self.presenter.extended_power("tolerance_interval", **p),
             "Computes minimum N for normal two-sided tolerance intervals.",
         )
+
+    def random_forest_dialog(self):
+        self._dialog(
+            "Random Forests® (Classification & Regression)",
+            [
+                selector("response_index", "Response", False, 1, 1, ("number", "text")),
+                selector("predictor_indices", "Predictors", True, 1, None, ("number", "text")),
+            ],
+            [
+                {"key": "task", "label": "Task", "choices": ["auto", "regression", "classification"], "default": "auto"},
+                numeric("n_trees", "Number of trees", 80, integer=True),
+                numeric("max_depth", "Maximum tree depth", 8, integer=True),
+                numeric("min_samples_leaf", "Minimum leaf samples", 2, integer=True),
+                {"key": "max_features", "label": "Features per split (mtry)", "choices": ["auto", "sqrt", "all"], "default": "auto"},
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.random_forest(
+                p["response_index"], p["predictor_indices"], p["task"],
+                p["n_trees"], p["max_depth"], p["min_samples_leaf"], p["max_features"], p["seed"],
+            ),
+            "Fits an ensemble of bagged random decision trees with Out-of-Bag (OOB) validation & variable importance.",
+        )
+
+    def treenet_dialog(self):
+        self._dialog(
+            "TreeNet® Stochastic Gradient Boosting",
+            [
+                selector("response_index", "Response", False, 1, 1, ("number", "text")),
+                selector("predictor_indices", "Predictors", True, 1, None, ("number", "text")),
+            ],
+            [
+                {"key": "task", "label": "Task", "choices": ["auto", "regression", "classification"], "default": "auto"},
+                numeric("n_trees", "Number of boosting iterations", 100, integer=True),
+                numeric("learning_rate", "Learning rate (shrinkage)", 0.08),
+                numeric("max_depth", "Base tree max depth", 3, integer=True),
+                numeric("subsample", "Subsample fraction (0.3–1.0)", 0.8),
+                {"key": "loss", "label": "Regression loss", "choices": ["ls", "huber"], "default": "ls"},
+                numeric("validation_fraction", "Holdout validation fraction", 0.2),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.treenet_gbm(
+                p["response_index"], p["predictor_indices"], p["task"],
+                p["n_trees"], p["learning_rate"], p["max_depth"], p["subsample"], p["loss"], p["validation_fraction"], p["seed"],
+            ),
+            "Stochastic gradient boosted trees with holdout optimal-tree selection & partial dependence profile.",
+        )
+
+    def mars_dialog(self):
+        self._dialog(
+            "MARS® Multivariate Adaptive Regression Splines",
+            [
+                selector("response_index", "Response", False, 1, 1, ("number", "text")),
+                selector("predictor_indices", "Predictors", True, 1, None, ("number", "text")),
+            ],
+            [
+                {"key": "task", "label": "Task", "choices": ["auto", "regression", "classification"], "default": "auto"},
+                numeric("max_terms", "Maximum basis terms", 16, integer=True),
+                numeric("max_degree", "Maximum interaction degree (1 or 2)", 2, integer=True),
+                numeric("penalty", "GCV pruning penalty", 2.0),
+            ],
+            lambda p: self.presenter.mars_regression(
+                p["response_index"], p["predictor_indices"], p["task"],
+                p["max_terms"], p["max_degree"], p["penalty"],
+            ),
+            "Forward hinge basis expansion with Generalized Cross-Validation (GCV) backward pruning.",
+        )
+
+    def discover_best_model_dialog(self):
+        self._dialog(
+            "Discover Best Model® AutoML Leaderboard",
+            [
+                selector("response_index", "Response", False, 1, 1, ("number", "text")),
+                selector("predictor_indices", "Predictors", True, 1, None, ("number", "text")),
+            ],
+            [
+                {"key": "task", "label": "Task", "choices": ["auto", "regression", "classification"], "default": "auto"},
+                numeric("validation_fraction", "Validation split fraction", 0.25),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.discover_best_model(
+                p["response_index"], p["predictor_indices"], p["task"], p["validation_fraction"], p["seed"],
+            ),
+            "Benchmarks Multiple Linear/Logistic Regression, CART, Random Forests, TreeNet, and MARS on holdout validation data.",
+        )
+
+    def guided_assistant_dialog(self):
+        from .assistant_wizard import GuidedAssistantDialog
+        dark_mode = bool(getattr(self, "dark_mode", False))
+        dlg = GuidedAssistantDialog(parent=self, dark_mode=dark_mode)
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.chosen_method:
+            target = getattr(self, dlg.chosen_method, None)
+            if callable(target):
+                target(*dlg.chosen_args)
 
     def cross_tabulation_dialog(self):
         from .tables_dialogs import CrossTabulationDialog
@@ -9098,6 +9198,10 @@ class ModernWindow(QMainWindow):
             if hasattr(self, "capability"): self.capability()
         elif action_name == "fishbone_diagram":
             if hasattr(self, "cause_and_effect"): self.cause_and_effect()
+        elif action_name == "discover_best_model":
+            self.discover_best_model_dialog()
+        elif action_name == "random_forest":
+            self.random_forest_dialog()
 
     def run_data_doctor_dialog(self):
         from .data_doctor import audit_worksheet, autofix_worksheet_issues
