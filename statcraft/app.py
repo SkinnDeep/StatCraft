@@ -610,6 +610,36 @@ class Presenter:
             'method':method,'indices':list(indices),'group_index':group_index,'bins':bins,
             'confidence':confidence,'distribution':distribution,'parameters':parameters}})
 
+    def probability_distribution_plot(self, distribution='Normal', parameters=None, mode='single', shade_by='probability', tail='both', prob_value=0.05, x_value=None, x_low=None, x_high=None):
+        from .prob_dist_plot import compute_probability_distribution_plot
+        parameters = {} if parameters is None else parameters
+        result = compute_probability_distribution_plot(
+            distribution=distribution,
+            parameters=parameters,
+            mode=mode,
+            shade_by=shade_by,
+            tail=tail,
+            prob_value=prob_value,
+            x_value=x_value,
+            x_low=x_low,
+            x_high=x_high,
+        )
+        recipe = {
+            'action': 'probability_distribution_plot',
+            'parameters': {
+                'distribution': distribution,
+                'parameters': parameters,
+                'mode': mode,
+                'shade_by': shade_by,
+                'tail': tail,
+                'prob_value': prob_value,
+                'x_value': x_value,
+                'x_low': x_low,
+                'x_high': x_high,
+            }
+        }
+        return self._record(result['title'], result, recipe=recipe)
+
     def panel_graph(self,source_recipe,by_indices,shared_x=True,shared_y=True,source_appearance=None):
         from .panel_graphs import build_panels,validate_parameters
         from .compositions import validate_appearance,apply_panel_appearance
@@ -7030,6 +7060,9 @@ def format_entry(entry):
     result = entry["result"]
     if isinstance(result, dict) and (result.get('analysis') == 'bootstrap_uncertainty' or 'bootstrap_report' in result):
         return title + result.get('text', '')
+    if isinstance(result, dict) and (result.get('analysis') == 'probability_distribution' or result.get('graph') == 'probability_distribution'):
+        from .prob_dist_report import format_probability_distribution_report
+        return title + format_probability_distribution_report(result)
     if isinstance(result, dict) and result.get('analysis') == 'covariance':
         from .covariance_report import format_covariance_report
         return title + format_covariance_report(result)
