@@ -1124,6 +1124,9 @@ class ModernWindow(QMainWindow):
         self._action(file, "Export to Word…", self.send_output_to_word)
         self._action(file, "Export to PowerPoint…", self.send_output_to_powerpoint)
         file.addSeparator()
+        self._action(file, "Export Session as Clean &HTML Report…", self.export_session_html_dialog, None, "export")
+        self._action(file, "Export Anonymized Dataset (Clean for &Audit)…", self.anonymize_dataset_dialog, None, "export")
+        file.addSeparator()
         self._action(file, "Page Setup…", lambda: self._printing().page_setup())
         self._action(file, "Print Preview…", lambda: self._printing().run("preview"))
         self._action(file, "Export PDF…", lambda: self._printing().run("pdf"))
@@ -1141,6 +1144,7 @@ class ModernWindow(QMainWindow):
         self.cut_action = self._action(edit, "Cut Cells", self.cut_cells, QKeySequence.StandardKey.Cut, "cut")
         self.copy_action = self._action(edit, "Copy Cells", self.copy_cells, QKeySequence.StandardKey.Copy, "copy")
         self._action(edit, "Copy &R Script for Active Output\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
+        self._action(edit, "Copy Chart as &SVG (Crisp Vector)\tCtrl+Alt+S", self.copy_active_chart_svg, "Ctrl+Alt+S", "copy")
         self.paste_action = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
         edit.addSeparator()
         self._action(edit, "Select All Cells in Worksheet", self.table.selectAll, QKeySequence.StandardKey.SelectAll)
@@ -1570,11 +1574,15 @@ class ModernWindow(QMainWindow):
         self._action(assistant, "Capability Analysis…", self.capability, None, None, True)
         self._action(assistant, "DOE (Factorial Design)…", self.create_factorial, None, "doe", True)
         self._action(assistant, "Control Charts (I-MR)…", self.imr_dialog, None, None, True)
+        assistant.addSeparator()
+        self._action(assistant, "Pre-Flight &Data Doctor (Sanity Audit)…", self.run_data_doctor_dialog, None, None, True)
+        self._action(assistant, "&Compare Two Analyses (Model Diff)…", self.compare_runs_dialog, None, None, True)
 
         # 10. Help menu (Always final menu on desktop menubar)
         help_menu = bar.addMenu("&Help")
         self.help_action = self._action(help_menu, "Help", self.about, QKeySequence.StandardKey.HelpContents, "help")
         help_menu.addSeparator()
+        self._action(help_menu, "Verify &Air-Gapped & Offline Integrity…", self.verify_airgap_dialog, None, "shield")
         self._action(help_menu, "Check for &Updates…", self.check_for_updates_dialog, None, "update", True)
         self._action(help_menu, "About StatCraft", self.about)
 
@@ -5187,6 +5195,43 @@ class ModernWindow(QMainWindow):
             from .connect_hub import ConnectBridgeWidget
             bridge = ConnectBridgeWidget(self, entry, conn_dict)
             layout.addWidget(bridge)
+
+        # Automated Plain English Executive Summary
+        from .executive_summary import generate_executive_summary
+        brief_bullets = generate_executive_summary(entry, self.presenter.worksheet)
+        if brief_bullets:
+            brief_card = QFrame()
+            brief_card.setObjectName("executiveBriefCard")
+            brief_card.setStyleSheet("""
+                #executiveBriefCard {
+                    background: #F0FDF4;
+                    border: 1px solid #BBF7D0;
+                    border-left: 4px solid #16A34A;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    margin: 8px 0;
+                }
+            """)
+            b_layout = QVBoxLayout(brief_card)
+            b_layout.setContentsMargins(4, 4, 4, 4)
+            b_layout.setSpacing(4)
+            b_hdr = QHBoxLayout()
+            b_title = QLabel("EXECUTIVE BRIEF")
+            b_title.setStyleSheet("font-size: 10px; font-weight: 800; color: #166534; letter-spacing: 0.5px;")
+            b_hdr.addWidget(b_title)
+            b_hdr.addStretch()
+            b_copy = QToolButton()
+            b_copy.setText("📋 Copy Brief")
+            b_copy.setStyleSheet("font-size: 11px; padding: 2px 6px; color: #15803D;")
+            b_copy.clicked.connect(lambda checked=False, bullets=brief_bullets: self.copy_executive_brief(bullets))
+            b_hdr.addWidget(b_copy)
+            b_layout.addLayout(b_hdr)
+            for b in brief_bullets:
+                b_lbl = QLabel(f"• {b}")
+                b_lbl.setWordWrap(True)
+                b_lbl.setStyleSheet("color: #14532D; font-size: 12px; line-height: 1.4;")
+                b_layout.addWidget(b_lbl)
+            layout.addWidget(brief_card)
         rendered = set()
         if result.get("analysis") == "cross_correlation":
             layout.addWidget(label("Cross Correlations", "sectionHeading"))
@@ -5420,6 +5465,13 @@ class ModernWindow(QMainWindow):
             elif value: notes.append(str(value))
         if notes:
             layout.addWidget(label("Method Notes", "sectionHeading")); note = QPlainTextEdit(); note.setReadOnly(True); note.setPlainText("\n\n".join(notes)); note.setMinimumHeight(90); note.setMaximumHeight(210); layout.addWidget(note)
+
+        # Smart Next Steps Guidance Chips
+        from .guidance_chips import GuidanceChipsBar
+        chips_bar = GuidanceChipsBar(entry, self)
+        chips_bar.actionTriggered.connect(self._on_guidance_action_triggered)
+        layout.addWidget(chips_bar)
+
         layout.addStretch()
         stage_layout.addWidget(content); stage_layout.addStretch()
         scroll=OutputZoomView(stage); self.result_tabs.addTab(scroll, "Report")
@@ -5567,8 +5619,8 @@ class ModernWindow(QMainWindow):
                     from .acceptance_chart import AcceptanceControlChartWidget
                     chart = AcceptanceControlChartWidget(entry)
                 elif result.get('graph') == 'capability' or result.get('analysis') == 'capability' or 'observed_perf' in result:
-                    from .capability_chart import CapabilityPlotWidget
-                    chart = CapabilityPlotWidget(entry)
+                    from .capability_chart import CapabilityContainerWidget
+                    chart = CapabilityContainerWidget(entry)
                 elif result.get('graph') == 'imr_chart' or result.get('analysis') == 'imr_control':
                     from .imr_chart import IMRChartWidget
                     chart = IMRChartWidget(entry)
@@ -7780,7 +7832,7 @@ class ModernWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(script)
                 if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved Tidyverse R script to {path}", 5000)
+                    self.statusBar().showMessage(f"\u2713 Saved Tidyverse R script to {path}", 5000)
             except OSError as err:
                 QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
@@ -7793,64 +7845,22 @@ class ModernWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(script)
                 if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved Base R script to {path}", 5000)
+                    self.statusBar().showMessage(f"\u2713 Saved Base R script to {path}", 5000)
             except OSError as err:
-                QMessageBox.critical(self, "Export Error", f"Failed to save Base R script:\n{err}")
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
     def export_worksheet_vroom(self):
-        script = self._get_entry_vroom_script()
+        from .connect_r import generate_vroom_load_code
         ws = self.presenter.worksheet
+        script = generate_vroom_load_code(ws)
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws.name).strip("_")
-        path, _ = QFileDialog.getSaveFileName(self, "Export Worksheet with vroom/readxl", f"{clean}_vroom_ingest.R", "R Scripts (*.R *.r)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Worksheet Vroom Loader", f"{clean}_vroom.R", "R Scripts (*.R *.r)")
         if path:
             try:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(script)
                 if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved vroom ingestion script to {path}", 5000)
-            except OSError as err:
-                QMessageBox.critical(self, "Export Error", f"Failed to save script:\n{err}")
-
-    def copy_connected_r_script(self, entry=None):
-        script, title = self._get_entry_tidyverse_script(entry)
-        cb = QApplication.clipboard()
-        if cb is not None:
-            cb.setText(script)
-        if self.statusBar():
-            self.statusBar().showMessage(f"✓ Copied modern Tidyverse R script for '{title}' to clipboard!", 5000)
-
-    def copy_entry_r_script(self, entry=None):
-        script, title = self._get_entry_tidyverse_script(entry)
-        cb = QApplication.clipboard()
-        if cb is not None:
-            cb.setText(script)
-        if self.statusBar():
-            self.statusBar().showMessage(f"✓ Copied modern Tidyverse R script for '{title}' to clipboard!", 5000)
-
-    def view_entry_r_code(self, entry):
-        base_script, title = self._get_entry_r_script(entry)
-        tidy_script, _ = self._get_entry_tidyverse_script(entry)
-        vroom_script = self._get_entry_vroom_script()
-        from .connect_hub import ViewRCodeDialog
-        dlg = ViewRCodeDialog(
-            self,
-            r_script=base_script,
-            title=f"R Code: {title}",
-            tidyverse_script=tidy_script,
-            vroom_script=vroom_script,
-        )
-        dlg.exec()
-
-    def export_entry_r_file(self, entry):
-        script, title = self._get_entry_r_script(entry)
-        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
-        path, _ = QFileDialog.getSaveFileName(self, "Export R Script", f"{clean}_script.R", "R Scripts (*.R *.r)")
-        if path:
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(script)
-                if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved R script to {path}", 5000)
+                    self.statusBar().showMessage(f"\u2713 Saved vroom R script to {path}", 5000)
             except OSError as err:
                 QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
@@ -7865,9 +7875,184 @@ class ModernWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(script)
                 if self.statusBar():
-                    self.statusBar().showMessage(f"✓ Saved worksheet R script to {path}", 5000)
+                    self.statusBar().showMessage(f"\u2713 Saved worksheet R script to {path}", 5000)
             except OSError as err:
                 QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
+
+    def copy_connected_r_script(self, entry=None):
+        if entry is None and hasattr(self, "_active_entry"):
+            entry = self._active_entry
+        from .r_universal_translator import translate_analysis_to_r
+        ws = self.presenter.worksheet if hasattr(self, "presenter") else None
+        script = translate_analysis_to_r(entry, ws, dialect="tidyverse")
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage("\u2713 Copied connected Tidyverse R script to clipboard!", 5000)
+
+    def copy_entry_r_script(self, entry=None):
+        if entry is None and hasattr(self, "_active_entry"):
+            entry = self._active_entry
+        from .r_universal_translator import translate_analysis_to_r
+        ws = self.presenter.worksheet if hasattr(self, "presenter") else None
+        script = translate_analysis_to_r(entry, ws, dialect="base")
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage("\u2713 Copied Base R script to clipboard!", 5000)
+
+    def view_entry_r_code(self, entry):
+        from .r_viewer import RScriptViewerDialog
+        from .r_universal_translator import translate_analysis_to_r
+        ws = self.presenter.worksheet if hasattr(self, "presenter") else None
+        r_code = translate_analysis_to_r(entry, ws, dialect="tidyverse")
+        title = entry.title if entry and hasattr(entry, "title") else "Analysis"
+        dlg = RScriptViewerDialog(
+            r_code=r_code,
+            title=title,
+            dialect="Tidyverse / ggplot2",
+            parent=self,
+        )
+        dlg.exec()
+
+    def export_entry_r_file(self, entry):
+        from .r_universal_translator import translate_analysis_to_r
+        ws = self.presenter.worksheet if hasattr(self, "presenter") else None
+        script = translate_analysis_to_r(entry, ws, dialect="tidyverse")
+        title = entry.title if entry and hasattr(entry, "title") else "Analysis"
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Modern Tidyverse R Script", f"{clean}_tidyverse.R", "R Scripts (*.R *.r)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(script)
+                if self.statusBar():
+                    self.statusBar().showMessage(f"\u2713 Saved Tidyverse R script to {path}", 5000)
+            except OSError as err:
+                QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
+
+    def copy_executive_brief(self, bullets):
+        text = "\n".join(f"• {b}" for b in bullets)
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(text)
+        if self.statusBar():
+            self.statusBar().showMessage("\u2713 Copied executive brief to clipboard!", 5000)
+
+    def _on_guidance_action_triggered(self, action_name, entry):
+        if action_name == "johnson_transformation":
+            if hasattr(self, "johnson_transformation"): self.johnson_transformation()
+        elif action_name == "capability_nonparametric":
+            if hasattr(self, "capability_nonparametric"): self.capability_nonparametric()
+        elif action_name == "tukey_comparisons":
+            if hasattr(self, "oneway_anova"): self.oneway_anova()
+        elif action_name == "stepwise_regression":
+            if hasattr(self, "stepwise_regression"): self.stepwise_regression()
+        elif action_name == "residual_plots":
+            if hasattr(self, "multiple_regression"): self.multiple_regression()
+        elif action_name == "what_if_tolerance":
+            if hasattr(self, "capability"): self.capability()
+        elif action_name == "fishbone_diagram":
+            if hasattr(self, "cause_and_effect"): self.cause_and_effect()
+
+    def run_data_doctor_dialog(self):
+        from .data_doctor import audit_worksheet, autofix_worksheet_issues
+        report = audit_worksheet(self.presenter.worksheet)
+        if not report.has_warnings:
+            QMessageBox.information(self, "Data Health Doctor", f"Worksheet '{report.worksheet_name}' is healthy!\nZero factor defects or numerical anomalies detected.")
+            return
+        msg = f"{report.summary_text}\n\n"
+        for i in report.issues[:8]:
+            msg += f"• [{i.severity.upper()}] {i.column_name}: {i.message}\n"
+
+        if any(i.can_autofix for i in report.issues):
+            reply = QMessageBox.warning(
+                self,
+                "Pre-Flight Data Doctor",
+                f"{msg}\nWould you like StatCraft to automatically trim leading/trailing whitespace and sanitize string sentinels?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                fixes = autofix_worksheet_issues(self.presenter.worksheet)
+                self.refresh()
+                QMessageBox.information(self, "Data Doctor Fixed", f"Applied {fixes} automated factor sanitization fixes.")
+        else:
+            QMessageBox.warning(self, "Pre-Flight Data Doctor", msg)
+
+    def anonymize_dataset_dialog(self):
+        from .anonymizer import anonymize_worksheet
+        reply = QMessageBox.question(
+            self,
+            "Clean for Audit (Anonymize Dataset)",
+            f"Create an anonymized copy of worksheet '{self.presenter.worksheet.name}' with masked operator/batch IDs safe for external auditors?\n\n(Statistical distributions, correlations, and ANOVA results will be mathematically preserved).",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            anon_ws = anonymize_worksheet(self.presenter.worksheet, mask_numeric=False)
+            if self.presenter.native_project is not None:
+                self.presenter.native_project.worksheets.append(anon_ws)
+                self.presenter.select_worksheet(len(self.presenter.native_project.worksheets) - 1)
+            else:
+                self.presenter.worksheet = anon_ws
+            self.refresh()
+            if self.statusBar():
+                self.statusBar().showMessage(f"\u2713 Created sanitized audit worksheet: '{anon_ws.name}'", 5000)
+
+    def compare_runs_dialog(self):
+        if len(self.presenter.history) < 2:
+            QMessageBox.information(self, "Compare Two Analyses", "At least two analyses must be present in session history to compare.")
+            return
+        from .run_comparator import compare_runs
+        run_a = self.presenter.history[-2]
+        run_b = self.presenter.history[-1]
+        diff = compare_runs(run_a, run_b)
+
+        msg = f"Model Comparison:\nRun 1: {diff['title_a']}\nRun 2: {diff['title_b']}\n\n"
+        msg += f"Verdict: {diff['verdict']}\n\nKey Metric Deltas:\n"
+        for d in diff["deltas"][:8]:
+            d_str = f"{d.delta:+.4f}" if d.delta is not None else "N/A"
+            status = " [IMPROVED]" if d.is_improved else (" [DEGRADED]" if d.is_improved is False else "")
+            msg += f"• {d.name}: {d.run_a_value} → {d.run_b_value} (Δ = {d_str}){status}\n"
+
+        QMessageBox.information(self, "Side-by-Side Model Comparison", msg)
+
+    def verify_airgap_dialog(self):
+        from .airgap_verifier import AirGapAuditDialog
+        dlg = AirGapAuditDialog(self)
+        dlg.exec()
+
+    def copy_active_chart_svg(self):
+        chart = getattr(self, "_active_chart_widget", None) or getattr(self, "_active_graph_frame", None)
+        if chart is not None:
+            from .svg_html_export import copy_widget_svg_to_clipboard
+            if copy_widget_svg_to_clipboard(chart):
+                if self.statusBar():
+                    self.statusBar().showMessage("\u2713 Copied lossless scalable vector graphic (SVG) to clipboard!", 5000)
+
+    def export_session_html_dialog(self):
+        from .svg_html_export import export_session_to_html
+        ws_name = self.presenter.worksheet.name if hasattr(self.presenter, "worksheet") else "StatCraft Session"
+        clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws_name).strip("_")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Session Report as Clean HTML", f"{clean}_report.html", "HTML Files (*.html *.htm)")
+        if path:
+            export_session_to_html(self.presenter.history, worksheet_name=ws_name, output_path=path)
+            if self.statusBar():
+                self.statusBar().showMessage(f"\u2713 Saved standalone HTML report to {path}", 5000)
+
+    def sync_table_selection_to_charts(self):
+        """Propagate selected worksheet rows to all active chart widgets for live brush-and-link."""
+        if not hasattr(self, "table") or not self.table.selectionModel():
+            return
+        selected_indexes = self.table.selectionModel().selectedRows()
+        if not selected_indexes:
+            return
+        row_numbers = [idx.row() + 1 + self.page * self.PAGE_SIZE for idx in selected_indexes]
+        chart = getattr(self, "_active_chart_widget", None)
+        if chart is not None and hasattr(chart, "brushed_rows"):
+            chart.brushed_rows = set(row_numbers)
+            chart.update()
 
 def main():
     sandbox_mode = "--sandbox" in sys.argv

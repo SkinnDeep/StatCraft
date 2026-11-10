@@ -7,7 +7,7 @@ from scipy.stats import norm
 
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QDoubleSpinBox, QPushButton, QSlider
 
 
 def _ci_text(bounds):
@@ -45,7 +45,26 @@ class CapabilityPlotWidget(QWidget):
         self.entry = entry
         self.error = None
         self.panels = []
+        self.override_lsl: Optional[float] = None
+        self.override_usl: Optional[float] = None
+        self.drift_pct: float = 0.0
         self.setMinimumSize(780, 520)
+
+    @property
+    def is_simulation_active(self) -> bool:
+        return (self.override_lsl is not None or self.override_usl is not None or abs(self.drift_pct) > 1e-6)
+
+    def set_simulation(self, override_lsl=None, override_usl=None, drift_pct=0.0):
+        self.override_lsl = override_lsl
+        self.override_usl = override_usl
+        self.drift_pct = float(drift_pct)
+        self.update()
+
+    def reset_simulation(self):
+        self.override_lsl = None
+        self.override_usl = None
+        self.drift_pct = 0.0
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -66,17 +85,44 @@ class CapabilityPlotWidget(QWidget):
         if not obs:
             return
 
-        lsl = res.get("lsl")
-        usl = res.get("usl")
+        lsl = self.override_lsl if self.override_lsl is not None else res.get("lsl")
+        usl = self.override_usl if self.override_usl is not None else res.get("usl")
         target = res.get("target")
         mean = res.get("mean", 0.0)
-        sd_within = res.get("stdev_within", 1.0)
-        sd_bw = res.get("stdev_between_within", sd_within) if is_bw else sd_within
-        sd_overall = res.get("stdev_overall", 1.0)
+        drift_mult = 1.0 + (self.drift_pct / 100.0)
+        sd_within = res.get("stdev_within", 1.0) * drift_mult
+        sd_bw = (res.get("stdev_between_within", sd_within) if is_bw else sd_within) * drift_mult
+        sd_overall = res.get("stdev_overall", 1.0) * drift_mult
         n_obs = res.get("sample_n", len(obs))
         stats_type = res.get("stats_type", "capability")
         include_ci = res.get("include_ci", False)
         unit = "%" if res.get("display_unit", "ppm").lower() == "percent" else "PPM"
+
+        render_res = dict(res)
+        if self.is_simulation_active:
+            render_res["lsl"] = lsl
+            render_res["usl"] = usl
+            render_res["stdev_within"] = sd_within
+            render_res["stdev_overall"] = sd_overall
+            if lsl is not None and usl is not None and sd_within > 0:
+                render_res["cp"] = (usl - lsl) / (6.0 * sd_within)
+            else:
+                render_res["cp"] = None
+            sim_cpl = (mean - lsl) / (3.0 * sd_within) if (lsl is not None and sd_within > 0) else None
+            sim_cpu = (usl - mean) / (3.0 * sd_within) if (usl is not None and sd_within > 0) else None
+            render_res["cpl"] = sim_cpl
+            render_res["cpu"] = sim_cpu
+            render_res["cpk"] = min(sim_cpl, sim_cpu) if (sim_cpl is not None and sim_cpu is not None) else (sim_cpl if sim_cpl is not None else sim_cpu)
+
+            if lsl is not None and usl is not None and sd_overall > 0:
+                render_res["pp"] = (usl - lsl) / (6.0 * sd_overall)
+            else:
+                render_res["pp"] = None
+            sim_ppl = (mean - lsl) / (3.0 * sd_overall) if (lsl is not None and sd_overall > 0) else None
+            sim_ppu = (usl - mean) / (3.0 * sd_overall) if (usl is not None and sd_overall > 0) else None
+            render_res["ppl"] = sim_ppl
+            render_res["ppu"] = sim_ppu
+            render_res["ppk"] = min(sim_ppl, sim_ppu) if (sim_ppl is not None and sim_ppu is not None) else (sim_ppl if sim_ppl is not None else sim_ppu)
 
         # Overall dimensions
         w = rect.width()
@@ -86,6 +132,14 @@ class CapabilityPlotWidget(QWidget):
         painter.setPen(QColor("#111827"))
         painter.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         painter.drawText(QRectF(20, 8, w - 40, 26), Qt.AlignmentFlag.AlignCenter, title)
+
+        if self.is_simulation_active:
+            painter.setPen(QColor("#B45309"))
+            painter.setBrush(QBrush(QColor("#FEF3C7")))
+            sim_badge = QRectF(w - 230, 8, 210, 22)
+            painter.drawRoundedRect(sim_badge, 4, 4)
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            painter.drawText(sim_badge, Qt.AlignmentFlag.AlignCenter, "⚡ LIVE WHAT-IF SIMULATION")
 
         # Layout partitioning
         left_box_w = 150
@@ -103,12 +157,12 @@ class CapabilityPlotWidget(QWidget):
         plot_h = plot_bottom - plot_top
 
         # Draw 1: Process Data Box (Left)
-        self._draw_process_data_box(painter, margin, top, left_box_w, bottom - top, res, is_bw)
+        self._draw_process_data_box(painter, margin, top, left_box_w, bottom - top, render_res, is_bw)
 
         # Draw 2: Overall & Within Capability Boxes (Right)
         cap_h = (bottom - top - 10) / 2
-        self._draw_overall_capability_box(painter, w - right_box_w - margin, top, right_box_w, cap_h, res)
-        self._draw_within_capability_box(painter, w - right_box_w - margin, top + cap_h + 10, right_box_w, cap_h, res, is_bw)
+        self._draw_overall_capability_box(painter, w - right_box_w - margin, top, right_box_w, cap_h, render_res)
+        self._draw_within_capability_box(painter, w - right_box_w - margin, top + cap_h + 10, right_box_w, cap_h, render_res, is_bw)
 
         # Draw 3: Performance Box (Bottom)
         self._draw_performance_box(painter, margin, bottom + 5, w - 2 * margin, bottom_box_h, res, unit, stats_type, is_bw)
@@ -417,3 +471,111 @@ class CapabilityPlotWidget(QWidget):
         painter.drawLine(QPointF(leg_x, leg_y + 22), QPointF(leg_x + 24, leg_y + 22))
         painter.setPen(QColor("#111827"))
         painter.drawText(QRectF(leg_x + 30, leg_y + 16, leg_w, 16), Qt.AlignmentFlag.AlignLeft, "Overall")
+
+
+class CapabilityWhatIfStrip(QFrame):
+    """Collapsible live What-If Spec & Tolerance Simulation Bar."""
+
+    def __init__(self, plot_widget: CapabilityPlotWidget, parent=None):
+        super().__init__(parent)
+        self.plot_widget = plot_widget
+        self.setObjectName("capabilityWhatIfStrip")
+        self.setStyleSheet("""
+            #capabilityWhatIfStrip {
+                background: #F8FAFC;
+                border-top: 1px solid #E2E8F0;
+                border-radius: 0 0 8px 8px;
+                padding: 6px;
+            }
+        """)
+
+        res = plot_widget.entry.get("result", {})
+        self.orig_lsl = res.get("lsl")
+        self.orig_usl = res.get("usl")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setSpacing(12)
+
+        title_lbl = QLabel("⚡ Live What-If Sliders:")
+        title_lbl.setStyleSheet("font-weight: bold; color: #0284C7; font-size: 11px;")
+        layout.addWidget(title_lbl)
+
+        # LSL Control
+        layout.addWidget(QLabel("LSL:"))
+        self.lsl_spin = QDoubleSpinBox()
+        self.lsl_spin.setRange(-1e9, 1e9)
+        self.lsl_spin.setDecimals(3)
+        self.lsl_spin.setValue(self.orig_lsl if self.orig_lsl is not None else -10.0)
+        self.lsl_spin.valueChanged.connect(self._on_values_changed)
+        layout.addWidget(self.lsl_spin)
+
+        # USL Control
+        layout.addWidget(QLabel("USL:"))
+        self.usl_spin = QDoubleSpinBox()
+        self.usl_spin.setRange(-1e9, 1e9)
+        self.usl_spin.setDecimals(3)
+        self.usl_spin.setValue(self.orig_usl if self.orig_usl is not None else 10.0)
+        self.usl_spin.valueChanged.connect(self._on_values_changed)
+        layout.addWidget(self.usl_spin)
+
+        # StDev Drift Dial
+        layout.addWidget(QLabel("StDev Shift (%):"))
+        self.drift_spin = QDoubleSpinBox()
+        self.drift_spin.setRange(-50.0, 100.0)
+        self.drift_spin.setSuffix("%")
+        self.drift_spin.setValue(0.0)
+        self.drift_spin.valueChanged.connect(self._on_values_changed)
+        layout.addWidget(self.drift_spin)
+
+        # Reset button
+        self.reset_btn = QPushButton("Reset to Actual")
+        self.reset_btn.setStyleSheet("font-size: 11px; padding: 2px 8px;")
+        self.reset_btn.clicked.connect(self._on_reset)
+        layout.addWidget(self.reset_btn)
+
+        layout.addStretch()
+
+    def _on_values_changed(self):
+        lsl_val = self.lsl_spin.value() if self.orig_lsl is not None else None
+        usl_val = self.usl_spin.value() if self.orig_usl is not None else None
+        drift = self.drift_spin.value()
+        self.plot_widget.set_simulation(override_lsl=lsl_val, override_usl=usl_val, drift_pct=drift)
+
+    def _on_reset(self):
+        if self.orig_lsl is not None:
+            self.lsl_spin.setValue(self.orig_lsl)
+        if self.orig_usl is not None:
+            self.usl_spin.setValue(self.orig_usl)
+        self.drift_spin.setValue(0.0)
+        self.plot_widget.reset_simulation()
+
+
+class CapabilityContainerWidget(QWidget):
+    """Container holding CapabilityPlotWidget with live What-If Simulation strip."""
+
+    def __init__(self, entry: Dict[str, Any], parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.plot = CapabilityPlotWidget(entry, self)
+        layout.addWidget(self.plot, 1)
+
+        self.strip = CapabilityWhatIfStrip(self.plot, self)
+        layout.addWidget(self.strip, 0)
+
+    # Proxy signals and methods
+    @property
+    def objectSelected(self):
+        return self.plot.objectSelected
+
+    @property
+    def objectActivated(self):
+        return self.plot.objectActivated
+
+    @property
+    def brushRowsSelected(self):
+        return self.plot.brushRowsSelected
+

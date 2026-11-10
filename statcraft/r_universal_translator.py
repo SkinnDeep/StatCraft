@@ -605,3 +605,12 @@ def translate_entry_to_r(entry: Dict[str, Any], worksheet: Worksheet) -> Tuple[s
     base_script = "\n".join(base_hdr + b_body)
     tidy_script = "\n".join(tidy_hdr + t_body)
     return base_script, tidy_script, title
+
+
+def translate_analysis_to_r(entry: Any, worksheet: Any, dialect: str = "tidyverse") -> str:
+    """Convenience helper returning the standalone R script string for the chosen dialect."""
+    base_script, tidy_script, _ = translate_entry_to_r(entry, worksheet)
+    if str(dialect).lower().startswith("base"):
+        return base_script
+    return tidy_script
+

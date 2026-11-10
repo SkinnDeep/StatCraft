@@ -1,0 +1,184 @@
+"""SVG and Clean Standalone HTML Report Exporter for StatCraft.
+
+Provides:
+1. Direct lossless vector SVG rendering to clipboard and disk via QSvgGenerator.
+2. Single-file, zero-dependency standalone HTML5 session report generation with embedded styling.
+"""
+from __future__ import annotations
+
+import html
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from pathlib import Path
+
+from PySide6.QtCore import QBuffer, QByteArray, QMimeData, QRectF
+from PySide6.QtGui import QPainter
+from PySide6.QtSvg import QSvgGenerator
+from PySide6.QtWidgets import QApplication, QWidget
+
+from .executive_summary import generate_executive_summary
+
+
+def export_widget_to_svg_bytes(widget: QWidget) -> bytes:
+    """Render any QWidget vector chart directly to SVG bytes in memory."""
+    buf = QBuffer()
+    buf.open(QBuffer.OpenModeFlag.WriteOnly)
+
+    generator = QSvgGenerator()
+    generator.setOutputDevice(buf)
+    w_size = widget.size()
+    if w_size.width() <= 0 or w_size.height() <= 0:
+        w_size = widget.minimumSizeHint()
+    generator.setSize(w_size)
+    generator.setViewBox(widget.rect())
+    generator.setTitle("StatCraft Vector Plot")
+    generator.setDescription("Rendered by StatCraft Desktop")
+
+    from PySide6.QtCore import QPoint
+    painter = QPainter(generator)
+    widget.render(painter, QPoint(0, 0))
+    painter.end()
+    del painter
+
+    return bytes(buf.data())
+
+
+def copy_widget_svg_to_clipboard(widget: QWidget) -> bool:
+    """Render widget as crisp SVG vector graphics and copy to system clipboard."""
+    svg_bytes = export_widget_to_svg_bytes(widget)
+    mime = QMimeData()
+    mime.setData("image/svg+xml", QByteArray(svg_bytes))
+    mime.setText(svg_bytes.decode("utf-8", errors="replace"))
+
+    cb = QApplication.clipboard()
+    if cb is not None:
+        cb.setMimeData(mime)
+        return True
+    return False
+
+
+def export_session_to_html(
+    history: List[Dict[str, Any]],
+    worksheet_name: str = "Active Worksheet",
+    output_path: Optional[str] = None
+) -> str:
+    """Export complete session log into a clean, zero-dependency standalone HTML5 report."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cards_html = []
+    for idx, entry in enumerate(history, 1):
+        title = html.escape(entry.get("title", f"Analysis {idx}"))
+        result = entry.get("result", {})
+        analysis = html.escape(str(result.get("analysis", "Procedure")))
+
+        # Executive summary
+        bullets = generate_executive_summary(entry)
+        brief_html = ""
+        if bullets:
+            b_items = "".join(f"<li style='margin-bottom: 4px;'>{html.escape(b)}</li>" for b in bullets)
+            brief_html = f"""
+            <div style="background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 4px; padding: 10px 14px; margin: 12px 0;">
+                <div style="font-weight: 700; color: #166534; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;">Executive Brief</div>
+                <ul style="margin: 0; padding-left: 18px; color: #14532d; font-size: 13px; line-height: 1.5;">
+                    {b_items}
+                </ul>
+            </div>
+            """
+
+        # Result tables / metrics
+        metrics_html = ""
+        metrics = []
+        for k, v in result.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                metrics.append((k.replace("_", " ").title(), f"{v:.4f}" if isinstance(v, float) else str(v)))
+
+        if metrics:
+            m_rows = "".join(f"<tr><td style='padding: 6px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 500;'>{html.escape(k)}</td><td style='padding: 6px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace;'>{html.escape(v)}</td></tr>" for k, v in metrics[:12])
+            metrics_html = f"""
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; background: #fafafa; border-radius: 6px;">
+                <thead>
+                    <tr style="background: #f1f5f9; color: #475569; text-align: left;">
+                        <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1;">Metric</th>
+                        <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; text-align: right;">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {m_rows}
+                </tbody>
+            </table>
+            """
+
+        cards_html.append(f"""
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 16px; color: #0f172a;">{title}</h3>
+                <span style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 12px; font-weight: 600;">{analysis}</span>
+            </div>
+            {brief_html}
+            {metrics_html}
+        </div>
+        """)
+
+    body_content = "\n".join(cards_html) if cards_html else "<p style='color: #64748b;'>No session analyses recorded.</p>"
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StatCraft Session Report — {html.escape(worksheet_name)}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            margin: 0;
+            padding: 32px 16px;
+        }}
+        .container {{
+            max-width: 880px;
+            margin: 0 auto;
+        }}
+        header {{
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e2e8f0;
+        }}
+        h1 {{
+            font-size: 24px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0 0 6px 0;
+        }}
+        .meta {{
+            font-size: 12px;
+            color: #64748b;
+        }}
+        footer {{
+            margin-top: 40px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>StatCraft Statistical Session Report</h1>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v114.0.0</div>
+        </header>
+        <main>
+            {body_content}
+        </main>
+        <footer>
+            Generated locally by StatCraft · 100% Offline & Private Quality Engineering
+        </footer>
+    </div>
+</body>
+</html>"""
+
+    if output_path:
+        Path(output_path).write_text(html_doc, encoding="utf-8")
+
+    return html_doc
