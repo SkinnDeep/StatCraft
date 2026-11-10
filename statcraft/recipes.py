@@ -197,6 +197,7 @@ FIELDS = {
     'treenet_gbm': {'response_index', 'predictor_indices', 'task', 'n_trees', 'learning_rate', 'max_depth', 'subsample', 'loss', 'validation_fraction', 'seed'},
     'mars_regression': {'response_index', 'predictor_indices', 'task', 'max_terms', 'max_degree', 'penalty'},
     'discover_best_model': {'response_index', 'predictor_indices', 'task', 'validation_fraction', 'seed'},
+    'monte_carlo_simulation': {'inputs', 'formula', 'lsl', 'usl', 'n_sims', 'seed'},
 }
 
 
@@ -235,7 +236,7 @@ def columns(recipe):
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
     if action == 'probability_distribution_plot':
         return []
-    if action == 'extended_power':
+    if action in ('extended_power', 'monte_carlo_simulation'):
         return []
     _p3_col_keys = {
         'bootstrap_1sample': (('index',), ()),

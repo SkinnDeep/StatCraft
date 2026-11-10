@@ -4220,6 +4220,13 @@ class Presenter:
         recipe = {"action": "discover_best_model", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
         return self._record(f"Discover Best Model ({res['task'].title()}): {res['response']}", res, recipe=recipe)
 
+    def monte_carlo_simulation(self, inputs, formula, lsl=None, usl=None, n_sims=10000, seed=42):
+        from .monte_carlo import monte_carlo_simulation as _fn, parse_input_specs
+        parsed = parse_input_specs(inputs) if isinstance(inputs, str) else list(inputs)
+        res = _fn(parsed, formula, lsl=lsl, usl=usl, n_sims=int(n_sims), seed=int(seed))
+        recipe = {"action": "monte_carlo_simulation", "parameters": {"inputs": parsed, "formula": formula, "lsl": lsl, "usl": usl, "n_sims": int(n_sims), "seed": int(seed)}}
+        return self._record(f"Monte Carlo Simulation ({res['n_sims']:,} runs)", res, recipe=recipe)
+
     def cross_tabulation(self, settings=None):
         settings = self._bound_settings("cross_tabulation", settings)
         import copy
@@ -7529,6 +7536,7 @@ def format_entry(entry):
             'treenet_gbm': ('.predictive_ml', 'format_predictive_ml_report'),
             'mars_regression': ('.predictive_ml', 'format_predictive_ml_report'),
             'discover_best_model': ('.predictive_ml', 'format_predictive_ml_report'),
+            'monte_carlo_simulation': ('.monte_carlo', 'format_monte_carlo_report'),
         }
         _p3_key = result.get('analysis')
         if _p3_key in _p3_formatters:

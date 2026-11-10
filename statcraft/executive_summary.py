@@ -107,7 +107,58 @@ def generate_executive_summary(entry: Dict[str, Any], worksheet: Optional[Worksh
             bullets.append("Process demonstrates stable statistical control with zero Nelson rule alarms triggered.")
             bullets.append("All observed variations are attributable to common-cause noise within 3-sigma control limits.")
 
-    # 6. UNIVERSAL FALLBACK FOR OTHER OUTPUTS
+    # 6. PREDICTIVE ML & DISCOVER BEST MODEL
+    elif analysis in ("random_forest", "treenet_gbm", "mars_regression", "discover_best_model"):
+        if analysis == "discover_best_model":
+            bullets.append(f"AutoML Champion Model: {result.get('champion_model')} ranked #1 across {len(result.get('leaderboard', []))} candidate architectures.")
+            top = (result.get("leaderboard") or [{}])[0]
+            if result.get("task") == "regression" and "val_r2" in top:
+                bullets.append(f"Champion holdout validation performance: R² = {top['val_r2']*100:.1f}%, RMSE = {top['val_rmse']:.4g}.")
+            elif "val_accuracy" in top:
+                bullets.append(f"Champion holdout validation accuracy: {top['val_accuracy']*100:.1f}%.")
+        else:
+            top_imp = (result.get("variable_importance") or [{}])[0].get("predictor")
+            if analysis == "random_forest":
+                om = result.get("oob_metrics", {})
+                stat_txt = f"OOB R² = {om['r2']*100:.1f}%" if result.get("task") == "regression" and "r2" in om else f"OOB Accuracy = {om.get('accuracy', 0)*100:.1f}%"
+                bullets.append(f"Random Forests ({result.get('n_trees')} trees) achieved {stat_txt}.")
+            elif analysis == "treenet_gbm":
+                vm = result.get("val_metrics", {})
+                stat_txt = f"Validation R² = {vm['r2']*100:.1f}%" if result.get("task") == "regression" and "r2" in vm else f"Validation Accuracy = {vm.get('accuracy', 0)*100:.1f}%"
+                bullets.append(f"TreeNet reached {stat_txt} at optimal tree count {result.get('optimal_trees')}.")
+            else:
+                mm = result.get("metrics", {})
+                stat_txt = f"GCV R² = {mm.get('gcv_r2', 0)*100:.1f}%" if result.get("task") == "regression" else f"Accuracy = {mm.get('accuracy', 0)*100:.1f}%"
+                bullets.append(f"MARS selected {result.get('n_basis_terms')} spline basis terms with {stat_txt}.")
+            if top_imp:
+                bullets.append(f"Strongest predictive driver in the model: '{top_imp}' (100% relative importance).")
+
+    # 7. SIX SIGMA, REML, SURVIVAL & MONTE CARLO
+    elif analysis == "six_sigma_process_report":
+        bullets.append(f"Estimated short-term Sigma Level is {result.get('sigma_level_est', 0):.2f}σ (Z-bench LT = {result.get('z_bench_lt', 0):.2f}, Expected LT DPMO = {result.get('dpmo_expected_lt', 0):,.0f}).")
+        cpk = result.get("cpk")
+        if cpk is not None:
+            bullets.append(f"Process Cpk = {cpk:.2f} ({'meets >= 1.33 benchmark' if cpk >= 1.33 else 'below 1.33 target; centering or variation reduction advised'}).")
+    elif analysis == "six_sigma_product_report":
+        bullets.append(f"Rolled Throughput Yield (RTY) across {result.get('steps')} steps is {result.get('rty_pct', 0):.2f}% ({result.get('dpmo_total', 0):,.0f} DPMO, {result.get('equivalent_sigma_level', 0):.2f}σ equivalent).")
+    elif analysis == "mixed_reml":
+        vcs = result.get("variance_components") or []
+        top_vc = max(vcs, key=lambda v: v.get("pct_total", 0), default={})
+        bullets.append(f"REML Mixed Model fitted ({result.get('n')} observations); dominant variance source is '{top_vc.get('source', 'Error')}' ({top_vc.get('pct_total', 0):.1f}% of total variance).")
+    elif analysis == "cox_ph_regression":
+        bullets.append(f"Cox PH fitted ({result.get('events')} events / {result.get('n')} subjects) with Harrell's Concordance = {result.get('concordance', 0):.3f} and LR test p = {result.get('lr_p_value', 1):.4f}.")
+    elif analysis == "warranty_analysis":
+        fc = (result.get("forecasts") or [{}])[-1]
+        bullets.append(f"Weibull warranty fit shape β = {result.get('weibull_shape', 0):.2f}; projected total cumulative claims at horizon = {fc.get('expected_total_claims', 0):.1f}.")
+    elif analysis == "monte_carlo_simulation":
+        cap = result.get("capability", {})
+        s = result.get("summary", {})
+        bullets.append(f"Monte Carlo ({result.get('n_sims', 0):,} runs) projected Mean = {s.get('mean', 0):.4g}, SD = {s.get('stdev', 0):.4g}, Out-of-Spec = {cap.get('pct_out_of_spec', 0):.2f}% ({cap.get('dpmo', 0):,.0f} DPMO).")
+        sens = result.get("sensitivity") or []
+        if sens:
+            bullets.append(f"Primary variance driver: '{sens[0]['input']}' accounts for {sens[0]['variance_contribution_pct']:.1f}% of simulated output sensitivity.")
+
+    # 8. UNIVERSAL FALLBACK FOR OTHER OUTPUTS
     else:
         bullets.append(f"StatCraft completed evaluation for '{title}'.")
         if "sample_size" in result or "n" in result:

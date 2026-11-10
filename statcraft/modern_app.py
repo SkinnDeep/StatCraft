@@ -1471,6 +1471,8 @@ class ModernWindow(QMainWindow):
         six_sigma_menu = quality.addMenu("Six &Sigma Quality")
         self._action(six_sigma_menu, "Six Sigma &Process Report…", self.six_sigma_process_dialog, None, "capability", True)
         self._action(six_sigma_menu, "Six Sigma &Product Report (RTY)…", self.six_sigma_product_dialog, None, "table", True)
+        six_sigma_menu.addSeparator()
+        self._action(six_sigma_menu, "&Monte Carlo Process Simulation…", self.monte_carlo_dialog, None, "chart", True)
 
         # 5b. Reliability/Survival menu
         reliability = stat.addMenu("&Reliability/Survival")
@@ -1663,6 +1665,7 @@ class ModernWindow(QMainWindow):
         assistant.addSeparator()
         self._action(assistant, "Pre-Flight &Data Doctor (Sanity Audit)…", self.run_data_doctor_dialog, None, None, True)
         self._action(assistant, "&Compare Two Analyses (Model Diff)…", self.compare_runs_dialog, None, None, True)
+        self._action(assistant, "&Monte Carlo Process Simulation…", self.monte_carlo_dialog, None, "chart", True)
 
         # 10. Help menu (Always final menu on desktop menubar)
         help_menu = bar.addMenu("&Help")
@@ -5240,6 +5243,24 @@ class ModernWindow(QMainWindow):
             target = getattr(self, dlg.chosen_method, None)
             if callable(target):
                 target(*dlg.chosen_args)
+
+    def monte_carlo_dialog(self):
+        self._dialog(
+            "Monte Carlo Process & Tolerance Simulation",
+            [],
+            [
+                {"key": "inputs", "label": "Inputs (Name: Dist(params); ...)", "default": "X1: Normal(10, 0.4); X2: Uniform(4.5, 5.5)"},
+                {"key": "formula", "label": "Transfer equation Y =", "default": "X1 + 2 * X2"},
+                numeric("lsl", "Lower specification limit (LSL)", 18.0, optional=True),
+                numeric("usl", "Upper specification limit (USL)", 22.0, optional=True),
+                numeric("n_sims", "Simulation iterations", 10000, integer=True),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.monte_carlo_simulation(
+                p["inputs"], p["formula"], p.get("lsl"), p.get("usl"), p["n_sims"], p["seed"],
+            ),
+            "Distributions: Normal(mu,sd), Uniform(a,b), Triangular(a,mode,b), Lognormal(mu,sd), Exponential(mean), Weibull(k,scale).",
+        )
 
     def cross_tabulation_dialog(self):
         from .tables_dialogs import CrossTabulationDialog
