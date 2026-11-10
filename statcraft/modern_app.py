@@ -4959,6 +4959,13 @@ class ModernWindow(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self._call(lambda: self.presenter.probability_distribution_plot(**dialog.settings()), result=True)
             return
+        if method == 'marginal':
+            self._commit_editor()
+            from .marginal_plot_dialog import MarginalPlotDialog
+            dialog = MarginalPlotDialog(self, self.presenter.worksheet)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self._call(lambda: self.presenter.marginal_plot(**dialog.settings()), result=True)
+            return
         if method not in ('scatter', 'histogram', 'boxplot'):
             self.expanded_graph_dialog(method); return
         if method == "scatter":
@@ -5657,6 +5664,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'attribute_gage' or result.get('graph') == 'attribute_gage':
                     from .attribute_gage_chart import AttributeGageChartWidget
                     chart = AttributeGageChartWidget(result)
+                elif result.get('analysis') == 'marginal_plot' or result.get('graph') == 'marginal_plot':
+                    from .marginal_plot_chart import MarginalPlotChartWidget
+                    chart = MarginalPlotChartWidget(entry)
                 elif result.get('analysis') == 'probability_distribution' or result.get('graph') == 'probability_distribution':
                     from .prob_dist_chart import ProbabilityDistributionChartWidget
                     chart = ProbabilityDistributionChartWidget(entry)

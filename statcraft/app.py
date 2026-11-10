@@ -610,6 +610,30 @@ class Presenter:
             'method':method,'indices':list(indices),'group_index':group_index,'bins':bins,
             'confidence':confidence,'distribution':distribution,'parameters':parameters}})
 
+    def marginal_plot(self, y_index, x_index, marginal_type='histogram', show_normal_curve=False, bins=12, title=None):
+        from .marginal_plot import compute_marginal_plot
+        result = compute_marginal_plot(
+            self.worksheet,
+            y_index=y_index,
+            x_index=x_index,
+            marginal_type=marginal_type,
+            show_normal_curve=show_normal_curve,
+            bins=bins,
+            title=title,
+        )
+        recipe = {
+            'action': 'marginal_plot',
+            'parameters': {
+                'y_index': y_index,
+                'x_index': x_index,
+                'marginal_type': marginal_type,
+                'show_normal_curve': show_normal_curve,
+                'bins': bins,
+                'title': title,
+            }
+        }
+        return self._record(result['title'], result, recipe=recipe)
+
     def probability_distribution_plot(self, distribution='Normal', parameters=None, mode='single', shade_by='probability', tail='both', prob_value=0.05, x_value=None, x_low=None, x_high=None):
         from .prob_dist_plot import compute_probability_distribution_plot
         parameters = {} if parameters is None else parameters
@@ -7060,6 +7084,9 @@ def format_entry(entry):
     result = entry["result"]
     if isinstance(result, dict) and (result.get('analysis') == 'bootstrap_uncertainty' or 'bootstrap_report' in result):
         return title + result.get('text', '')
+    if isinstance(result, dict) and (result.get('analysis') == 'marginal_plot' or result.get('graph') == 'marginal_plot'):
+        from .marginal_plot_report import format_marginal_plot_report
+        return title + format_marginal_plot_report(result)
     if isinstance(result, dict) and (result.get('analysis') == 'probability_distribution' or result.get('graph') == 'probability_distribution'):
         from .prob_dist_report import format_probability_distribution_report
         return title + format_probability_distribution_report(result)
