@@ -26,6 +26,7 @@ from .model import finite_number
 
 
 _REFERENCE = re.compile(r'[cC]([1-9][0-9]*)(?:-([tTdD]))?')
+_RANGE_RE = re.compile(r'^[cC]([1-9][0-9]*)\s*[-–]\s*[cC]([1-9][0-9]*)$')
 _TOKENS = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[^\s\'\"]+')
 
 
@@ -61,6 +62,33 @@ def resolve_variables(text, worksheet, kinds=('number',)):
     position=0
     while position<len(tokens):
         token,quoted=tokens[position]; position+=1
+        if not quoted:
+            m_range = _RANGE_RE.match(token)
+            if not m_range and _REFERENCE.fullmatch(token) and position + 1 < len(tokens):
+                if tokens[position][0] in ('-', '–') and not tokens[position][1]:
+                    m_next = _REFERENCE.fullmatch(tokens[position + 1][0]) if not tokens[position + 1][1] else None
+                    if m_next:
+                        m_start = _REFERENCE.fullmatch(token)
+                        start = int(m_start.group(1)) - 1
+                        end = int(m_next.group(1)) - 1
+                        position += 2
+                        step = 1 if end >= start else -1
+                        for idx in range(start, end + step, step):
+                            if idx < 0 or idx >= len(worksheet.columns) or worksheet.columns[idx].kind not in kinds:
+                                raise ValueError(f"Choose an eligible column: C{idx+1}")
+                            if idx not in indices:
+                                indices.append(idx)
+                        continue
+            if m_range:
+                start = int(m_range.group(1)) - 1
+                end = int(m_range.group(2)) - 1
+                step = 1 if end >= start else -1
+                for idx in range(start, end + step, step):
+                    if idx < 0 or idx >= len(worksheet.columns) or worksheet.columns[idx].kind not in kinds:
+                        raise ValueError(f"Choose an eligible column: C{idx+1}")
+                    if idx not in indices:
+                        indices.append(idx)
+                continue
         decorated=not quoted and token.endswith(':')
         reference=_REFERENCE.fullmatch(token[:-1] if decorated else token) if not quoted else None
         if decorated:
@@ -87,6 +115,7 @@ class VariableEntry(QLineEdit):
         super().__init__(parent); self.focus_callback=focus_callback
     def focusInEvent(self,event):
         super().focusInEvent(event); self.focus_callback()
+        self.selectAll()
 
 
 class ProcedureDialog(QDialog):
@@ -290,7 +319,13 @@ class ProcedureDialog(QDialog):
         body=QHBoxLayout(); self.available=QListWidget()
         self.available.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.available.setMinimumWidth(220); self.available.setMinimumHeight(240)
-        left=QVBoxLayout(); left.addWidget(QLabel('Available variables')); left.addWidget(self.available)
+        left=QVBoxLayout(); left.addWidget(QLabel('Available variables'))
+        self.var_filter = QLineEdit()
+        self.var_filter.setPlaceholderText("Filter variables...")
+        self.var_filter.setClearButtonEnabled(True)
+        self.var_filter.textChanged.connect(self._filter_available_variables)
+        left.addWidget(self.var_filter)
+        left.addWidget(self.available)
         self.select_button=QPushButton('Select'); self.select_button.setAutoDefault(False)
         self.select_button.clicked.connect(self.transfer); left.addWidget(self.select_button)
         self.available.itemDoubleClicked.connect(lambda item:self.transfer())
@@ -313,7 +348,10 @@ class ProcedureDialog(QDialog):
             self.controls[spec['key']]=control; form.addRow(spec['label'],control)
         right=QVBoxLayout(); right.addLayout(form); right.addStretch(); body.addLayout(right,2); layout.addLayout(body)
         self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
-        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Reset)
+        reset_btn = buttons.button(QDialogButtonBox.StandardButton.Reset)
+        if reset_btn:
+            reset_btn.clicked.connect(self.reset_dialog)
         buttons.accepted.connect(self.validate); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
         if self.selectors:
             self.activate(self.selectors[0]['key']); self.controls[self.active_key].setFocus()
@@ -331,6 +369,45 @@ class ProcedureDialog(QDialog):
                         ctrl.setChecked(bool(val))
                     elif isinstance(ctrl, QLineEdit):
                         ctrl.setText(str(val))
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F3:
+            self.reset_dialog()
+            return
+        super().keyPressEvent(event)
+
+    def reset_dialog(self):
+        for spec in self.selectors:
+            key = spec['key']
+            if key in self.controls:
+                self.controls[key].clear()
+        for spec in self.fields:
+            key = spec['key']
+            if key in self.controls:
+                ctrl = self.controls[key]
+                if 'default' in spec:
+                    if isinstance(ctrl, QComboBox):
+                        ctrl.setCurrentText(str(spec['default']))
+                    elif isinstance(ctrl, QLineEdit):
+                        ctrl.setText(str(spec['default']))
+                    elif isinstance(ctrl, QCheckBox):
+                        ctrl.setChecked(bool(spec.get('default', False)))
+                else:
+                    if isinstance(ctrl, (QLineEdit,)):
+                        ctrl.clear()
+                    elif isinstance(ctrl, QCheckBox):
+                        ctrl.setChecked(False)
+        if hasattr(self, 'error'):
+            self.error.setVisible(False)
+        if self.selectors:
+            self.activate(self.selectors[0]['key'])
+            self.controls[self.active_key].setFocus()
+
+    def _filter_available_variables(self, text):
+        query = text.strip().lower()
+        for i in range(self.available.count()):
+            item = self.available.item(i)
+            item.setHidden(bool(query and query not in item.text().lower()))
 
     def activate(self,key):
         if key==self.active_key: return
@@ -404,8 +481,18 @@ class ProcedureDialog(QDialog):
             self.parameters=self.values()
             self.error.setVisible(False)
         except (ValueError,TypeError,OverflowError) as exc:
-            self.error.setText(str(exc))
+            msg = str(exc)
+            self.error.setText(msg)
             self.error.setVisible(True)
+            for spec in self.selectors + self.fields:
+                lbl = spec.get('label', '')
+                if lbl and (lbl in msg or lbl.rstrip(':') in msg):
+                    ctrl = self.controls.get(spec['key'])
+                    if ctrl:
+                        ctrl.setFocus()
+                        if hasattr(ctrl, "selectAll"):
+                            ctrl.selectAll()
+                        break
             return
 
         ws_name = getattr(self.worksheet, 'name', '')

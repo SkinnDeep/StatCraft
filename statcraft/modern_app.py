@@ -781,6 +781,26 @@ class ModernWindow(QMainWindow):
         self.navigator.itemClicked.connect(self._navigate)
         self.navigator.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.navigator.customContextMenuRequested.connect(self._show_navigator_item_menu)
+
+        def _nav_key_press(event):
+            key = event.key()
+            item = self.navigator.currentItem()
+            if item:
+                data = item.data(0, Qt.ItemDataRole.UserRole)
+                if key == Qt.Key.Key_F2:
+                    if isinstance(data, dict):
+                        if data.get("kind") == "result" and "entry" in data:
+                            self.rename_output_dialog(data["entry"])
+                            return
+                        elif data.get("kind") == "sheet":
+                            self.rename_sheet()
+                            return
+                elif key == Qt.Key.Key_Delete:
+                    if isinstance(data, dict) and data.get("kind") == "result" and "entry" in data:
+                        self.delete_output_entry(data["entry"])
+                        return
+            QTreeWidget.keyPressEvent(self.navigator, event)
+        self.navigator.keyPressEvent = _nav_key_press
         nav_layout.addWidget(self.navigator, 1)
 
         self.sidebar_stack = QStackedWidget()
@@ -1119,6 +1139,8 @@ class ModernWindow(QMainWindow):
         self.new_sheet_action = self._action(new_menu, "Worksheet", self.new_worksheet, QKeySequence("Ctrl+N"), "new_sheet")
         new_proj = self._action(new_menu, "Project", self.new_document, QKeySequence("Ctrl+Shift+N"), "new_project")
         self.open_action = self._action(file, "Open…", self.open_document, QKeySequence.StandardKey.Open, "open")
+        self.recent_menu = file.addMenu("Open Recent")
+        self._update_recent_menu()
         self._action(file, "Import delimited text with column types…", lambda: self.open_document(True))
         file.addSeparator()
         self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
@@ -2670,6 +2692,10 @@ class ModernWindow(QMainWindow):
     def copy_cells(self):
         focused = QApplication.focusWidget()
         if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not self.table.isAncestorOf(focused): focused.copy(); return
+        is_graph_view = getattr(self, "_active_graph_frame", None) is not None or getattr(self, "_active_chart_widget", None) is not None
+        if focused is not None and not self.table.hasFocus() and not self.table.isAncestorOf(focused) and is_graph_view:
+            self.copy_output_graph()
+            return
         if self.column_names.hasFocus():
             selected = self.column_names.selectedRanges()
             if len(selected) == 1:
@@ -3145,9 +3171,58 @@ class ModernWindow(QMainWindow):
             if text.strip(): column_types = [value.strip().lower() for value in text.split(",")]
         self._call(lambda: self.load_path(path, column_types))
 
+    def _add_recent_file(self, path):
+        if not path or getattr(self, "sandbox_mode", False):
+            return
+        from PySide6.QtCore import QSettings
+        from pathlib import Path
+        try:
+            clean_path = str(Path(path).resolve())
+        except Exception:
+            clean_path = str(path)
+        settings = QSettings("StatCraft", "StatCraft")
+        recents = settings.value("recent_projects", [])
+        if not isinstance(recents, list):
+            recents = []
+        if clean_path in recents:
+            recents.remove(clean_path)
+        recents.insert(0, clean_path)
+        recents = recents[:10]
+        settings.setValue("recent_projects", recents)
+        self._update_recent_menu()
+
+    def _update_recent_menu(self):
+        if not hasattr(self, "recent_menu"):
+            return
+        self.recent_menu.clear()
+        from PySide6.QtCore import QSettings
+        from pathlib import Path
+        settings = QSettings("StatCraft", "StatCraft")
+        recents = settings.value("recent_projects", [])
+        if not isinstance(recents, list):
+            recents = []
+        valid_recents = [p for p in recents if isinstance(p, str)]
+        if valid_recents:
+            for p in valid_recents:
+                filename = Path(p).name
+                act = self.recent_menu.addAction(filename, lambda path=p: self.load_path(path))
+                act.setToolTip(p)
+            self.recent_menu.addSeparator()
+            self.recent_menu.addAction("Clear Recent Projects", self._clear_recent_files)
+        else:
+            no_rec = self.recent_menu.addAction("No Recent Projects")
+            no_rec.setEnabled(False)
+
+    def _clear_recent_files(self):
+        from PySide6.QtCore import QSettings
+        settings = QSettings("StatCraft", "StatCraft")
+        settings.remove("recent_projects")
+        self._update_recent_menu()
+
     def load_path(self, path, column_types=None):
         if not self.graph_options_pane.flush():raise ValueError('Correct the Graph Options values before opening another project.')
         notices = self.presenter.load(path, column_types)
+        self._add_recent_file(path)
         self.graph_options_pane.load_entry(None);self.graph_options_pane.hide()
         self._active_graph_frame=None;self._active_chart_widget=None
         self.page = 0; self.selected_entry = None; self.refresh()
@@ -3172,6 +3247,7 @@ class ModernWindow(QMainWindow):
         state=self._workspace.snapshot()
         self.presenter.workspace=state if any(state[k] for k in ("open_ids","closed_ids","views","report_pad")) else None
         self.presenter.save(path);self._workspace.history=self.presenter.history
+        self._add_recent_file(path)
         self.refresh(); self.statusBar().showMessage("Project saved", 8000)
         return True
 
@@ -6335,6 +6411,7 @@ class ModernWindow(QMainWindow):
         menu.addAction(tool_icon("send_report"), "Send to Report", lambda: self.send_output_to_report(target_entry))
         if is_graph:
             menu.addAction(tool_icon("copy_graph"), "Copy Graph", lambda: self.copy_output_graph(target_entry))
+            menu.addAction("📋 Copy Chart as SVG (Lossless Vector)\tCtrl+Alt+S", self.copy_active_chart_svg)
             from .similar_graph_dialog import supports_similar
             menu.addAction(tool_icon("make_similar_graph"), "Make Similar Graph...", lambda: self.make_similar_graph(target_entry)).setEnabled(supports_similar(target_entry))
             menu.addSeparator()
@@ -6373,6 +6450,7 @@ class ModernWindow(QMainWindow):
             menu.addAction(tool_icon("copy_graph"), "Copy as Picture", lambda: self.copy_output_graph(target_entry))
             menu.addSeparator()
             menu.addAction("Rename...", lambda: self.rename_output_dialog(target_entry))
+            menu.addAction(tool_icon("delete_red_x"), "Delete Output\tDel", lambda: self.delete_output_entry(target_entry))
             menu.addSeparator()
         # R Script Export Actions
         menu.addSeparator()
@@ -7957,6 +8035,23 @@ class ModernWindow(QMainWindow):
         else:
             Path(path).write_text(format_entry(target), encoding="utf-8")
         self.statusBar().showMessage("Saved graph to " + str(path), 6000)
+
+    def delete_output_entry(self, entry=None):
+        target = entry or getattr(self, "selected_entry", None)
+        if target is None:
+            return
+        title = target.get("title", "Output")
+        choice = QMessageBox.question(self, "Delete Output", f"Delete '{title}' from project?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if choice == QMessageBox.StandardButton.Yes:
+            self.presenter.delete_result(target)
+            if self.selected_entry is target:
+                self.selected_entry = self.presenter.history[-1] if self.presenter.history else None
+            self.refresh()
+            if self.selected_entry:
+                self.show_result(self.selected_entry)
+            else:
+                self._show_welcome()
+            self.statusBar().showMessage(f"Deleted '{title}' from project", 4000)
 
     def rename_output_dialog(self, entry=None):
         target = entry or self.selected_entry
