@@ -6122,6 +6122,30 @@ class Presenter:
             {"condition": condition_expr, "matched_rows": len(matched_rows), "worksheet": new_sheet.name},
         )
 
+    @undoable
+    def round_datetime(self, col_index: int, unit: str = "Day", destination: str = ""):
+        from .data_prep import round_datetime_column
+        serials = round_datetime_column(self.worksheet, col_index, unit=unit)
+        dest = destination.strip() if destination and destination.strip() else col_index
+        col = self._assign_or_append_column(dest, serials, "date")
+        self.dirty = True
+        return self._record(
+            f"Round Date/Time ({unit}) — {col.name}",
+            {"source": self.worksheet.columns[col_index].name, "unit": unit, "destination": col.name, "rows": len(serials)},
+        )
+
+    @undoable
+    def convert_text_to_datetime(self, col_index: int, date_format: str = "", destination: str = ""):
+        from .data_prep import convert_text_to_datetime_column
+        serials = convert_text_to_datetime_column(self.worksheet, col_index, fmt=date_format)
+        dest = destination.strip() if destination and destination.strip() else col_index
+        col = self._assign_or_append_column(dest, serials, "date")
+        self.dirty = True
+        return self._record(
+            f"Convert Text to Date/Time — {col.name}",
+            {"source": self.worksheet.columns[col_index].name, "format": date_format or "Auto", "destination": col.name, "rows": len(serials)},
+        )
+
     def covariance(self, indices, missing="Pairwise"):
         from .covariance import compute_covariance
         columns = self._selected_numeric(indices)
@@ -6677,7 +6701,6 @@ class Presenter:
         self.dirty = True
 
     @undoable
-    @undoable
     def duplicate_column(self, col_index):
         if not 0 <= col_index < len(self.worksheet.columns):
             raise ValueError("Select a valid column to duplicate.")
@@ -7210,135 +7233,15 @@ class Presenter:
         return self._set_graph_option(entry,'histogram_settings',normalized)
 
     def execute_session_command(self, line):
-        """Execute a bounded Standard statistical session command (DESCRIBE, REGRESS, LET, NAME, INFO, CORRELATION, NORMALITY, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK)."""
-        from .variable_dialogs import resolve_variables
-        raw = line.strip()
-        if not raw:
-            raise ValueError("Enter a session command (for example: DESCRIBE C1, LET C3 = C1 + C2, INFO).")
-        if raw.endswith("."):
-            raw = raw[:-1].strip()
-        parts = raw.split(None, 1)
-        verb = parts[0].upper()
-        rest = parts[1].strip() if len(parts) > 1 else ""
-        if verb in ("DESCRIBE", "DESC"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            return self.describe_columns(indices)
-        if verb in ("INFO", "INFORMATION"):
-            return self.worksheet_information()
-        if verb in ("CORRELATION", "CORR"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            return self.correlation(indices)
-        if verb in ("NORMALITY", "NORM"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) != 1:
-                raise ValueError("NORMALITY takes one numeric column (e.g., NORMALITY C1).")
-            return self.normality(indices[0])
-        if verb == "LET":
-            if "=" not in rest:
-                raise ValueError("Syntax: LET C1 = expression")
-            lhs, expr = [s.strip() for s in rest.split("=", 1)]
-            if lhs.upper().startswith("C") and lhs[1:].isdigit():
-                idx = int(lhs[1:]) - 1
-                if 0 <= idx < len(self.worksheet.columns):
-                    return self.assign_formula(idx, expr)
-            return self.calculate(expr, lhs)
-        if verb == "NAME":
-            tokens = rest.split(None, 1)
-            if len(tokens) != 2:
-                raise ValueError("Syntax: NAME C1 'ColumnName'")
-            indices = resolve_variables(tokens[0], self.worksheet, ("number", "text", "date"))
-            clean_name = tokens[1].strip().strip("'\"")
-            self.rename_column(indices[0], clean_name)
-            return self._record("Name Column", {"column": "C" + str(indices[0] + 1), "name": clean_name})
-        if verb in ("HISTOGRAM", "HIST"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) != 1:
-                raise ValueError("HISTOGRAM takes one numeric column (e.g., HISTOGRAM C1).")
-            from .recipes import run
-            return run(self, {"action": "graph", "parameters": {"method": "histogram", "indices": indices, "bins": 10}})
-        if verb in ("BOXPLOT", "BOX"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) != 1:
-                raise ValueError("BOXPLOT takes one numeric column (e.g., BOXPLOT C1).")
-            from .recipes import run
-            return run(self, {"action": "graph", "parameters": {"method": "boxplot", "indices": indices, "bins": 1}})
-        if verb == "PLOT":
-            cleaned = rest.replace("*", " ")
-            indices = resolve_variables(cleaned, self.worksheet, ("number",))
-            if len(indices) != 2:
-                raise ValueError("Syntax: PLOT C2 * C1 (Y then X)")
-            return self.scatter_plot(indices[1], indices[0])
-        if verb in ("REGRESS", "REGR"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) < 2:
-                raise ValueError("Syntax: REGRESS C_response C_predictor1 [C_predictor2 ...]")
-            return self.multiple_regression(indices[0], indices[1:])
-        if verb in ("ONEWAY", "AOVONEWAY", "ANOVA"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) == 2:
-                return self.oneway_anova(response_index=indices[0], factor_index=indices[1])
-            elif len(indices) > 2:
-                return self.oneway_anova_unstacked(indices)
-            raise ValueError("Syntax: ONEWAY C_response C_factor or ONEWAY C1 C2 C3...")
-        if verb in ("TTEST", "TINTERVAL"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if not indices:
-                raise ValueError("Syntax: TTEST C1 [C2 ...]")
-            return self.one_sample_t({"sample_cols": indices})
-        if verb in ("TWOSAMPLE", "TWOSAMPLE-T"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) != 2:
-                raise ValueError("Syntax: TWOSAMPLE C1 C2")
-            return self.two_sample_t({"data_format": 1, "sample1_col": indices[0], "sample2_col": indices[1]})
-        if verb in ("XBARCHART", "XBAR-R"):
-            indices = resolve_variables(rest, self.worksheet, ("number",))
-            if len(indices) == 2:
-                return self.xbar_r_stacked(response_index=indices[0], factor_index=indices[1])
-            elif len(indices) > 2:
-                return self.xbar_r_rows(indices)
-            raise ValueError("Syntax: XBARCHART C_response C_subgroup or XBARCHART C1 C2 ...")
-        if verb == "SORT":
-            indices = resolve_variables(rest, self.worksheet, ("number", "text", "date"))
-            if len(indices) < 1:
-                raise ValueError("Syntax: SORT C1 [by C2]")
-            return self.sort_columns(indices[:-1] or indices, indices[-1])
-        if verb == "RANK":
-            tokens = rest.split()
-            if len(tokens) != 2:
-                raise ValueError("Syntax: RANK C1 C2")
-            indices = resolve_variables(tokens[0], self.worksheet, ("number",))
-            return self.rank_column(indices[0], tokens[1])
-        if verb == "CCF":
-            fields = rest.split(maxsplit=1)
-            lag_count = int(fields[0]) if len(fields) == 2 and fields[0].isdigit() else 0
-            variables = fields[1] if lag_count or len(fields) == 2 and fields[0] == "0" else rest
-            indices = resolve_variables(variables, self.worksheet, ("number",))
-            if len(indices) != 2:
-                raise ValueError("Use CCF [lags] C1 C2.")
-            return self.cross_correlation(*indices, lags=lag_count)
-        if verb in ("RSCR", "RSCRIPT", "R"):
-            import os
-            from pathlib import Path
-            from .r_bridge import execute_r_code
-            code = rest.strip()
-            if (code.startswith('"') and code.endswith('"')) or (code.startswith("'") and code.endswith("'")):
-                target_path = code[1:-1]
-            else:
-                target_path = code
-            if os.path.isfile(target_path):
-                code = Path(target_path).read_text(encoding="utf-8")
-            res = execute_r_code(code, worksheet=self.worksheet)
-            session_out = f"R Output:\n{res.get('stdout', '')}"
-            if res.get('stderr'):
-                session_out += f"\nR Diagnostics:\n{res['stderr']}"
-            return self._record("R Script Output", {
-                "analysis": "r_script",
-                "session_text": session_out,
-                "stdout": res.get("stdout", ""),
-                "stderr": res.get("stderr", ""),
-                "plot_path": res.get("plot_path"),
-            })
-        raise ValueError("Unsupported session command '" + verb + "'. Supported: DESCRIBE, INFO, LET, NAME, CORRELATION, NORMALITY, REGRESS, ONEWAY, TTEST, TWOSAMPLE, XBARCHART, HISTOGRAM, BOXPLOT, PLOT, SORT, RANK, RSCR.")
+        """Execute a session command or subcommand block."""
+        from .session_commands import execute_script
+        results = execute_script(self, line)
+        return results[-1] if results else None
+
+    def execute_session_script(self, script_text):
+        """Execute a multi-line Minitab Exec / session command script (.MTB)."""
+        from .session_commands import execute_script
+        return execute_script(self, script_text)
 
 
 def format_entry(entry):

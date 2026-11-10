@@ -1162,6 +1162,7 @@ class ModernWindow(QMainWindow):
         file.addSeparator()
         self._action(file, "Export Session as Clean &HTML Report…", self.export_session_html_dialog, None, "export")
         self._action(file, "Export Anonymized Dataset (Clean for &Audit)…", self.anonymize_dataset_dialog, None, "export")
+        self._action(file, "Run Exec / Batch Script (.MTB)…", self.run_mtb_script_dialog, None, "workflow")
         file.addSeparator()
         self._action(file, "Page Setup…", lambda: self._printing().page_setup())
         self._action(file, "Print Preview…", lambda: self._printing().run("preview"))
@@ -1216,6 +1217,9 @@ class ModernWindow(QMainWindow):
         recode_menu = data.addMenu("Recode")
         self._action(recode_menu, "To &Numeric…", lambda: self.recode_dialog("number"), None, "format_column", True)
         self._action(recode_menu, "To &Text…", lambda: self.recode_dialog("text"), None, "format_column", True)
+        dt_menu = data.addMenu("Date/Time")
+        self._action(dt_menu, "Convert Text to Date/Time…", self.convert_text_to_datetime_dialog, None, "format_column", True)
+        self._action(dt_menu, "Round Date/Time…", self.round_datetime_dialog, None, "format_column", True)
         col_prop_menu = data.addMenu("Column Properties")
         self._action(col_prop_menu, "Value Order…", self.column_value_order_dialog, None, "sort", True)
         self._action(col_prop_menu, "Description…", self.column_description_dialog, None, "worksheet", True)
@@ -3151,11 +3155,24 @@ class ModernWindow(QMainWindow):
         raw = self.command_editor.toPlainText().strip()
         if not raw: return
         for line in raw.splitlines():
-            cmd = line.strip()
-            if cmd:
-                self.command_history_view.appendPlainText(f"MTB > {cmd}")
-                self._call(lambda l=cmd: self.presenter.execute_session_command(l), result=True)
+            if line.strip():
+                self.command_history_view.appendPlainText(f"MTB > {line.strip()}")
+        entries = self._call(lambda: self.presenter.execute_session_script(raw), result=False)
+        self.refresh()
+        if entries:
+            self.show_result(entries[-1])
         self.command_editor.clear()
+
+    def run_mtb_script_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Run Exec / Batch Script", "", "Minitab Exec / Command Scripts (*.mtb *.exec *.txt);;All Files (*)")
+        if not path:
+            return
+        script_text = Path(path).read_text(encoding="utf-8", errors="replace")
+        entries = self._call(lambda: self.presenter.execute_session_script(script_text), result=False)
+        self.refresh()
+        if entries:
+            self.show_result(entries[-1])
+            self.statusBar().showMessage(f"Executed {len(entries)} command(s) from {Path(path).name}", 5000)
 
     def undo(self):
         self._commit_editor()
@@ -5351,6 +5368,30 @@ class ModernWindow(QMainWindow):
             "Creates a new worksheet containing only rows where the formula evaluates to true.",
         )
 
+    def round_datetime_dialog(self):
+        self._dialog(
+            "Round Date/Time",
+            [selector("index", "Date/Time column", False, 1, 1, ("date", "text"))],
+            [
+                {"key": "unit", "label": "Round/truncate to", "choices": ["Day", "Hour", "Minute", "Month", "Year"], "default": "Day"},
+                {"key": "destination", "label": "Store in column (leave blank to replace)", "default": ""},
+            ],
+            lambda p: self.presenter.round_datetime(p["index"], p["unit"], p.get("destination", "")),
+            "Rounds dates or timestamps down to the start of the selected calendar/clock unit.",
+        )
+
+    def convert_text_to_datetime_dialog(self):
+        self._dialog(
+            "Convert Text to Date/Time",
+            [selector("index", "Text date column", False, 1, 1, ("text",))],
+            [
+                {"key": "date_format", "label": "Input format (optional, e.g. %m/%d/%Y)", "default": ""},
+                {"key": "destination", "label": "Store in column (leave blank to convert in place)", "default": ""},
+            ],
+            lambda p: self.presenter.convert_text_to_datetime(p["index"], p.get("date_format", ""), p.get("destination", "")),
+            "Parses text timestamps into StatCraft typed Date/Time columns.",
+        )
+
     def probability(self):
         from . import probability
         dialog = QDialog(self); dialog.setWindowTitle("Probability Distributions"); dialog.setMinimumWidth(540)
@@ -6278,7 +6319,8 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('general_linear_model','response_surface'):chart.setMinimumHeight(680 if result['options']['graphs']=='four' else 350)
                 elif result.get('analysis') in ('optimal_design', 'design_evaluation', 'cart_tree', 'evaluating_measurement_process', 'fit_y_by_x', 'jmp_distribution', 'control_chart_builder', 'process_screening', 'definitive_screening_analysis', 'accelerated_life_testing'): chart.setMinimumHeight(440)
                 elif result.get('graph') not in ('panel_graph','graph_layout'):
-                    chart.setMinimumHeight(max(chart.minimumHeight(), len(chart.panels)*max(260,max(len(panel['series']) for panel in chart.panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and chart.panels else 480 if len(chart.panels)>1 else 460))
+                    panels = getattr(chart, 'panels', [])
+                    chart.setMinimumHeight(max(chart.minimumHeight(), len(panels)*max(260,max(len(panel['series']) for panel in panels)*42+100)+36 if result.get('graph')=='histogram_graphs' and panels else 480 if len(panels)>1 else 460))
                 chart.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 chart.customContextMenuRequested.connect(lambda pos, c=chart: self._show_output_context_menu(c.mapToGlobal(pos)) if not (getattr(c, '_has_3d_panel', lambda: False)()) else None)
                 self._active_chart_widget = chart

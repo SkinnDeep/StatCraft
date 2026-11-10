@@ -253,3 +253,68 @@ def subset_by_condition(sheet, condition_expr, new_name="Subset"):
         sub_cols.append(Column(c.name, c.kind, new_vals, metadata=dict(c.metadata)))
     clean_name = (new_name or f"{sheet.name} (Subset)").strip()[:128]
     return _sheet(clean_name, sub_cols)
+
+
+def _parse_datetime_cell(val, kind, custom_fmt=""):
+    from datetime import datetime
+    from .model import serial_to_datetime
+    if val is None:
+        return None
+    if kind == "date" and isinstance(val, (int, float)):
+        return serial_to_datetime(val)
+    text = str(val).strip()
+    if not text or text == "*":
+        return None
+    if custom_fmt and custom_fmt.strip():
+        return datetime.strptime(text, custom_fmt.strip())
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m/%d/%Y",
+        "%Y/%m/%d", "%d-%m-%Y", "%m-%d-%Y",
+    ):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"Unable to parse date/time value '{text}'.") from exc
+
+
+def round_datetime_column(sheet, col_index, unit="Day"):
+    """Truncate/round a Date/Time column to Year, Month, Day, Hour, or Minute."""
+    from .model import datetime_to_serial
+    src = _columns(sheet, [col_index], 1)[0]
+    u = unit.strip().lower()
+    if u not in ("year", "month", "day", "hour", "minute"):
+        raise ValueError("Choose Year, Month, Day, Hour, or Minute.")
+    out_serials = []
+    for v in src.values:
+        dt = _parse_datetime_cell(v, src.kind)
+        if dt is None:
+            out_serials.append(None)
+            continue
+        if u == "year":
+            rd = dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif u == "month":
+            rd = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif u == "day":
+            rd = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif u == "hour":
+            rd = dt.replace(minute=0, second=0, microsecond=0)
+        else:
+            rd = dt.replace(second=0, microsecond=0)
+        out_serials.append(datetime_to_serial(rd))
+    return out_serials
+
+
+def convert_text_to_datetime_column(sheet, col_index, fmt=""):
+    """Parse a Text column into typed StatCraft date serial numbers."""
+    from .model import datetime_to_serial
+    src = _columns(sheet, [col_index], 1)[0]
+    out_serials = []
+    for v in src.values:
+        dt = _parse_datetime_cell(v, src.kind, fmt)
+        out_serials.append(None if dt is None else datetime_to_serial(dt))
+    return out_serials
