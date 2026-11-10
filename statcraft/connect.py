@@ -1814,8 +1814,10 @@ def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> Con
     title = entry.get("title") or f"StatCraft: {action.replace('_', ' ').title()}"
 
     all_row_ids = list(meta.get("row_ids", []))
-    from .connect_r import generate_generic_r_script
-    r_code = generate_generic_r_script(entry, worksheet)
+    from .r_universal_translator import translate_entry_to_r
+    base_script, tidyverse_script, resolved_title = translate_entry_to_r(entry, worksheet)
+    title = title or resolved_title
+    r_code = base_script
 
     connected = ConnectedAnalysis(
         analysis_id=str(uuid.uuid4()),
@@ -1838,7 +1840,7 @@ def create_connected_generic(entry: Dict[str, Any], worksheet: Worksheet) -> Con
         statistics={},
         fitted_values=[],
         residuals=[],
-        metadata={"recipe": recipe, "entry_title": title},
+        metadata={"recipe": recipe, "entry_title": title, "tidyverse_script": tidyverse_script},
         r_script=r_code,
     )
     return connected

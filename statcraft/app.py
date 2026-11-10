@@ -282,7 +282,10 @@ class Presenter:
             project_path = None
         elif suffix in (".jmp", ".jsl"):
             from .jmp_reader import load_jmp
+            from .mpx_create import create_project
             worksheet = load_jmp(path)
+            native_project = create_project([worksheet])
+            native_project.statcraft_owned = True
             project_path = None
         else:
             raise io.UnsupportedFormatError("Open an .mpx project, .statcraft, .csv, .tsv, supported .mwx, or .jmp/.jsl file.")
@@ -307,8 +310,10 @@ class Presenter:
                 for index, command in enumerate(native_project.history[-80:], max(1, len(native_project.history) - 79)):
                     self._record("Native command " + str(index), {"command": command, "source": "Retained project history; not executed."}, persist=False)
             self.history = (self.history + native_outputs + copy.deepcopy(native_project.session_records))[-100:]
-            if getattr(native_project,'statcraft_owned',False):
-                self.notices=['StatCraft-authored MPX project: worksheet data, design metadata and saved StatCraft analyses are editable. Native application compatibility remains unverified.']
+            if suffix in (".jmp", ".jsl"):
+                self.notices = ["JMP data table auto-converted to Minitab project. Full Minitab statistical procedures, multiple worksheets, and .MPX saving are enabled."]
+            elif getattr(native_project, 'statcraft_owned', False):
+                self.notices = ['StatCraft-authored MPX project: worksheet data, design metadata and saved StatCraft analyses are editable. Native application compatibility remains unverified.']
         if suffix in (".csv", ".tsv", ".tab") and column_types is None:
             self.notices.append("Column types were inferred. Numeric-looking labels become numeric; use explicit text types when preparing data.")
         return self.notices

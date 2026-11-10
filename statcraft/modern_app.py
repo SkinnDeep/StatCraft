@@ -5763,7 +5763,7 @@ class ModernWindow(QMainWindow):
                     copy_act = r_menu.addAction("📋 Copy R Script (Base R & Tidyverse)")
                     copy_act.triggered.connect(lambda checked=False, e=entry: self.copy_connected_r_script(e))
                     view_act = r_menu.addAction("📄 View R Code Dialog…")
-                    view_act.triggered.connect(lambda checked=False: self.view_active_r_code())
+                    view_act.triggered.connect(lambda checked=False, e=entry: self.view_entry_r_code(e))
                     r_code_btn.setMenu(r_menu)
                     r_code_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
                     graph_frame.header.addWidget(r_code_btn)
@@ -7716,22 +7716,11 @@ class ModernWindow(QMainWindow):
         if target is None and self.presenter.history:
             target = self.presenter.history[-1]
         ws = self.presenter.worksheet
-        from .connect_r import generate_dataframe_init_code, build_self_contained_r_script
         if target is not None:
-            conn_dict = target.get("connected_analysis")
-            if not conn_dict:
-                from .connect import create_connected_analysis_from_entry
-                try:
-                    conn_obj = create_connected_analysis_from_entry(target, ws)
-                    if conn_obj:
-                        conn_dict = conn_obj.to_dict()
-                        target["connected_analysis"] = conn_dict
-                except Exception:
-                    conn_dict = None
-            if conn_dict and conn_dict.get("r_script"):
-                title = conn_dict.get("title", target.get("title", "Analysis"))
-                full_script = build_self_contained_r_script(conn_dict["r_script"], ws, title)
-                return full_script, title
+            from .r_universal_translator import translate_entry_to_r
+            base_script, _, title = translate_entry_to_r(target, ws)
+            return base_script, title
+        from .connect_r import generate_dataframe_init_code
         code = generate_dataframe_init_code(ws)
         return code, f"Worksheet: {ws.name}"
 
@@ -7740,24 +7729,11 @@ class ModernWindow(QMainWindow):
         if target is None and self.presenter.history:
             target = self.presenter.history[-1]
         ws = self.presenter.worksheet
-        from .connect_r import generate_r_tidyverse_script, generate_vroom_data_import_code
         if target is not None:
-            conn_dict = target.get("connected_analysis")
-            if not conn_dict:
-                from .connect import create_connected_analysis_from_entry
-                try:
-                    conn_obj = create_connected_analysis_from_entry(target, ws)
-                    if conn_obj:
-                        conn_dict = conn_obj.to_dict()
-                        target["connected_analysis"] = conn_dict
-                except Exception:
-                    conn_dict = None
-            if conn_dict:
-                from .connect import ConnectedAnalysis
-                conn_obj = ConnectedAnalysis.from_dict(conn_dict)
-                title = conn_obj.title or target.get("title", "Analysis")
-                script = generate_r_tidyverse_script(conn_obj, ws)
-                return script, title
+            from .r_universal_translator import translate_entry_to_r
+            _, tidy_script, title = translate_entry_to_r(target, ws)
+            return tidy_script, title
+        from .connect_r import generate_vroom_data_import_code
         return generate_vroom_data_import_code(ws), f"Worksheet: {ws.name}"
 
     def _get_entry_vroom_script(self) -> str:
@@ -7835,18 +7811,34 @@ class ModernWindow(QMainWindow):
             except OSError as err:
                 QMessageBox.critical(self, "Export Error", f"Failed to save script:\n{err}")
 
-    def copy_entry_r_script(self, entry):
-        script, title = self._get_entry_r_script(entry)
+    def copy_connected_r_script(self, entry=None):
+        script, title = self._get_entry_tidyverse_script(entry)
         cb = QApplication.clipboard()
         if cb is not None:
             cb.setText(script)
         if self.statusBar():
-            self.statusBar().showMessage(f"✓ Copied reproducible Base R script for '{title}' to clipboard!", 5000)
+            self.statusBar().showMessage(f"✓ Copied modern Tidyverse R script for '{title}' to clipboard!", 5000)
+
+    def copy_entry_r_script(self, entry=None):
+        script, title = self._get_entry_tidyverse_script(entry)
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.setText(script)
+        if self.statusBar():
+            self.statusBar().showMessage(f"✓ Copied modern Tidyverse R script for '{title}' to clipboard!", 5000)
 
     def view_entry_r_code(self, entry):
-        script, title = self._get_entry_r_script(entry)
+        base_script, title = self._get_entry_r_script(entry)
+        tidy_script, _ = self._get_entry_tidyverse_script(entry)
+        vroom_script = self._get_entry_vroom_script()
         from .connect_hub import ViewRCodeDialog
-        dlg = ViewRCodeDialog(self, script, title=f"R Code: {title}")
+        dlg = ViewRCodeDialog(
+            self,
+            r_script=base_script,
+            title=f"R Code: {title}",
+            tidyverse_script=tidy_script,
+            vroom_script=vroom_script,
+        )
         dlg.exec()
 
     def export_entry_r_file(self, entry):

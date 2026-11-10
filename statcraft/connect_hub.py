@@ -545,16 +545,20 @@ class StatCraftAnalysisBar(QFrame):
         root.addLayout(btn_bar)
 
     def get_full_r_script(self) -> str:
-        raw = self.conn_obj.r_script or ""
-        from .connect_r import build_self_contained_r_script
         ws = getattr(self.window.presenter, "worksheet", None) if hasattr(self.window, "presenter") else None
         if ws is not None:
-            return build_self_contained_r_script(raw, ws, self.conn_obj.title)
-        return raw
+            from .r_universal_translator import translate_entry_to_r
+            base, _, _ = translate_entry_to_r(self.entry, ws)
+            return base
+        return self.conn_obj.r_script or ""
 
     def get_tidyverse_r_script(self) -> str:
-        from .connect_r import generate_r_tidyverse_script
         ws = getattr(self.window.presenter, "worksheet", None) if hasattr(self.window, "presenter") else None
+        if ws is not None:
+            from .r_universal_translator import translate_entry_to_r
+            _, tidy, _ = translate_entry_to_r(self.entry, ws)
+            return tidy
+        from .connect_r import generate_r_tidyverse_script
         return generate_r_tidyverse_script(self.conn_obj, ws)
 
     def get_vroom_r_script(self) -> str:
