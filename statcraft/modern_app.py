@@ -1161,6 +1161,7 @@ class ModernWindow(QMainWindow):
         self._action(file, "Export to PowerPoint…", self.send_output_to_powerpoint)
         file.addSeparator()
         self._action(file, "Export Session as Clean &HTML Report…", self.export_session_html_dialog, None, "export")
+        self._action(file, "Export Session as &Markdown Report (.md)…", self.export_session_markdown_dialog, None, "export")
         self._action(file, "Export Anonymized Dataset (Clean for &Audit)…", self.anonymize_dataset_dialog, None, "export")
         self._action(file, "Run Exec / Batch Script (.MTB)…", self.run_mtb_script_dialog, None, "workflow")
         file.addSeparator()
@@ -1651,6 +1652,8 @@ class ModernWindow(QMainWindow):
         self._action(view,"Close All Output Tabs",lambda:self._workspace.close_all())
         self._action(view, "Toggle Entry Direction (Down / Right)", self.toggle_entry_direction, "Ctrl+D", "direction")
         self._action(view, "Refresh Worksheet", self.refresh)
+        view.addSeparator()
+        self._action(view, "Command Palette (Find Procedure)…", self.open_command_palette, QKeySequence("Ctrl+K"), "find")
 
         # 9. Assistant menu (`RT_MENU 8445` guided workflow shortcuts)
         assistant = bar.addMenu("Assista&nt")
@@ -4865,8 +4868,9 @@ class ModernWindow(QMainWindow):
                 numeric("n_resamples", "Number of resamples", 2000, integer=True),
                 numeric("confidence", "Confidence level (0–1)", 0.95),
                 numeric("seed", "Random seed", 42, integer=True),
+                {"key": "store_replicates", "label": "Storage", "boolean": True, "text": "Store bootstrap replicates in worksheet"},
             ],
-            lambda p: self.presenter.bootstrap_1sample(p["index"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"]),
+            lambda p: self.presenter.bootstrap_1sample(p["index"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"], p.get("store_replicates", False)),
             "Percentile/pivot bootstrap confidence intervals for a single sample.",
         )
 
@@ -4879,8 +4883,9 @@ class ModernWindow(QMainWindow):
                 numeric("n_resamples", "Number of resamples", 2000, integer=True),
                 numeric("confidence", "Confidence level (0–1)", 0.95),
                 numeric("seed", "Random seed", 42, integer=True),
+                {"key": "store_replicates", "label": "Storage", "boolean": True, "text": "Store bootstrap replicates in worksheet"},
             ],
-            lambda p: self.presenter.bootstrap_2sample(p["index1"], p["index2"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"]),
+            lambda p: self.presenter.bootstrap_2sample(p["index1"], p["index2"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"], p.get("store_replicates", False)),
             "Two-sample independent bootstrap confidence intervals.",
         )
 
@@ -5165,10 +5170,11 @@ class ModernWindow(QMainWindow):
                 numeric("min_samples_leaf", "Minimum leaf samples", 2, integer=True),
                 {"key": "max_features", "label": "Features per split (mtry)", "choices": ["auto", "sqrt", "all"], "default": "auto"},
                 numeric("seed", "Random seed", 42, integer=True),
+                {"key": "store_fits", "label": "Storage", "boolean": True, "text": "Store fits & residuals in worksheet"},
             ],
             lambda p: self.presenter.random_forest(
                 p["response_index"], p["predictor_indices"], p["task"],
-                p["n_trees"], p["max_depth"], p["min_samples_leaf"], p["max_features"], p["seed"],
+                p["n_trees"], p["max_depth"], p["min_samples_leaf"], p["max_features"], p["seed"], p.get("store_fits", False),
             ),
             "Fits an ensemble of bagged random decision trees with Out-of-Bag (OOB) validation & variable importance.",
         )
@@ -5189,10 +5195,11 @@ class ModernWindow(QMainWindow):
                 {"key": "loss", "label": "Regression loss", "choices": ["ls", "huber"], "default": "ls"},
                 numeric("validation_fraction", "Holdout validation fraction", 0.2),
                 numeric("seed", "Random seed", 42, integer=True),
+                {"key": "store_fits", "label": "Storage", "boolean": True, "text": "Store fits & residuals in worksheet"},
             ],
             lambda p: self.presenter.treenet_gbm(
                 p["response_index"], p["predictor_indices"], p["task"],
-                p["n_trees"], p["learning_rate"], p["max_depth"], p["subsample"], p["loss"], p["validation_fraction"], p["seed"],
+                p["n_trees"], p["learning_rate"], p["max_depth"], p["subsample"], p["loss"], p["validation_fraction"], p["seed"], p.get("store_fits", False),
             ),
             "Stochastic gradient boosted trees with holdout optimal-tree selection & partial dependence profile.",
         )
@@ -5209,10 +5216,11 @@ class ModernWindow(QMainWindow):
                 numeric("max_terms", "Maximum basis terms", 16, integer=True),
                 numeric("max_degree", "Maximum interaction degree (1 or 2)", 2, integer=True),
                 numeric("penalty", "GCV pruning penalty", 2.0),
+                {"key": "store_fits", "label": "Storage", "boolean": True, "text": "Store fits & residuals in worksheet"},
             ],
             lambda p: self.presenter.mars_regression(
                 p["response_index"], p["predictor_indices"], p["task"],
-                p["max_terms"], p["max_degree"], p["penalty"],
+                p["max_terms"], p["max_degree"], p["penalty"], p.get("store_fits", False),
             ),
             "Forward hinge basis expansion with Generalized Cross-Validation (GCV) backward pruning.",
         )
@@ -5237,12 +5245,43 @@ class ModernWindow(QMainWindow):
 
     def guided_assistant_dialog(self):
         from .assistant_wizard import GuidedAssistantDialog
-        dark_mode = bool(getattr(self, "dark_mode", False))
-        dlg = GuidedAssistantDialog(parent=self, dark_mode=dark_mode)
+        ws = self.presenter.worksheet
+        num_c = sum(1 for c in ws.columns if c.kind == "number" and any(v is not None for v in c.values))
+        txt_c = sum(1 for c in ws.columns if c.kind == "text" and any(v is not None for v in c.values))
+        ws_info = f"Active Worksheet '{ws.name}': {ws.row_count} rows · {num_c} numeric, {txt_c} categorical columns populated"
+        dark_mode = bool(getattr(self, "_dark_mode", False))
+        dlg = GuidedAssistantDialog(parent=self, dark_mode=dark_mode, worksheet_summary=ws_info)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.chosen_method:
             target = getattr(self, dlg.chosen_method, None)
             if callable(target):
                 target(*dlg.chosen_args)
+
+    def open_command_palette(self):
+        from .command_palette import CommandPaletteDialog, collect_menu_actions
+        actions = collect_menu_actions(self.menuBar())
+        dlg = CommandPaletteDialog(self, actions, dark_mode=bool(getattr(self, "_dark_mode", False)))
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_action is not None:
+            dlg.selected_action.trigger()
+
+    def export_session_markdown_dialog(self):
+        from .svg_html_export import export_session_to_markdown
+        from .modern_charts import ChartWidget, supported
+        if not self.presenter.history:
+            QMessageBox.information(self, "Export Session", "Run at least one analysis before exporting to Markdown.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Session as Markdown", "StatCraft_Session_Report.md", "Markdown (*.md)")
+        if not path:
+            return
+        charts = {}
+        for idx, entry in enumerate(self.presenter.history):
+            if supported(entry):
+                w = ChartWidget(entry)
+                w.resize(760, 480)
+                charts[idx] = w
+        export_session_to_markdown(self.presenter.history, self.presenter.worksheet.name, path, chart_widgets=charts)
+        for w in charts.values():
+            w.close()
+        self.statusBar().showMessage(f"Exported Markdown report to {path}", 4000)
 
     def monte_carlo_dialog(self):
         self._dialog(
@@ -5255,9 +5294,10 @@ class ModernWindow(QMainWindow):
                 numeric("usl", "Upper specification limit (USL)", 22.0, optional=True),
                 numeric("n_sims", "Simulation iterations", 10000, integer=True),
                 numeric("seed", "Random seed", 42, integer=True),
+                {"key": "store_column", "label": "Storage", "boolean": True, "text": "Store simulated draws in worksheet"},
             ],
             lambda p: self.presenter.monte_carlo_simulation(
-                p["inputs"], p["formula"], p.get("lsl"), p.get("usl"), p["n_sims"], p["seed"],
+                p["inputs"], p["formula"], p.get("lsl"), p.get("usl"), p["n_sims"], p["seed"], p.get("store_column", False),
             ),
             "Distributions: Normal(mu,sd), Uniform(a,b), Triangular(a,mode,b), Lognormal(mu,sd), Exponential(mean), Weibull(k,scale).",
         )

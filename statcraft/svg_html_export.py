@@ -166,7 +166,7 @@ def export_session_to_html(
     <div class="container">
         <header>
             <h1>StatCraft Statistical Session Report</h1>
-            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.1.0</div>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.2.0</div>
         </header>
         <main>
             {body_content}
@@ -182,3 +182,55 @@ def export_session_to_html(
         Path(output_path).write_text(html_doc, encoding="utf-8")
 
     return html_doc
+
+
+def export_session_to_markdown(
+    history: List[Dict[str, Any]],
+    worksheet_name: str = "Active Worksheet",
+    output_path: Optional[str] = None,
+    chart_widgets: Optional[Dict[int, QWidget]] = None,
+) -> str:
+    """Export complete session analyses, Executive Briefs, and vector SVGs to Markdown."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines: List[str] = [
+        f"# StatCraft Session Report — {worksheet_name}",
+        f"*Generated locally: {now_str} · StatCraft v116.2.0*",
+        "",
+        "## Table of Contents",
+    ]
+    for idx, entry in enumerate(history, 1):
+        lines.append(f"- [{idx}. {entry.get('title', f'Analysis {idx}')}](#analysis-{idx})")
+    lines.append("")
+
+    assets_dir = None
+    if output_path and chart_widgets:
+        assets_dir = Path(output_path).parent / f"{Path(output_path).stem}_assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+    from .app import format_entry
+    for idx, entry in enumerate(history, 1):
+        title = entry.get("title", f"Analysis {idx}")
+        lines.append(f"---")
+        lines.append(f'## <a id="analysis-{idx}"></a>{idx}. {title}')
+        bullets = generate_executive_summary(entry)
+        if bullets:
+            lines.append("")
+            lines.append("**Executive Brief:**")
+            for b in bullets:
+                lines.append(f"- {b}")
+        lines.append("")
+        lines.append("```text")
+        lines.append(format_entry(entry).strip())
+        lines.append("```")
+        if chart_widgets and idx - 1 in chart_widgets and assets_dir is not None:
+            svg_bytes = export_widget_to_svg_bytes(chart_widgets[idx - 1])
+            svg_name = f"chart_{idx}.svg"
+            (assets_dir / svg_name).write_bytes(svg_bytes)
+            lines.append("")
+            lines.append(f"![{title}]({assets_dir.name}/{svg_name})")
+        lines.append("")
+
+    md_doc = "\n".join(lines)
+    if output_path:
+        Path(output_path).write_text(md_doc, encoding="utf-8")
+    return md_doc

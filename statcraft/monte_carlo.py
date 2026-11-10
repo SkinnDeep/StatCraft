@@ -216,6 +216,33 @@ def monte_carlo_simulation(
             "variance_contribution_pct": pct_var,
         })
 
+    # What-If Tolerance-Tightening Sweep on Top Sensitivity Driver
+    tolerance_sweep: List[Dict[str, Any]] = []
+    if sensitivity:
+        top_var = sensitivity[0]["input"]
+        base_draws = env[top_var]
+        mu_top = float(np.mean(base_draws))
+        for cut_pct in (0, 25, 50):
+            factor = 1.0 - cut_pct / 100.0
+            env_sw = dict(env)
+            env_sw[top_var] = mu_top + (base_draws - mu_top) * factor
+            y_sw = _eval_safe_formula(formula, env_sw)
+            sd_sw = float(np.std(y_sw, ddof=1))
+            m_sw = float(np.mean(y_sw))
+            oos_sw = (float(np.mean(y_sw < float(lsl)) * 100.0) if lsl is not None else 0.0) + (
+                float(np.mean(y_sw > float(usl)) * 100.0) if usl is not None else 0.0
+            )
+            sw_ppu = (float(usl) - m_sw) / (3.0 * sd_sw) if (usl is not None and sd_sw > 1e-12) else None
+            sw_ppl = (m_sw - float(lsl)) / (3.0 * sd_sw) if (lsl is not None and sd_sw > 1e-12) else None
+            sw_cands = [v for v in (sw_ppl, sw_ppu) if v is not None]
+            tolerance_sweep.append({
+                "scenario": "Baseline (0% SD cut)" if cut_pct == 0 else f"Tighten {top_var} SD by -{cut_pct}%",
+                "output_stdev": sd_sw,
+                "pct_out_of_spec": oos_sw,
+                "dpmo": oos_sw * 10000.0,
+                "ppk": min(sw_cands) if sw_cands else None,
+            })
+
     h_counts, h_edges = np.histogram(y, bins=24)
 
     return {
@@ -246,6 +273,8 @@ def monte_carlo_simulation(
             "dpmo": dpmo,
         },
         "sensitivity": sensitivity,
+        "tolerance_sweep": tolerance_sweep,
+        "_draws": [float(v) for v in y],
     }
 
 
@@ -283,4 +312,11 @@ def format_monte_carlo_report(result: Dict[str, Any]) -> str:
         lines.append(
             f"  {row['input']:<20} {row['spearman_rho']:>+10.3f} {row['variance_contribution_pct']:>9.1f}%  {bars}"
         )
+    if result.get("tolerance_sweep"):
+        lines.append("")
+        lines.append("Tolerance-Tightening What-If Sweep:")
+        lines.append(f"  {'Scenario':<30} {'Out SD':>10} {'OOS %':>9} {'DPMO':>10} {'Ppk':>8}")
+        for sw in result["tolerance_sweep"]:
+            ppk_txt = f"{sw['ppk']:.3f}" if sw.get("ppk") is not None else "N/A"
+            lines.append(f"  {sw['scenario']:<30} {sw['output_stdev']:>10.4g} {sw['pct_out_of_spec']:>8.3f}% {sw['dpmo']:>10,.0f} {ppk_txt:>8}")
     return "\n".join(lines)

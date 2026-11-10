@@ -1,16 +1,14 @@
-"""Native Qt QPainter Visual Charts for Phases 3-5 Analyses.
+"""Native Qt QPainter Visual Charts for Phases 3-6 Analyses.
 
-Renders crisp multi-panel vector plots inside ChartWidget for:
+Renders crisp multi-panel vector plots with interactive hover tooltips inside ChartWidget for:
 - Monte Carlo Process Simulation (Output Histogram + LSL/USL + Sensitivity Tornado)
-- Random Forests & TreeNet GBM (Variable Importance + OOB/Validation Curve)
-- MARS Splines & Discover Best Model (Basis/Importance & AutoML Leaderboard Bars)
+- Random Forests & TreeNet GBM (Variable Importance + OOB/Validation Curve + Partial Dependence + ROC)
+- MARS Splines & Discover Best Model (Importance + Binary ROC / AutoML Leaderboard Bars)
 - Resampling (Bootstrap / Randomization Null Distribution Histogram + CI / Observed)
-- Warranty Analysis (Observed vs Projected Cumulative Claims Curve)
-- REML / Nested ANOVA Variance Components & Six Sigma RTY Step Yields
+- Warranty Analysis, REML/Nested Variance Components, Six Sigma RTY & Cox PH Hazard Ratios
 """
 from __future__ import annotations
 
-import math
 from typing import Any, Dict, List, Sequence
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -37,6 +35,24 @@ PHASE6_CHART_ANALYSES = {
 
 def supported(result: Any) -> bool:
     return isinstance(result, dict) and result.get("analysis") in PHASE6_CHART_ANALYSES
+
+
+def _maybe_roc_panel(r: Dict[str, Any], auc_val: Any = None) -> List[Dict[str, Any]]:
+    roc = r.get("roc_curve") or []
+    if not roc:
+        return []
+    auc_txt = f" (AUC = {auc_val:.3f})" if isinstance(auc_val, (int, float)) else ""
+    return [{
+        "kind": "phase6_chart",
+        "mode": "line",
+        "title": f"ROC Curve{auc_txt}",
+        "series": [
+            {"label": "Model ROC", "x": [pt["fpr"] for pt in roc], "y": [pt["tpr"] for pt in roc], "color": "#2563eb", "dash": False},
+            {"label": "Random (0.5)", "x": [0.0, 1.0], "y": [0.0, 1.0], "color": "#94a3b8", "dash": True},
+        ],
+        "xlabel": "False Positive Rate (1 - Specificity)",
+        "ylabel": "True Positive Rate (Sensitivity)",
+    }]
 
 
 def prepare(chart: Any, r: Dict[str, Any]) -> None:
@@ -88,29 +104,46 @@ def prepare(chart: Any, r: Dict[str, Any]) -> None:
                 "unit": "%",
                 "fill": "#2563eb",
             })
-        if kind == "random_forest" and r.get("oob_curve"):
-            curve = r["oob_curve"]
-            panels.append({
-                "kind": "phase6_chart",
-                "mode": "line",
-                "title": "OOB Error / RMSE Convergence vs. Trees",
-                "series": [{"label": "OOB Metric", "x": [c["trees"] for c in curve], "y": [c["metric"] for c in curve], "color": "#dc2626", "dash": False}],
-                "xlabel": "Number of Trees",
-                "ylabel": "OOB RMSE" if r.get("task") == "regression" else "OOB Error",
-            })
-        elif kind == "treenet_gbm" and r.get("history"):
-            hist = r["history"]
-            panels.append({
-                "kind": "phase6_chart",
-                "mode": "line",
-                "title": f"Training vs. Validation Loss (Opt Trees = {r.get('optimal_trees')})",
-                "series": [
-                    {"label": "Train", "x": [h["trees"] for h in hist], "y": [h["train_loss"] for h in hist], "color": "#2563eb", "dash": False},
-                    {"label": "Validation", "x": [h["trees"] for h in hist], "y": [h["val_loss"] for h in hist], "color": "#dc2626", "dash": True},
-                ],
-                "xlabel": "Boosting Iterations",
-                "ylabel": "Loss (RMSE / LogLoss)",
-            })
+        if kind == "random_forest":
+            if r.get("oob_curve"):
+                curve = r["oob_curve"]
+                panels.append({
+                    "kind": "phase6_chart",
+                    "mode": "line",
+                    "title": "OOB Error / RMSE Convergence vs. Trees",
+                    "series": [{"label": "OOB Metric", "x": [c["trees"] for c in curve], "y": [c["metric"] for c in curve], "color": "#dc2626", "dash": False}],
+                    "xlabel": "Number of Trees",
+                    "ylabel": "OOB RMSE" if r.get("task") == "regression" else "OOB Error",
+                })
+            panels.extend(_maybe_roc_panel(r, (r.get("oob_metrics") or {}).get("roc_auc")))
+        elif kind == "treenet_gbm":
+            if r.get("history"):
+                hist = r["history"]
+                panels.append({
+                    "kind": "phase6_chart",
+                    "mode": "line",
+                    "title": f"Training vs. Validation Loss (Opt Trees = {r.get('optimal_trees')})",
+                    "series": [
+                        {"label": "Train", "x": [h["trees"] for h in hist], "y": [h["train_loss"] for h in hist], "color": "#2563eb", "dash": False},
+                        {"label": "Validation", "x": [h["trees"] for h in hist], "y": [h["val_loss"] for h in hist], "color": "#dc2626", "dash": True},
+                    ],
+                    "xlabel": "Boosting Iterations",
+                    "ylabel": "Loss",
+                })
+            pdp = r.get("top_pdp") or []
+            if pdp and imp:
+                y_key = "y_hat" if "y_hat" in pdp[0] else "prob_class1"
+                panels.append({
+                    "kind": "phase6_chart",
+                    "mode": "line",
+                    "title": f"Partial Dependence: {imp[0]['predictor']}",
+                    "series": [{"label": "Fitted Response", "x": [pt["x"] for pt in pdp], "y": [pt[y_key] for pt in pdp], "color": "#059669", "dash": False}],
+                    "xlabel": imp[0]["predictor"],
+                    "ylabel": "Predicted Mean" if y_key == "y_hat" else "P(Class 1)",
+                })
+            panels.extend(_maybe_roc_panel(r, (r.get("val_metrics") or {}).get("roc_auc")))
+        elif kind == "mars_regression":
+            panels.extend(_maybe_roc_panel(r, (r.get("metrics") or {}).get("roc_auc")))
 
     elif kind == "discover_best_model":
         lb = r.get("leaderboard") or []
@@ -234,7 +267,8 @@ def prepare(chart: Any, r: Dict[str, Any]) -> None:
     chart.panels = panels
     chart.panel_columns = 2 if len(panels) > 1 else 1
     chart.note = f"StatCraft Vector Plot — {r.get('analysis', '')}"
-    chart.setMinimumSize(760 if len(panels) > 1 else 560, 420)
+    rows_n = (len(panels) + 1) // 2 if len(panels) > 1 else 1
+    chart.setMinimumSize(760 if len(panels) > 1 else 560, max(400, 360 * rows_n))
 
 
 def draw_panel(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None:
@@ -284,6 +318,9 @@ def _draw_barh(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None
         p.setBrush(QBrush(fill_col))
         p.drawRoundedRect(rect, 3, 3)
 
+        if hasattr(chart, "remember_hover"):
+            chart.remember_hover(rect, {"text": f"{lbl}: {val:.4g}{unit}"}, clip=plot)
+
         p.setFont(QFont("Segoe UI", 8.5))
         p.setPen(QColor("#0f172a"))
         elided = p.fontMetrics().elidedText(str(lbl), Qt.TextElideMode.ElideRight, int(left_pad - 14))
@@ -325,7 +362,10 @@ def _draw_hist(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None
     for i, c in enumerate(counts):
         x0, x1 = sx(edges[i]), sx(edges[i + 1])
         y0 = sy(c)
-        p.drawRect(QRectF(x0, y0, max(1.0, x1 - x0), plot.bottom() - y0))
+        bar_rect = QRectF(x0, y0, max(1.0, x1 - x0), plot.bottom() - y0)
+        p.drawRect(bar_rect)
+        if hasattr(chart, "remember_hover") and c > 0:
+            chart.remember_hover(bar_rect, {"text": f"Bin [{edges[i]:.4g}, {edges[i+1]:.4g}]\nCount: {c}"}, clip=plot)
 
     for vl in vlines:
         vx = sx(float(vl["x"]))
@@ -384,16 +424,25 @@ def _draw_line(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None
         xs, ys = s.get("x", []), s.get("y", [])
         if not xs:
             continue
-        pen = QPen(QColor(s.get("color", "#2563eb")), 2.0)
+        col = QColor(s.get("color", "#2563eb"))
+        pen = QPen(col, 2.0)
         if s.get("dash"):
             pen.setStyle(Qt.PenStyle.DashLine)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
         path = QPainterPath()
-        path.moveTo(sx(xs[0]), sy(ys[0]))
-        for xv, yv in zip(xs[1:], ys[1:]):
-            path.lineTo(sx(xv), sy(yv))
+        pts = [QPointF(sx(xs[i]), sy(ys[i])) for i in range(len(xs))]
+        path.moveTo(pts[0])
+        for pt in pts[1:]:
+            path.lineTo(pt)
         p.drawPath(path)
+
+        if not s.get("dash") and len(pts) <= 30:
+            p.setBrush(QBrush(col))
+            for i, pt in enumerate(pts):
+                p.drawEllipse(pt, 3.0, 3.0)
+                if hasattr(chart, "remember_point_hover"):
+                    chart.remember_point_hover(pt, {"text": f"{s.get('label', 'Series')}\nX = {xs[i]:.4g}, Y = {ys[i]:.4g}"}, size=10, clip=plot)
 
     p.setPen(QPen(QColor("#334155"), 1.2))
     p.drawLine(plot.bottomLeft(), plot.bottomRight())

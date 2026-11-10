@@ -4067,20 +4067,37 @@ class Presenter:
         col = self.worksheet.columns[int(index)]
         return col.name, (col.numeric_values(True) if numeric else list(col.values))
 
-    def bootstrap_1sample(self, index, statistic="Mean", n_resamples=2000, confidence=0.95, seed=42):
+    def _store_generated_col(self, prefix, values, kind="number"):
+        existing = {c.name for c in self.worksheet.columns}
+        name = prefix
+        k = 2
+        while name in existing:
+            name = f"{prefix}_{k}"
+            k += 1
+        self.worksheet.columns.append(Column(name, kind, list(values)))
+        self.dirty = True
+        return name
+
+    def bootstrap_1sample(self, index, statistic="Mean", n_resamples=2000, confidence=0.95, seed=42, store_replicates=False):
         from .resampling import bootstrap_1sample as _fn
         name, vals = self._phase3_col(index, "Variable", numeric=True)
         res = _fn(vals, statistic=statistic, n_resamples=int(n_resamples), confidence=float(confidence), seed=int(seed), variable_name=name)
+        if store_replicates and res.get("_replicates"):
+            res["stored_replicates_column"] = self._store_generated_col(f"Boot_{name}", res["_replicates"], "number")
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "bootstrap_1sample", "parameters": {"index": index, "statistic": statistic, "n_resamples": n_resamples, "confidence": confidence, "seed": seed}}
-        return self._record(f"1-Sample Bootstrap ({statistic}): {name}", res, recipe=recipe)
+        return self._record(f"1-Sample Bootstrap ({statistic}): {name}", clean, recipe=recipe)
 
-    def bootstrap_2sample(self, index1, index2, statistic="Mean Difference", n_resamples=2000, confidence=0.95, seed=42):
+    def bootstrap_2sample(self, index1, index2, statistic="Mean Difference", n_resamples=2000, confidence=0.95, seed=42, store_replicates=False):
         from .resampling import bootstrap_2sample as _fn
         n1, v1 = self._phase3_col(index1, "Sample 1", numeric=True)
         n2, v2 = self._phase3_col(index2, "Sample 2", numeric=True)
         res = _fn(v1, v2, statistic=statistic, n_resamples=int(n_resamples), confidence=float(confidence), seed=int(seed), name1=n1, name2=n2)
+        if store_replicates and res.get("_replicates"):
+            res["stored_replicates_column"] = self._store_generated_col("Boot_Diff", res["_replicates"], "number")
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "bootstrap_2sample", "parameters": {"index1": index1, "index2": index2, "statistic": statistic, "n_resamples": n_resamples, "confidence": confidence, "seed": seed}}
-        return self._record(f"2-Sample Bootstrap ({statistic}): {n1}, {n2}", res, recipe=recipe)
+        return self._record(f"2-Sample Bootstrap ({statistic}): {n1}, {n2}", clean, recipe=recipe)
 
     def randomization_1sample(self, index, hypothesized_mean=0.0, alternative="two_sided", n_resamples=2000, seed=42):
         from .resampling import randomization_1sample as _fn
@@ -4191,26 +4208,38 @@ class Presenter:
         recipe = {"action": "rolled_throughput_yield", "parameters": {"step_yields": yields, "index": index, "process_name": process_name}}
         return self._record(f"Six Sigma Product Report (RTY): {process_name}", res, recipe=recipe)
 
-    def random_forest(self, response_index, predictor_indices, task="auto", n_trees=80, max_depth=8, min_samples_leaf=2, max_features="auto", seed=42):
+    def _maybe_store_ml_cols(self, res: dict, prefix: str, store_fits: bool) -> None:
+        if not store_fits or not res.get("_fits"):
+            return
+        fit_kind = "number" if res.get("task") == "regression" else "text"
+        res["stored_fit_column"] = self._store_generated_col(f"{prefix}_Fit", res["_fits"], fit_kind)
+        if res.get("_residuals"):
+            res_name = f"{prefix}_Res" if res.get("task") == "regression" else f"{prefix}_Prob"
+            res["stored_resid_column"] = self._store_generated_col(res_name, res["_residuals"], "number")
+
+    def random_forest(self, response_index, predictor_indices, task="auto", n_trees=80, max_depth=8, min_samples_leaf=2, max_features="auto", seed=42, store_fits=False):
         from .predictive_ml import random_forest_fit as _fn
         preds = list(predictor_indices)
         res = _fn(self.worksheet, response_index, preds, task=task, n_trees=int(n_trees), max_depth=int(max_depth), min_samples_leaf=int(min_samples_leaf), max_features=max_features, seed=int(seed))
+        self._maybe_store_ml_cols(res, "RF", bool(store_fits))
         clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "random_forest", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "max_depth": int(max_depth), "min_samples_leaf": int(min_samples_leaf), "max_features": max_features, "seed": int(seed)}}
         return self._record(f"Random Forests ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
 
-    def treenet_gbm(self, response_index, predictor_indices, task="auto", n_trees=100, learning_rate=0.08, max_depth=3, subsample=0.8, loss="ls", validation_fraction=0.2, seed=42):
+    def treenet_gbm(self, response_index, predictor_indices, task="auto", n_trees=100, learning_rate=0.08, max_depth=3, subsample=0.8, loss="ls", validation_fraction=0.2, seed=42, store_fits=False):
         from .predictive_ml import treenet_fit as _fn
         preds = list(predictor_indices)
         res = _fn(self.worksheet, response_index, preds, task=task, n_trees=int(n_trees), learning_rate=float(learning_rate), max_depth=int(max_depth), subsample=float(subsample), loss=loss, validation_fraction=float(validation_fraction), seed=int(seed))
+        self._maybe_store_ml_cols(res, "TreeNet", bool(store_fits))
         clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "treenet_gbm", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "learning_rate": float(learning_rate), "max_depth": int(max_depth), "subsample": float(subsample), "loss": loss, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
         return self._record(f"TreeNet Gradient Boosting ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
 
-    def mars_regression(self, response_index, predictor_indices, task="auto", max_terms=16, max_degree=2, penalty=2.0):
+    def mars_regression(self, response_index, predictor_indices, task="auto", max_terms=16, max_degree=2, penalty=2.0, store_fits=False):
         from .predictive_ml import mars_fit as _fn
         preds = list(predictor_indices)
         res = _fn(self.worksheet, response_index, preds, task=task, max_terms=int(max_terms), max_degree=int(max_degree), penalty=float(penalty))
+        self._maybe_store_ml_cols(res, "MARS", bool(store_fits))
         clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "mars_regression", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "max_terms": int(max_terms), "max_degree": int(max_degree), "penalty": float(penalty)}}
         return self._record(f"MARS Splines ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
@@ -4222,12 +4251,15 @@ class Presenter:
         recipe = {"action": "discover_best_model", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
         return self._record(f"Discover Best Model ({res['task'].title()}): {res['response']}", res, recipe=recipe)
 
-    def monte_carlo_simulation(self, inputs, formula, lsl=None, usl=None, n_sims=10000, seed=42):
+    def monte_carlo_simulation(self, inputs, formula, lsl=None, usl=None, n_sims=10000, seed=42, store_column=False):
         from .monte_carlo import monte_carlo_simulation as _fn, parse_input_specs
         parsed = parse_input_specs(inputs) if isinstance(inputs, str) else list(inputs)
         res = _fn(parsed, formula, lsl=lsl, usl=usl, n_sims=int(n_sims), seed=int(seed))
+        if store_column and res.get("_draws"):
+            res["stored_column"] = self._store_generated_col("MC_Output", res["_draws"], "number")
+        clean = {k: v for k, v in res.items() if not k.startswith("_")}
         recipe = {"action": "monte_carlo_simulation", "parameters": {"inputs": parsed, "formula": formula, "lsl": lsl, "usl": usl, "n_sims": int(n_sims), "seed": int(seed)}}
-        return self._record(f"Monte Carlo Simulation ({res['n_sims']:,} runs)", res, recipe=recipe)
+        return self._record(f"Monte Carlo Simulation ({clean['n_sims']:,} runs)", clean, recipe=recipe)
 
     def cross_tabulation(self, settings=None):
         settings = self._bound_settings("cross_tabulation", settings)

@@ -93,6 +93,7 @@ def bootstrap_1sample(
         "ci_low": ci_low,
         "ci_high": ci_high,
         "histogram": _resample_hist(boot_vals),
+        "_replicates": [float(v) for v in boot_vals],
     }
 
 
@@ -159,6 +160,7 @@ def bootstrap_2sample(
         "ci_low": ci_low,
         "ci_high": ci_high,
         "histogram": _resample_hist(boot_vals),
+        "_replicates": [float(v) for v in boot_vals],
     }
 
 

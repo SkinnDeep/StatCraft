@@ -126,7 +126,51 @@ def prepare_ml_dataset(
         "predictor_names": orig_predictor_names,
         "col_groups": col_groups,
         "n": len(valid_rows),
+        "valid_rows": valid_rows,
+        "total_rows": n_rows,
     }
+
+
+def _compute_roc_curve(y_true: np.ndarray, p1: np.ndarray, n_pts: int = 25) -> List[Dict[str, float]]:
+    pos = max(1, int(np.sum(y_true == 1)))
+    neg = max(1, int(np.sum(y_true == 0)))
+    threshs = np.linspace(1.0, 0.0, n_pts)
+    pts = []
+    for th in threshs:
+        pred1 = p1 >= th
+        tpr = float(np.sum(pred1 & (y_true == 1))) / pos
+        fpr = float(np.sum(pred1 & (y_true == 0))) / neg
+        pts.append({"fpr": fpr, "tpr": tpr})
+    return pts
+
+
+def _format_mars_equation(basis_rows: Sequence[Dict[str, Any]]) -> str:
+    parts = [f"{basis_rows[0]['coef']:.5g}"]
+    for row in basis_rows[1:]:
+        c = float(row["coef"])
+        if abs(c) < 1e-12:
+            continue
+        sign = " + " if c >= 0 else " - "
+        parts.append(f"{sign}{abs(c):.5g} * {row['basis']}")
+    return "".join(parts)
+
+
+def _align_predictions(ds: Dict[str, Any], pred_vals: Any, y_arr: np.ndarray, eff_task: str, classes: Sequence[str]):
+    total = int(ds["total_rows"])
+    v_rows = ds["valid_rows"]
+    fits: List[Any] = [None] * total
+    resids: List[Any] = [None] * total
+    if eff_task == "regression":
+        for pos, r_idx in enumerate(v_rows):
+            fv = float(pred_vals[pos])
+            fits[r_idx] = fv
+            resids[r_idx] = float(y_arr[pos]) - fv
+    else:
+        idx_cls = np.argmax(pred_vals, axis=1)
+        for pos, r_idx in enumerate(v_rows):
+            fits[r_idx] = str(classes[int(idx_cls[pos])])
+            resids[r_idx] = float(pred_vals[pos, 1]) if len(classes) == 2 else float(np.max(pred_vals[pos]))
+    return fits, resids
 
 
 def _aggregate_importance(
@@ -478,18 +522,23 @@ def random_forest_fit(
                     oob_curve.append({"trees": t_idx + 1, "metric": err, "accuracy": 1.0 - err})
 
     valid_oob = oob_cnt > 0
+    roc_pts = []
     if eff_task == "regression":
         train_pred = in_sum / nt
         train_metrics = _regression_metrics(y, train_pred)
         oob_pred = oob_sum[valid_oob] / oob_cnt[valid_oob] if np.any(valid_oob) else train_pred
         oob_y = y[valid_oob] if np.any(valid_oob) else y
         oob_metrics = _regression_metrics(oob_y, oob_pred)
+        fits_row, resids_row = _align_predictions(ds, train_pred, y, eff_task, classes)
     else:
         train_probs = in_sum / nt
         train_metrics = _classification_metrics(y, train_probs, classes)
         oob_probs = oob_sum[valid_oob] / oob_cnt[valid_oob][:, None] if np.any(valid_oob) else train_probs
         oob_y = y[valid_oob] if np.any(valid_oob) else y
         oob_metrics = _classification_metrics(oob_y, oob_probs, classes)
+        if len(classes) == 2:
+            roc_pts = _compute_roc_curve(oob_y, oob_probs[:, 1])
+        fits_row, resids_row = _align_predictions(ds, train_probs, y, eff_task, classes)
 
     importance = _aggregate_importance(imp_total, ds["col_groups"], ds["predictor_names"])
     return {
@@ -507,6 +556,9 @@ def random_forest_fit(
         "oob_covered": int(np.sum(valid_oob)),
         "oob_curve": oob_curve,
         "variable_importance": importance,
+        "roc_curve": roc_pts,
+        "_fits": fits_row,
+        "_residuals": resids_row,
         "_trees": trees,
         "_ds": ds,
     }
@@ -751,6 +803,16 @@ def treenet_fit(
                         s += lr * tr.predict(X_tmp)
                     pdp_points.append({"x": float(gv), "prob_class1": float(np.mean(1.0 / (1.0 + np.exp(-np.clip(s, -30, 30)))))})
 
+    roc_pts = []
+    if eff_task == "classification" and len(classes) == 2:
+        p_full = 1.0 / (1.0 + np.exp(-np.clip(
+            np.full(n, float(init_val), dtype=float) + sum((lr * tr.predict(X) for tr in stages[:best_iter]), np.zeros(n)),
+            -30.0, 30.0,
+        )))
+        roc_pts = _compute_roc_curve(y, p_full)
+    full_pred = _predict_treenet({"_lr": lr, "_stages": stages[:best_iter], "_init": init_val, "task": eff_task, "classes": classes}, X)
+    fits_row, resids_row = _align_predictions(ds, full_pred, y, eff_task, classes)
+
     return {
         "analysis": "treenet_gbm",
         "task": eff_task,
@@ -771,6 +833,9 @@ def treenet_fit(
         "history": history,
         "variable_importance": importance,
         "top_pdp": pdp_points,
+        "roc_curve": roc_pts,
+        "_fits": fits_row,
+        "_residuals": resids_row,
         "_init": init_val,
         "_stages": stages[:best_iter],
         "_lr": lr,
@@ -1005,6 +1070,14 @@ def mars_fit(
     for t, c in zip(best_terms, active_beta[1:]):
         basis_rows.append({"basis": t.label, "coef": float(c)})
 
+    roc_pts = []
+    if eff_task == "classification":
+        probs_all = np.column_stack([1.0 - probs_p1, probs_p1])
+        roc_pts = _compute_roc_curve(y, probs_p1)
+        fits_row, resids_row = _align_predictions(ds, probs_all, y, eff_task, classes)
+    else:
+        fits_row, resids_row = _align_predictions(ds, best_B @ best_beta, y_work, eff_task, classes)
+
     return {
         "analysis": "mars_regression",
         "task": eff_task,
@@ -1014,9 +1087,13 @@ def mars_fit(
         "n": n,
         "n_basis_terms": len(basis_rows),
         "gcv": float(best_gcv),
+        "equation": _format_mars_equation(basis_rows),
         "basis_functions": basis_rows,
         "metrics": fit_metrics,
+        "roc_curve": roc_pts,
         "variable_importance": _aggregate_importance(raw_imp, ds["col_groups"], ds["predictor_names"]),
+        "_fits": fits_row,
+        "_residuals": resids_row,
         "_terms": best_terms,
         "_beta": active_beta,
         "_ds": ds,
@@ -1213,6 +1290,8 @@ def format_predictive_ml_report(result: Dict[str, Any]) -> str:
         lines.append(header)
         m = result["metrics"]
         lines.append(f"N: {result['n']}  |  Selected Basis Functions: {result['n_basis_terms']}  |  GCV: {result['gcv']:.6g}")
+        if result.get("equation"):
+            lines.append(f"Equation: {result['response']} = {result['equation']}")
         if result["task"] == "regression":
             lines.append(f"R-sq: {m['r2'] * 100:.2f}%  |  GCV R-sq: {m.get('gcv_r2', 0) * 100:.2f}%  |  RMSE: {m['rmse']:.4f}  |  MAE: {m['mae']:.4f}")
         else:

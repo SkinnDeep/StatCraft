@@ -224,8 +224,9 @@ def recommend_analysis(track_id: str, choices: Dict[str, str]) -> Dict[str, Any]
 class GuidedAssistantDialog(QDialog):
     """Interactive Minitab-style Guided Analysis Assistant Wizard."""
 
-    def __init__(self, parent: Optional[QWidget] = None, dark_mode: bool = False):
+    def __init__(self, parent: Optional[QWidget] = None, dark_mode: bool = False, worksheet_summary: str = ""):
         super().__init__(parent)
+        self.worksheet_summary = worksheet_summary
         self.setWindowTitle("StatCraft Guided Analysis Assistant")
         self.resize(840, 560)
         self.chosen_method: Optional[str] = None
@@ -271,6 +272,10 @@ class GuidedAssistantDialog(QDialog):
 
         hdr = QLabel("<b>Guided Analysis Assistant</b> — Choose what you want to accomplish and answer a few quick questions:")
         root.addWidget(hdr)
+        if self.worksheet_summary:
+            ws_lbl = QLabel(self.worksheet_summary)
+            ws_lbl.setObjectName("muted")
+            root.addWidget(ws_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.track_list = QListWidget()

@@ -693,6 +693,65 @@ def translate_entry_to_r(entry: Dict[str, Any], worksheet: Worksheet) -> Tuple[s
             f"  labs(title = 'Scatterplot: {y_name} vs {x_name}') + theme_minimal(base_size = 12)",
         ]
 
+    elif analysis in ("randomization_1sample", "randomization_2sample"):
+        c1 = worksheet.columns[params.get("index", params.get("index1", 0))].name
+        b_body = [
+            f"x1 <- na.omit(df[[{_escape_str(c1)}]])",
+            f"set.seed({params.get('seed', 42)}); B <- {params.get('resamples', params.get('n_resamples', 2000))}",
+            "perm_stats <- replicate(B, mean(sample(c(-1, 1), length(x1), replace = TRUE) * (x1 - mean(x1))))",
+            "hist(perm_stats, col = '#a5b4fc', border = 'white', main = 'Randomization Null Distribution')",
+        ]
+        t_body = list(b_body)
+
+    elif analysis in ("poisson_gof", "goodness_of_fit_poisson"):
+        c1 = worksheet.columns[params.get("index", 0)].name
+        b_body = [
+            f"counts <- na.omit(df[[{_escape_str(c1)}]])",
+            "lam <- mean(counts)",
+            "tab <- table(counts); k <- as.numeric(names(tab))",
+            "probs <- dpois(k, lambda = lam); probs <- probs / sum(probs)",
+            "print(chisq.test(as.numeric(tab), p = probs))",
+        ]
+        t_body = list(b_body)
+
+    elif analysis in ("six_sigma_process_report", "six_sigma_product_report"):
+        if analysis == "six_sigma_process_report":
+            c1 = worksheet.columns[params.get("index", 0)].name
+            lsl_v = result.get("lsl")
+            usl_v = result.get("usl")
+            b_body = [
+                f"x <- na.omit(df[[{_escape_str(c1)}]])",
+                f"mu <- mean(x); s <- sd(x)",
+                f"cat(sprintf('Mean=%.4f StDev=%.4f\n', mu, s))",
+                f"# Spec limits: LSL={lsl_v}, USL={usl_v}",
+                "hist(x, col = '#60a5fa', border = 'white', main = 'Six Sigma Process Distribution')",
+            ]
+        else:
+            ys = result.get("step_yields_pct") or [99.0]
+            b_body = [
+                f"yields <- c({', '.join(str(v) for v in ys)}) / 100",
+                "rty <- prod(yields)",
+                "cat(sprintf('Rolled Throughput Yield (RTY): %.2f%%\n', rty * 100))",
+                "barplot(yields * 100, col = '#10b981', ylim = c(0, 105), main = 'Step Yields (%)')",
+            ]
+        t_body = list(b_body)
+
+    elif analysis in ("one_variance_power", "two_variances_power", "one_poisson_rate_power", "two_poisson_rates_power", "equivalence_tost_power", "sample_size_estimation", "sample_size_tolerance_interval"):
+        b_body = [
+            "if (!requireNamespace('pwr', quietly = TRUE)) install.packages('pwr')",
+            "library(pwr)",
+            f"# StatCraft Extended Power Analysis: {title}",
+            f"cat('Computed Sample Size:', {result.get('sample_size') or result.get('sample_size_per_group') or 'NA'}, '\n')",
+        ]
+        t_body = list(b_body)
+
+    elif analysis == "warranty_analysis":
+        b_body = [
+            f"# Weibull Warranty Analysis (shape={result.get('weibull_shape', 1.0):.3f}, scale={result.get('weibull_scale', 1.0):.3f})",
+            "cat('Observed Claims:', " + str(result.get("observed_claims", 0)) + ", '\n')",
+        ]
+        t_body = list(b_body)
+
     # UNIVERSAL SMART FALLBACK (Matches ANY other analysis or graph)
     else:
         # Detect relevant column names
