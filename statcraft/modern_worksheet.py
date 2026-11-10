@@ -21,19 +21,25 @@ from PySide6.QtWidgets import (
 )
 
 
-def movement(event, enter_direction='down'):
+def movement(event, enter_direction='down', in_editor=False):
     if event.type() != QEvent.Type.KeyPress:
         return None
-    if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier):
+    mods = event.modifiers()
+    if mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier):
         return None
     key = event.key()
-    reverse = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+    reverse = bool(mods & Qt.KeyboardModifier.ShiftModifier)
     if key in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
         return 'left' if reverse or key == Qt.Key.Key_Backtab else 'right'
     if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
         if enter_direction == 'right':
             return 'left' if reverse else 'right'
         return 'up' if reverse else 'down'
+    if in_editor:
+        if key == Qt.Key.Key_Down:
+            return 'down'
+        if key == Qt.Key.Key_Up:
+            return 'up'
     return None
 
 
@@ -128,15 +134,27 @@ class WorksheetDelegate(QStyledItemDelegate):
     def __init__(self, parent, navigate, is_column_names=False):
         super().__init__(parent)
         self.navigate = navigate
-        self.page_rows=None
+        self.page_rows = None
         self.is_column_names = is_column_names
+        self._initial_editor_text = ""
+
+    def setEditorData(self, editor, index):
+        super().setEditorData(editor, index)
+        if isinstance(editor, QLineEdit):
+            self._initial_editor_text = editor.text()
 
     def eventFilter(self, editor, event):
-        direction = movement(event, getattr(self.parent(), 'enter_direction', 'down'))
-        if direction is not None and isinstance(editor, QLineEdit):
-            if self.navigate is not None:
-                self.navigate(direction, editor, self)
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Escape and isinstance(editor, QLineEdit):
+                editor.setText(self._initial_editor_text)
+                self.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
                 return True
+            direction = movement(event, getattr(self.parent(), 'enter_direction', 'down'), in_editor=True)
+            if direction is not None and isinstance(editor, QLineEdit):
+                if self.navigate is not None:
+                    self.navigate(direction, editor, self)
+                    return True
         return super().eventFilter(editor, event)
 
     def paint(self, painter, option, index):
@@ -216,23 +234,71 @@ class WorksheetTable(QTableWidget):
         self.setItemDelegate(WorksheetDelegate(self, navigate))
 
     def event(self, event):
-        if event.type()==QEvent.Type.KeyPress and not event.modifiers():
-            key=event.key();scroll=self.verticalScrollBar()
-            if key==Qt.Key.Key_Down and self.currentRow()==self.rowCount()-1:
-                self.navigate('down');return True
-            if key==Qt.Key.Key_Up and self.currentRow()==0:
-                self.navigate('up');return True
-            if self.page_rows and ((key==Qt.Key.Key_PageDown and scroll.value()==scroll.maximum()) or (key==Qt.Key.Key_PageUp and scroll.value()==scroll.minimum())):
-                if self.page_rows(1 if key==Qt.Key.Key_PageDown else -1):return True
-        direction = movement(event, self.enter_direction)
-        if direction is not None:
-            self.navigate(direction)
-            return True
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            mods = event.modifiers()
+            # Ctrl+Home / Ctrl+End / Ctrl+Up
+            if (mods & Qt.KeyboardModifier.ControlModifier) and not (mods & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)):
+                if key == Qt.Key.Key_Home:
+                    self.navigate('top_left')
+                    return True
+                if key == Qt.Key.Key_End:
+                    self.navigate('bottom_right')
+                    return True
+                if key == Qt.Key.Key_Up and self.currentRow() == 0:
+                    self.navigate('column_name')
+                    return True
+            elif not mods:
+                scroll = self.verticalScrollBar()
+                if key == Qt.Key.Key_Down and self.currentRow() == self.rowCount() - 1:
+                    self.navigate('down')
+                    return True
+                if key == Qt.Key.Key_Up and self.currentRow() == 0:
+                    self.navigate('up')
+                    return True
+                if self.page_rows and ((key == Qt.Key.Key_PageDown and scroll.value() == scroll.maximum()) or (key == Qt.Key.Key_PageUp and scroll.value() == scroll.minimum())):
+                    if self.page_rows(1 if key == Qt.Key.Key_PageDown else -1):
+                        return True
+            direction = movement(event, self.enter_direction, in_editor=False)
+            if direction is not None:
+                self.navigate(direction)
+                return True
         return super().event(event)
 
-    def wheelEvent(self,event):
-        delta=event.angleDelta().y() or event.pixelDelta().y();scroll=self.verticalScrollBar()
-        at_edge=(delta<0 and scroll.value()==scroll.maximum()) or (delta>0 and scroll.value()==scroll.minimum())
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y() or event.pixelDelta().y()
+        scroll = self.verticalScrollBar()
+        at_edge = (delta < 0 and scroll.value() == scroll.maximum()) or (delta > 0 and scroll.value() == scroll.minimum())
         if delta and at_edge and self.page_rows and not event.modifiers():
-            if self.page_rows(1 if delta<0 else -1):event.accept();return
+            if self.page_rows(1 if delta < 0 else -1):
+                event.accept()
+                return
         super().wheelEvent(event)
+
+
+class ColumnNamesTable(QTableWidget):
+    """Header row table for column names (C1, C2...) with seamless Minitab-style navigation."""
+    def __init__(self, navigate, parent=None):
+        super().__init__(1, 0, parent)
+        self.navigate = navigate
+        self.enter_direction = 'down'
+        self.selected_columns = set()
+        self.selected_rows = set()
+        self.setItemDelegate(WorksheetDelegate(self, navigate, is_column_names=True))
+
+    def event(self, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            mods = event.modifiers()
+            if not (mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)):
+                if key == Qt.Key.Key_Down:
+                    if self.navigate is not None:
+                        self.navigate('down')
+                        return True
+                direction = movement(event, self.enter_direction, in_editor=False)
+                if direction is not None:
+                    if self.navigate is not None:
+                        self.navigate(direction)
+                        return True
+        return super().event(event)
+

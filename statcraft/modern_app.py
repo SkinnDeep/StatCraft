@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 from .app import Presenter, format_entry, _display, _number_list
 from .model import Column, finite_number, display_date
-from .modern_worksheet import WorksheetTable, WorksheetHeaderView, WorksheetDelegate
+from .modern_worksheet import WorksheetTable, WorksheetHeaderView, WorksheetDelegate, ColumnNamesTable
 from .modern_icons import tool_icon
 from .io import MAX_CELLS
 from .variable_dialogs import (
@@ -876,11 +876,10 @@ class ModernWindow(QMainWindow):
         self.worksheet_selector = QComboBox(self.worksheet_pane); self.worksheet_selector.hide()
         self.worksheet_selector.currentIndexChanged.connect(self._select_sheet)
 
-        self.column_names = QTableWidget(1, 0)
+        self.column_names = ColumnNamesTable(self._navigate_column_name)
         self.column_names.setObjectName("columnNamesTable")
         self.column_names.selected_columns = set()
         self.column_names.selected_rows = set()
-        self.column_names.setItemDelegate(WorksheetDelegate(self.column_names, None, is_column_names=True))
         self.col_header_view = WorksheetHeaderView(Qt.Orientation.Horizontal, self.column_names)
         self.column_names.setHorizontalHeader(self.col_header_view)
         self.col_header_view.sectionClicked.connect(self._on_column_header_clicked)
@@ -903,6 +902,10 @@ class ModernWindow(QMainWindow):
         self.column_names.itemChanged.connect(self._column_name_changed)
         self.column_names.currentCellChanged.connect(self._column_name_current_changed)
         self.column_names.cellClicked.connect(self._column_name_current_changed)
+        from PySide6.QtWidgets import QAbstractButton
+        col_corner = self.column_names.findChild(QAbstractButton)
+        if col_corner:
+            col_corner.clicked.connect(self.toggle_entry_direction)
         self.entry_dir_label = QLabel("↓", self.column_names)
         self.entry_dir_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.entry_dir_label.setGeometry(0, 20, 44, 21)
@@ -911,7 +914,10 @@ class ModernWindow(QMainWindow):
         sheet_layout.addWidget(self.column_names)
 
         self.table = WorksheetTable(self._navigate_cell)
-        self.table.page_rows=self._scroll_row_page
+        tbl_corner = self.table.findChild(QAbstractButton)
+        if tbl_corner:
+            tbl_corner.clicked.connect(self.toggle_entry_direction)
+        self.table.page_rows = self._scroll_row_page
         self.row_header_view = WorksheetHeaderView(Qt.Orientation.Vertical, self.table)
         self.table.setVerticalHeader(self.row_header_view)
         self.row_header_view.sectionClicked.connect(self._on_row_header_clicked)
@@ -1563,7 +1569,7 @@ class ModernWindow(QMainWindow):
         self._action(view,"Reopen Closed Output Tab",lambda:self._workspace.reopen())
         self._action(view,"Close Other Output Tabs",lambda:self._workspace.close_all(self._workspace.state['active']))
         self._action(view,"Close All Output Tabs",lambda:self._workspace.close_all())
-        self._action(view, "Toggle Entry Direction (Down / Right)", self.toggle_entry_direction)
+        self._action(view, "Toggle Entry Direction (Down / Right)", self.toggle_entry_direction, "Ctrl+D", "direction")
         self._action(view, "Refresh Worksheet", self.refresh)
 
         # 9. Assistant menu (`RT_MENU 8445` guided workflow shortcuts)
@@ -1932,9 +1938,12 @@ class ModernWindow(QMainWindow):
         self.column_names.verticalHeader().setToolTip("Data entry direction (" + arrow + ") — click to toggle Down (↓) or Right (→)")
 
     def toggle_entry_direction(self):
-        self.table.enter_direction = "right" if getattr(self.table, "enter_direction", "down") == "down" else "down"
+        new_dir = "right" if getattr(self.table, "enter_direction", "down") == "down" else "down"
+        self.table.enter_direction = new_dir
+        if hasattr(self, "column_names"):
+            self.column_names.enter_direction = new_dir
         self._update_corner_arrow()
-        mode_text = "Right (→)" if self.table.enter_direction == "right" else "Down (↓)"
+        mode_text = "Right (→)" if new_dir == "right" else "Down (↓)"
         self.statusBar().showMessage("Data entry direction: " + mode_text, 5000)
 
     def toggle_navigator(self):
@@ -2383,30 +2392,113 @@ class ModernWindow(QMainWindow):
         row = self.page * self.PAGE_SIZE + item.row(); column = item.column(); raw = item.text()
         self._call(lambda: self.presenter.set_cell(row, column, raw))
 
+    def _navigate_column_name(self, direction, editor=None, delegate=None):
+        columns = len(self.presenter.worksheet.columns)
+        if not columns:
+            return
+        column = max(0, self.column_names.currentColumn())
+        if editor is not None:
+            new_name = editor.text().strip()
+            if not new_name:
+                new_name = f"C{column + 1}"
+            try:
+                self.presenter.rename_column(column, new_name)
+                item = self.column_names.item(0, column)
+                if item is not None:
+                    item.setText(new_name if new_name != f"C{column + 1}" else "")
+            except Exception as exc:
+                self.statusBar().showMessage(str(exc), 12000)
+                return
+            if delegate is not None and hasattr(delegate, 'closeEditor'):
+                try:
+                    if editor.parent() in (self.column_names, self.column_names.viewport()):
+                        delegate.closeEditor.emit(editor, delegate.EndEditHint.NoHint)
+                except Exception:
+                    pass
+
+        if direction == 'down':
+            self.table.setCurrentCell(0, column)
+            self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif direction == 'right':
+            col = min(columns - 1, column + 1)
+            self.column_names.setCurrentCell(0, col)
+            self.column_names.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif direction == 'left':
+            col = max(0, column - 1)
+            self.column_names.setCurrentCell(0, col)
+            self.column_names.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _navigate_cell(self, direction, editor=None, delegate=None):
         columns = len(self.presenter.worksheet.columns)
-        if not columns: return
-        local_row = max(0, self.table.currentRow()); column = max(0, self.table.currentColumn())
+        if not columns:
+            return
+        local_row = max(0, self.table.currentRow())
+        column = max(0, self.table.currentColumn())
         row = self.page * self.PAGE_SIZE + local_row
         if editor is not None:
             item = self.table.item(local_row, column)
+            new_text = editor.text()
             try:
-                if item is None or item.text() != editor.text(): self.presenter.set_cell(row, column, editor.text())
+                if item is None or item.text() != new_text:
+                    self.presenter.set_cell(row, column, new_text)
+                    if item is not None:
+                        item.setText(new_text)
             except (ValueError, TypeError, ArithmeticError) as exc:
-                self.statusBar().showMessage(str(exc), 12000); return
-            delegate.closeEditor.emit(editor, delegate.EndEditHint.NoHint)
-        if direction == 'down': row += 1
-        elif direction == 'up': row = max(0, row - 1)
+                self.statusBar().showMessage(str(exc), 12000)
+                return
+            if delegate is not None and hasattr(delegate, 'closeEditor'):
+                try:
+                    if editor.parent() in (self.table, self.table.viewport()):
+                        delegate.closeEditor.emit(editor, delegate.EndEditHint.NoHint)
+                except Exception:
+                    pass
+
+        if direction == 'column_name':
+            self.column_names.setCurrentCell(0, column)
+            self.column_names.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        elif direction == 'top_left':
+            row = 0
+            column = 0
+        elif direction == 'bottom_right':
+            row = max(0, self.presenter.worksheet.row_count - 1)
+            column = max(0, columns - 1)
+        elif direction == 'down':
+            row += 1
+        elif direction == 'up':
+            if local_row == 0 and self.page == 0:
+                self.column_names.setCurrentCell(0, column)
+                self.column_names.setFocus(Qt.FocusReason.OtherFocusReason)
+                return
+            row = max(0, row - 1)
         elif direction == 'right':
             column += 1
-            if column >= columns: column = 0; row += 1
+            if column >= columns:
+                column = 0
+                row += 1
         elif direction == 'left':
-            if column: column -= 1
-            elif row: column = columns - 1; row -= 1
+            if column > 0:
+                column -= 1
+            elif row > 0:
+                column = columns - 1
+                row -= 1
+
         row = min(row, max(0, MAX_CELLS // columns - 1))
-        self._navigation_row = row; self.page = row // self.PAGE_SIZE; self.refresh()
-        self.table.setCurrentCell(row % self.PAGE_SIZE, column)
-        self.table.scrollToItem(self.table.currentItem()); self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+        target_page = row // self.PAGE_SIZE
+        target_local_row = row % self.PAGE_SIZE
+
+        if target_page == self.page and target_local_row < self.table.rowCount():
+            self._navigation_row = row
+            self.table.setCurrentCell(target_local_row, column)
+            self.table.scrollToItem(self.table.currentItem())
+            self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self._navigation_row = row
+            self.page = target_page
+            self.refresh()
+            self.table.setCurrentCell(target_local_row, column)
+            self.table.scrollToItem(self.table.currentItem())
+            self.table.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _select_sheet(self, index):
         if self._refreshing or index < 0: return
