@@ -395,7 +395,8 @@ class Presenter:
     def parse_cell(raw, kind):
         if kind == "text":
             return raw
-        if raw.strip() in ("", "*"):
+        s = raw.strip()
+        if s in ("", "*") or s.lower() in ("na", "n/a", "nan", "none", ".", "-"):
             return None
         if kind == "date":
             try:
@@ -418,11 +419,16 @@ class Presenter:
         col = self.worksheet.columns[column]
         if col.metadata.get('formula') and self.auto_calculate_formulas:
             raise ValueError('C'+str(column+1)+' is calculated. Remove its formula or turn off automatic calculation before editing its cells.')
-        kind=col.kind
-        if kind=='number' and col.metadata.get('auto_type') and all(value is None for value in col.values) and raw.strip() not in ('','*'):
-            try:float(raw)
-            except ValueError:kind='text'
-        value = self.parse_cell(raw,kind)
+        kind = col.kind
+        s = raw.strip()
+        is_missing = s in ("", "*") or s.lower() in ("na", "n/a", "nan", "none", ".", "-")
+        if kind == 'number' and col.metadata.get('auto_type') and not is_missing:
+            try:
+                float(raw)
+            except ValueError:
+                kind = 'text'
+                col.values = [str(int(v)) if (isinstance(v, float) and v.is_integer()) else (str(v) if v is not None else None) for v in col.values]
+        value = self.parse_cell(raw, kind)
         if (row + 1) * len(self.worksheet.columns) > io.MAX_CELLS:
             raise ValueError("The worksheet exceeds the cell limit.")
         while len(col.values) <= row:
@@ -488,6 +494,38 @@ class Presenter:
         width = len(rows[0])
         if not width or any(len(r) != width for r in rows):
             raise ValueError("Clipboard rows must have equal numbers of cells.")
+
+        # Smart Header Detection: If row == 0 and top row is headers, extract them
+        headers = None
+        if row == 0 and len(rows) >= 2:
+            header_candidates = []
+            for c_idx in range(width):
+                val_0 = rows[0][c_idx].strip()
+                is_num_0 = False
+                try:
+                    if val_0 not in ("", "*", "NA", "N/A", "nan", "NaN"):
+                        finite_number(float(val_0))
+                        is_num_0 = True
+                except ValueError:
+                    is_num_0 = False
+
+                has_num_rest = False
+                for r_idx in range(1, len(rows)):
+                    val_r = rows[r_idx][c_idx].strip()
+                    try:
+                        if val_r not in ("", "*", "NA", "N/A", "nan", "NaN"):
+                            finite_number(float(val_r))
+                            has_num_rest = True
+                            break
+                    except ValueError:
+                        pass
+                if not is_num_0 and has_num_rest:
+                    header_candidates.append(c_idx)
+
+            if header_candidates:
+                headers = [r.strip() for r in rows[0]]
+                rows = rows[1:]
+
         if self.auto_calculate_formulas:
             for index in range(column,min(column+width,len(self.worksheet.columns))):
                 if self.worksheet.columns[index].metadata.get('formula'):
@@ -502,19 +540,23 @@ class Presenter:
             raw = [r[index - column] for r in rows] if index >= column else []
             try:
                 for value in raw:
-                    if value.strip() not in ("", "*"):
+                    if value.strip() not in ("", "*", "NA", "N/A", "nan", "NaN"):
                         finite_number(float(value))
                 kind = "number"
             except ValueError:
                 kind = "text"
-            columns.append(Column("C" + str(index + 1), kind))
+            col_name = headers[index - column] if (headers and index >= column and headers[index - column]) else ("C" + str(index + 1))
+            columns.append(Column(col_name, kind))
         for position in range(width):
             col = columns[column + position]
-            if col.kind == "number" and col.metadata.get("auto_type") and all(v is None for v in col.values):
+            if headers is not None and headers[position]:
+                col.name = headers[position]
+            if col.metadata.get("auto_type") or all(v is None for v in col.values):
                 try:
                     for cells in rows:
-                        if cells[position].strip() not in ("", "*"):
+                        if cells[position].strip() not in ("", "*", "NA", "N/A", "nan", "NaN"):
                             finite_number(float(cells[position]))
+                    col.kind = "number"
                 except ValueError:
                     col.kind = "text"
         for offset, cells in enumerate(rows):
@@ -6674,6 +6716,32 @@ class Presenter:
             for i, col in enumerate(self.worksheet.columns):
                 if col.name.startswith("C") and col.name[1:].isdigit():
                     col.name = "C" + str(i + 1)
+        self.dirty = True
+
+    @undoable
+    def clear_columns_data(self, indices):
+        col_set = sorted({int(i) for i in indices})
+        if not col_set or any(i < 0 or i >= len(self.worksheet.columns) for i in col_set):
+            raise ValueError("Select existing columns to clear.")
+        for idx in col_set:
+            col = self.worksheet.columns[idx]
+            col.values = [None] * len(col.values)
+        self.dirty = True
+
+    @undoable
+    def autofill_column(self, col_index, start_row, sample_len, count):
+        from .autofill_engine import autofill_sequence
+        if not 0 <= col_index < len(self.worksheet.columns):
+            raise ValueError("Select a valid column.")
+        col = self.worksheet.columns[col_index]
+        sample = col.values[start_row : start_row + sample_len]
+        new_values = autofill_sequence(sample, count)
+        target_start = start_row + sample_len
+        target_end = target_start + count
+        while len(col.values) < target_end:
+            col.values.append(None)
+        for i, val in enumerate(new_values):
+            col.values[target_start + i] = val
         self.dirty = True
 
     @undoable

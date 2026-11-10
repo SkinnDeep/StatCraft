@@ -90,6 +90,7 @@ class VariableEntry(QLineEdit):
 
 
 class ProcedureDialog(QDialog):
+    _LAST_DIALOG_STATE = {}
     def __init__(self,parent,title,worksheet,selectors=(),fields=(),note=''):
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -317,6 +318,20 @@ class ProcedureDialog(QDialog):
         if self.selectors:
             self.activate(self.selectors[0]['key']); self.controls[self.active_key].setFocus()
 
+        ws_name = getattr(self.worksheet, 'name', '')
+        state_key = (ws_name, self.windowTitle())
+        if state_key in self._LAST_DIALOG_STATE:
+            saved = self._LAST_DIALOG_STATE[state_key]
+            for k, val in saved.items():
+                if k in self.controls:
+                    ctrl = self.controls[k]
+                    if isinstance(ctrl, QComboBox):
+                        ctrl.setCurrentText(str(val))
+                    elif isinstance(ctrl, QCheckBox):
+                        ctrl.setChecked(bool(val))
+                    elif isinstance(ctrl, QLineEdit):
+                        ctrl.setText(str(val))
+
     def activate(self,key):
         if key==self.active_key: return
         self.active_key=key; self.available.clear()
@@ -337,8 +352,23 @@ class ProcedureDialog(QDialog):
         refs=[format_variable_reference(item.data(Qt.ItemDataRole.UserRole),self.worksheet) for item in selected]
         if spec.get('multiple'):
             existing=control.text().strip(); control.setText((existing+' ' if existing else '')+' '.join(refs))
-        else: control.setText(refs[0])
-        control.setFocus()
+            control.setFocus()
+        else:
+            control.setText(refs[0])
+            current_idx = next((i for i, s in enumerate(self.selectors) if s['key'] == self.active_key), -1)
+            next_key = None
+            if current_idx != -1 and current_idx + 1 < len(self.selectors):
+                for s in self.selectors[current_idx + 1:]:
+                    if not self.controls[s['key']].text().strip():
+                        next_key = s['key']
+                        break
+                if next_key is None and current_idx + 1 < len(self.selectors):
+                    next_key = self.selectors[current_idx + 1]['key']
+            if next_key is not None:
+                self.activate(next_key)
+                self.controls[next_key].setFocus()
+            else:
+                control.setFocus()
 
     def values(self):
         values={}
@@ -377,6 +407,19 @@ class ProcedureDialog(QDialog):
             self.error.setText(str(exc))
             self.error.setVisible(True)
             return
+
+        ws_name = getattr(self.worksheet, 'name', '')
+        state_key = (ws_name, self.windowTitle())
+        saved = {}
+        for k, ctrl in self.controls.items():
+            if isinstance(ctrl, QComboBox):
+                saved[k] = ctrl.currentText()
+            elif isinstance(ctrl, QCheckBox):
+                saved[k] = ctrl.isChecked()
+            elif isinstance(ctrl, QLineEdit):
+                saved[k] = ctrl.text()
+        self._LAST_DIALOG_STATE[state_key] = saved
+
         self.accept()
 
 

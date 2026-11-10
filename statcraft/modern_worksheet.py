@@ -237,8 +237,13 @@ class WorksheetTable(QTableWidget):
         if event.type() == QEvent.Type.KeyPress:
             key = event.key()
             mods = event.modifiers()
-            # Ctrl+Home / Ctrl+End / Ctrl+Up
-            if (mods & Qt.KeyboardModifier.ControlModifier) and not (mods & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)):
+            # Ctrl+Space / Ctrl+Home / Ctrl+End / Ctrl+Up
+            if (mods & Qt.KeyboardModifier.ControlModifier) and not (mods & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ShiftModifier)):
+                if key == Qt.Key.Key_Space:
+                    win = self.window()
+                    if hasattr(win, "select_worksheet_column") and self.currentColumn() >= 0:
+                        win.select_worksheet_column(self.currentColumn())
+                        return True
                 if key == Qt.Key.Key_Home:
                     self.navigate('top_left')
                     return True
@@ -248,6 +253,12 @@ class WorksheetTable(QTableWidget):
                 if key == Qt.Key.Key_Up and self.currentRow() == 0:
                     self.navigate('column_name')
                     return True
+            elif (mods & Qt.KeyboardModifier.ShiftModifier) and not (mods & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ControlModifier)):
+                if key == Qt.Key.Key_Space:
+                    win = self.window()
+                    if hasattr(win, "select_worksheet_row") and self.currentRow() >= 0:
+                        win.select_worksheet_row(self.currentRow())
+                        return True
             elif not mods:
                 scroll = self.verticalScrollBar()
                 if key == Qt.Key.Key_Down and self.currentRow() == self.rowCount() - 1:

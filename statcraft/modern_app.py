@@ -1158,6 +1158,7 @@ class ModernWindow(QMainWindow):
         edit.addSeparator()
         self.find_action = self._action(edit, "Find…", self.find_dialog, QKeySequence.StandardKey.Find, "find", True)
         self.find_next_action = self._action(edit, "Find Next", self.find_next, QKeySequence("F3"), "find_next")
+        self.replace_action = self._action(edit, "Replace…", self.replace_dialog, QKeySequence("Ctrl+H"), "replace", True)
         self._action(edit, "Go To…", self.goto_dialog, QKeySequence("Ctrl+G"), "goto", True)
         edit.addSeparator()
         self._action(edit, "Worksheet Description…", self.worksheet_description_dialog, None, "worksheet", True)
@@ -1171,6 +1172,7 @@ class ModernWindow(QMainWindow):
         self._action(data, "Add Rows…", self.add_rows, None, "insert_rows", True)
         self.move_columns_action = self._action(data, "Move Columns…", self.move_columns_dialog, None, "move_columns", True)
         data.addSeparator()
+        self._action(data, "Autofill / Extend Series…", self.autofill_dialog, None, "autofill", True)
         self._action(data, "Sort…", self.sort_dialog, None, "sort", True)
         self._action(data, "Rank…", self.rank_dialog, None, "rank", True)
         self._action(data, "Delete Rows…", self.delete_rows_dialog, None, "delete", True)
@@ -2647,6 +2649,12 @@ class ModernWindow(QMainWindow):
                 area = selected[0]
                 self._call(lambda: self.presenter.rename_columns(area.leftColumn(), [""] * (area.rightColumn() - area.leftColumn() + 1)))
             return
+        if getattr(self, '_selected_columns', None):
+            targets = sorted(idx for idx in self._selected_columns if 0 <= idx < len(self.presenter.worksheet.columns))
+            if targets:
+                self._commit_editor()
+                self._call(lambda: self.presenter.clear_columns_data(targets))
+                return
         if focused is not None and not self.table.hasFocus() and not self.table.isAncestorOf(focused):
             # When invoked from toolbar button, table may have lost focus to the toolbar
             pass
@@ -3181,6 +3189,29 @@ class ModernWindow(QMainWindow):
     def add_rows(self):
         count, accepted = QInputDialog.getInt(self, "Add rows", "Rows to add", 1, 1, 100000)
         if accepted: self._call(lambda: self.presenter.add_rows(count))
+
+    def autofill_dialog(self):
+        self._commit_editor()
+        first_r, last_r, left_c, right_c = self._range()
+        cur_c = max(0, min(self.table.currentColumn(), len(self.presenter.worksheet.columns) - 1))
+        col = self.presenter.worksheet.columns[cur_c]
+
+        selected_vals = col.values[first_r:last_r + 1] if last_r < len(col.values) else []
+        non_empty = [v for v in selected_vals if v is not None and str(v).strip() != ""]
+
+        if len(non_empty) >= 1 and len(non_empty) < len(selected_vals):
+            sample_len = len(non_empty)
+            count = len(selected_vals) - sample_len
+            self._call(lambda: self.presenter.autofill_column(cur_c, first_r, sample_len, count))
+            self.statusBar().showMessage(f"Autofilled {count} rows in C{cur_c + 1}", 4000)
+            return
+
+        from PySide6.QtWidgets import QInputDialog
+        sample_len = max(1, last_r - first_r + 1)
+        count, accepted = QInputDialog.getInt(self, "Autofill / Extend Series", f"Number of values to generate for C{cur_c + 1}:", 10, 1, 10000)
+        if accepted and count > 0:
+            self._call(lambda: self.presenter.autofill_column(cur_c, first_r, sample_len, count))
+            self.statusBar().showMessage(f"Generated {count} values in C{cur_c + 1}", 4000)
 
     def rename_column(self):
         index = self._current_column(); old = self.presenter.worksheet.columns[index].name
@@ -6100,12 +6131,12 @@ class ModernWindow(QMainWindow):
         goto_sub.addAction(tool_icon("next_brushed"), "Next Brushed Row", lambda: self.go_to_brushed_row(1))
         goto_sub.addAction(tool_icon("prev_brushed"), "Previous Brushed Row", lambda: self.go_to_brushed_row(-1))
 
-        sort_sub = menu.addMenu("Sort Columns")
-        entire_ws_sub = sort_sub.addMenu("Entire Worksheet")
         all_cols = list(range(len(self.presenter.worksheet.columns)))
-        entire_ws_sub.addAction("Smallest to Largest", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, False), result=True))
-        entire_ws_sub.addAction("Largest to Smallest", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, True), result=True))
-        sort_sub.addAction("Custom Sort...", self.sort_dialog)
+        col_label = f"C{cur_col + 1}"
+        menu.addAction(f"Sort Ascending ({col_label} / Smallest to Largest)", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, False), result=True))
+        menu.addAction(f"Sort Descending ({col_label} / Largest to Smallest)", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, True), result=True))
+        menu.addAction("Custom Sort...", self.sort_dialog)
+        menu.addAction("Autofill / Extend Series...", self.autofill_dialog)
 
         menu.addSeparator()
 
@@ -6242,6 +6273,7 @@ class ModernWindow(QMainWindow):
             menu.addAction(tool_icon("save"), "Save Graph As...", lambda: self.save_graph_as(target_entry))
         else:
             menu.addAction(tool_icon("copy"), "Copy\tCtrl+C", lambda: QApplication.clipboard().setText(format_entry(target_entry)))
+            menu.addAction(tool_icon("copy"), "Copy Table (TSV for Excel)\tCtrl+Shift+C", lambda: self.copy_output_table_tsv(target_entry))
             menu.addAction(tool_icon("copy_graph"), "Copy as Picture", lambda: self.copy_output_graph(target_entry))
             menu.addSeparator()
             menu.addAction("Rename...", lambda: self.rename_output_dialog(target_entry))
@@ -7509,6 +7541,60 @@ class ModernWindow(QMainWindow):
                 self.statusBar().showMessage("Copied output image to clipboard", 5000)
                 return
         QApplication.clipboard().setText(format_entry(target))
+
+    def _text_to_tsv(self, text):
+        import re
+        lines = text.strip().splitlines()
+        tsv_lines = []
+        for line in lines:
+            s = line.strip()
+            if not s or re.match(r'^[\xe2\x94\x80\-_=+\s]{3,}$', s) or re.match(r'^[\-_=+\s]{3,}$', s):
+                continue
+            if "|" in s:
+                parts = [p.strip() for p in s.split("|")]
+                tsv_lines.append("\t".join(parts))
+            else:
+                parts = re.split(r'\s{2,}', s)
+                tsv_lines.append("\t".join(parts))
+        return "\n".join(tsv_lines)
+
+    def copy_output_table_tsv(self, entry=None):
+        target = entry or getattr(self, "selected_entry", None)
+        if target is None:
+            return
+        tables = []
+        cur_widget = self.result_tabs.currentWidget()
+        if cur_widget is not None:
+            from PySide6.QtWidgets import QTableWidget
+            tables = cur_widget.findChildren(QTableWidget)
+
+        tsv_blocks = []
+        if tables:
+            for tbl in tables:
+                rows_data = []
+                headers = []
+                for c in range(tbl.columnCount()):
+                    h_item = tbl.horizontalHeaderItem(c)
+                    headers.append(h_item.text() if h_item else f"Col{c+1}")
+                if any(headers):
+                    rows_data.append("\t".join(headers))
+                for r in range(tbl.rowCount()):
+                    row_vals = []
+                    for c in range(tbl.columnCount()):
+                        item = tbl.item(r, c)
+                        row_vals.append(item.text() if item else "")
+                    rows_data.append("\t".join(row_vals))
+                tsv_blocks.append("\n".join(rows_data))
+
+        if not tsv_blocks:
+            from .app import format_entry
+            text = format_entry(target)
+            tsv_text = self._text_to_tsv(text)
+            tsv_blocks.append(tsv_text)
+
+        full_tsv = "\n\n".join(tsv_blocks)
+        QApplication.clipboard().setText(full_tsv)
+        self.statusBar().showMessage("Copied table as TSV (ready to paste into Excel / Sheets)", 5000)
 
     def make_similar_graph(self, entry=None):
         target = entry or self.selected_entry
