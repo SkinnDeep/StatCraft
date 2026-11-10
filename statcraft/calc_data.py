@@ -258,3 +258,140 @@ def make_patterned_datetime(
         result.extend(expanded)
 
     return result
+
+
+def generate_random_distribution(
+    distribution: str,
+    n: int,
+    parameters: list[float] | tuple[float, ...],
+    seed: int | None = None,
+) -> list[float | int]:
+    """Generate random samples from any supported probability distribution."""
+    if n <= 0:
+        raise ValueError("Number of rows must be at least 1.")
+    if n > 1_000_000:
+        raise ValueError("Number of rows cannot exceed 1,000,000.")
+    import numpy as np
+    from .probability import _build_model, DISCRETE_DISTRIBUTIONS, PARAMETERS
+
+    if distribution not in PARAMETERS:
+        raise ValueError(f"Unsupported distribution: {distribution}")
+    if len(parameters) != len(PARAMETERS[distribution]):
+        raise ValueError(f"Expected {len(PARAMETERS[distribution])} parameter(s) for {distribution}.")
+
+    p = tuple(float(x) for x in parameters)
+    model = _build_model(distribution, p)
+    rng = np.random.default_rng(seed)
+    samples = model.rvs(size=n, random_state=rng)
+    if distribution in DISCRETE_DISTRIBUTIONS:
+        return [int(v) for v in samples]
+    return [round(float(v), 6) if math.isfinite(float(v)) else None for v in samples]
+
+
+def sample_from_columns(
+    columns_values: list[list],
+    n: int,
+    replace: bool = False,
+    seed: int | None = None,
+) -> list[list]:
+    """Sample n rows simultaneously across source columns (with or without replacement)."""
+    if not columns_values:
+        raise ValueError("Select at least one source column to sample from.")
+    row_count = max(len(col) for col in columns_values)
+    if row_count == 0:
+        raise ValueError("Source columns contain no rows.")
+    if n <= 0:
+        raise ValueError("Number of rows to sample must be at least 1.")
+    if not replace and n > row_count:
+        raise ValueError(f"Cannot sample {n} rows without replacement from {row_count} rows.")
+
+    rng = random.Random(seed) if seed is not None else random.Random()
+    if replace:
+        indices = [rng.randrange(row_count) for _ in range(n)]
+    else:
+        indices = rng.sample(range(row_count), n)
+
+    return [
+        [col[idx] if idx < len(col) else None for idx in indices]
+        for col in columns_values
+    ]
+
+
+ROW_STAT_CHOICES = ("Mean", "Sum", "StDev", "Min", "Max", "Median", "Range", "Count", "NMISS", "SSQ")
+COLUMN_STAT_CHOICES = ("Mean", "Sum", "StDev", "Min", "Max", "Median", "Range", "Count", "NMISS", "SSQ", "Q1", "Q3", "IQR")
+
+
+def _finite_row_nums(row_vals: list) -> list[float]:
+    nums = []
+    for v in row_vals:
+        if v is None or isinstance(v, bool):
+            continue
+        try:
+            fv = float(v)
+            if math.isfinite(fv):
+                nums.append(fv)
+        except (ValueError, TypeError):
+            continue
+    return nums
+
+
+def _single_stat(nums: list[float], total_items: int, stat_name: str) -> float | None:
+    key = stat_name.strip().lower()
+    n = len(nums)
+    if key in ("count", "n"):
+        return float(n)
+    if key == "nmiss":
+        return float(total_items - n)
+    if n == 0:
+        return None
+    if key == "sum":
+        return float(sum(nums))
+    if key == "mean":
+        return float(sum(nums) / n)
+    if key == "min":
+        return float(min(nums))
+    if key == "max":
+        return float(max(nums))
+    if key == "range":
+        return float(max(nums) - min(nums))
+    if key == "ssq":
+        return float(sum(x * x for x in nums))
+    if key == "median":
+        import statistics
+        return float(statistics.median(nums))
+    if key in ("stdev", "std"):
+        if n < 2:
+            return None
+        mean = sum(nums) / n
+        return math.sqrt(sum((x - mean) ** 2 for x in nums) / (n - 1))
+    if key in ("q1", "q3", "iqr"):
+        import numpy as np
+        arr = sorted(nums)
+        q1 = float(np.percentile(arr, 25))
+        q3 = float(np.percentile(arr, 75))
+        if key == "q1":
+            return q1
+        if key == "q3":
+            return q3
+        return q3 - q1
+    raise ValueError(f"Unsupported statistic: {stat_name}")
+
+
+def compute_row_statistics(columns_values: list[list], stat_name: str = "Mean") -> list[float | None]:
+    """Compute a statistic row-by-row across multiple columns (Calc > Row Statistics)."""
+    if not columns_values:
+        raise ValueError("Select at least one numeric column.")
+    row_count = max(len(col) for col in columns_values)
+    result = []
+    for r in range(row_count):
+        row_items = [col[r] if r < len(col) else None for col in columns_values]
+        nums = _finite_row_nums(row_items)
+        result.append(_single_stat(nums, len(columns_values), stat_name))
+    return result
+
+
+def compute_column_statistics(values: list, stat_name: str = "Mean") -> float | None:
+    """Compute a single scalar statistic over a column (Calc > Column Statistics)."""
+    nums = _finite_row_nums(values)
+    return _single_stat(nums, len(values), stat_name)
+

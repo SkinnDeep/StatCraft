@@ -778,18 +778,25 @@ class Presenter:
     @undoable
     def calculate(self, expression, destination):
         from . import calculator
-        values = calculator.evaluate(expression, self.worksheet)
-        if destination.strip().isdigit():
-            index = int(destination) - 1
-            if not 0 <= index < len(self.worksheet.columns) or self.worksheet.columns[index].kind != "number":
-                raise ValueError("Choose an existing numeric column number.")
+        values = calculator.evaluate_advanced(expression, self.worksheet)
+        has_text = any(isinstance(v, str) for v in values)
+        target_kind = "text" if has_text else "number"
+        if target_kind == "text":
+            values = [None if v is None else str(v) for v in values]
+
+        dest_clean = destination.strip()
+        if dest_clean.isdigit() or (dest_clean.upper().startswith("C") and dest_clean[1:].isdigit()):
+            index = int(dest_clean[1:] if dest_clean.upper().startswith("C") else dest_clean) - 1
+            if not 0 <= index < len(self.worksheet.columns):
+                raise ValueError("Choose an existing column number (e.g., 1 or C1) or enter a new column name.")
+            self.worksheet.columns[index].kind = target_kind
             self.worksheet.columns[index].values = values
         else:
-            if not destination.strip():
+            if not dest_clean:
                 raise ValueError("Enter a destination name.")
             if (len(self.worksheet.columns) + 1) * max(1, self.worksheet.row_count) > io.MAX_CELLS:
                 raise ValueError("The worksheet exceeds the cell limit.")
-            self.worksheet.columns.append(Column(destination.strip(), "number", values))
+            self.worksheet.columns.append(Column(dest_clean, target_kind, values))
         return self._record("Calculator", {"expression": expression, "destination": destination, "rows": len(values)})
 
     def fit_binary_logistic(self,response_index,continuous_indices,categorical_indices,event=None,trials_index=None,terms=None,options=None):
@@ -6001,6 +6008,119 @@ class Presenter:
             col.metadata.pop("auto_type", None)
         self.dirty = True
         return self._record(f"Random Data ({dist.title()}) — " + col.name, {"target_column": col.name, "rows": len(values), "distribution": dist})
+
+    def _assign_or_append_column(self, target_column_index: int | str, values, kind: str = "number", default_name: str | None = None):
+        from .model import Column
+        if isinstance(target_column_index, str):
+            dest = target_column_index.strip()
+            if dest.isdigit() or (dest.upper().startswith("C") and dest[1:].isdigit()):
+                idx = int(dest[1:] if dest.upper().startswith("C") else dest) - 1
+            else:
+                if not dest:
+                    raise ValueError("Enter a destination column name.")
+                col = Column(dest, kind, values)
+                self.worksheet.columns.append(col)
+                return col
+        else:
+            idx = target_column_index
+        if idx == -1 or idx >= len(self.worksheet.columns):
+            new_name = default_name or f"C{len(self.worksheet.columns) + 1}"
+            col = Column(new_name, kind, values)
+            self.worksheet.columns.append(col)
+            return col
+        col = self.worksheet.columns[idx]
+        col.kind = kind
+        col.values = values
+        col.metadata.pop("auto_type", None)
+        return col
+
+    @undoable
+    def generate_random_distribution_data(self, target_column_index, distribution: str, n: int = 50, parameters=(), seed=None):
+        from .calc_data import generate_random_distribution
+        values = generate_random_distribution(distribution, n, parameters, seed=seed)
+        col = self._assign_or_append_column(target_column_index, values, "number")
+        self.dirty = True
+        return self._record(
+            f"Random Data ({distribution}) — {col.name}",
+            {"target_column": col.name, "rows": len(values), "distribution": distribution},
+        )
+
+    @undoable
+    def sample_from_columns(self, source_indices, n: int = 10, replace: bool = False, seed=None):
+        from .calc_data import sample_from_columns as _sample_cols
+        if not source_indices:
+            raise ValueError("Select at least one source column.")
+        src_cols = [self.worksheet.columns[i] for i in source_indices]
+        sampled = _sample_cols([c.values for c in src_cols], n, replace=replace, seed=seed)
+        created = []
+        for src_col, vals in zip(src_cols, sampled):
+            new_col = self._assign_or_append_column(-1, vals, src_col.kind, default_name=f"{src_col.name}_Sample")
+            created.append(new_col.name)
+        self.dirty = True
+        return self._record(
+            "Sample from Columns",
+            {"source_columns": [c.name for c in src_cols], "created_columns": created, "rows": n, "with_replacement": bool(replace)},
+        )
+
+    @undoable
+    def row_statistics(self, source_indices, stat_name: str = "Mean", destination: str | int = "RowStat"):
+        from .calc_data import compute_row_statistics
+        cols = self._selected_numeric(source_indices)
+        values = compute_row_statistics([c.values for c in cols], stat_name)
+        col = self._assign_or_append_column(destination, values, "number")
+        self.dirty = True
+        return self._record(
+            f"Row Statistics ({stat_name}) — {col.name}",
+            {"statistic": stat_name, "variables": [c.name for c in cols], "destination": col.name, "rows": len(values)},
+        )
+
+    @undoable
+    def column_statistics(self, col_index: int, stat_name: str = "Mean", store_constant_name: str | None = None):
+        from .calc_data import compute_column_statistics
+        from .model import Column
+        col = self._selected_numeric([col_index])[0]
+        val = compute_column_statistics(col.values, stat_name)
+        stored_label = None
+        if store_constant_name and store_constant_name.strip():
+            cname = store_constant_name.strip()
+            existing = next((c for c in self.worksheet.constants if c.name.casefold() == cname.casefold()), None)
+            if existing is not None:
+                existing.kind = "number"
+                existing.values = [val]
+            else:
+                self.worksheet.constants.append(Column(cname, "number", [val]))
+            stored_label = cname
+            self.dirty = True
+        return self._record(
+            f"Column Statistics ({stat_name}) — {col.name}",
+            {"variable": col.name, "statistic": stat_name, "value": val, "stored_constant": stored_label},
+        )
+
+    @undoable
+    def make_indicator_variables(self, col_index: int, prefix: str = ""):
+        from .data_prep import make_indicator_variables as _make_ind
+        new_cols = _make_ind(self.worksheet, col_index, prefix=prefix)
+        self.worksheet.columns.extend(new_cols)
+        self.dirty = True
+        return self._record(
+            f"Make Indicator Variables — {self.worksheet.columns[col_index].name}",
+            {"source": self.worksheet.columns[col_index].name, "created_columns": [c.name for c in new_cols]},
+        )
+
+    def subset_worksheet_by_condition(self, condition_expr: str, name: str = "Subset"):
+        from .calculator import evaluate_advanced
+        flags = evaluate_advanced(condition_expr, self.worksheet)
+        matched_rows = [
+            r for r, v in enumerate(flags)
+            if v is not None and v not in (0, 0.0, False, "")
+        ]
+        if not matched_rows:
+            raise ValueError("No rows matched the specified condition.")
+        new_sheet = self.subset_worksheet(name=name or None, mode="include", row_indices=matched_rows)
+        return self._record(
+            f"Subset Worksheet — {new_sheet.name}",
+            {"condition": condition_expr, "matched_rows": len(matched_rows), "worksheet": new_sheet.name},
+        )
 
     def covariance(self, indices, missing="Pairwise"):
         from .covariance import compute_covariance

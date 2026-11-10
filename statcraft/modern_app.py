@@ -1220,12 +1220,14 @@ class ModernWindow(QMainWindow):
         self._action(col_prop_menu, "Value Order…", self.column_value_order_dialog, None, "sort", True)
         self._action(col_prop_menu, "Description…", self.column_description_dialog, None, "worksheet", True)
         self._action(col_prop_menu, "Assign Formula…", self.assign_formula_dialog, None, "assign_formula", True)
-        self._action(col_prop_menu, "Conditional Formatting…", self.conditional_formatting_dialog, None, "format_column", True)
+        self._action(col_prop_menu, "Conditional Formatting…", lambda: self.conditional_formatting_dialog(), None, "format_column", True)
         self._action(data, "Worksheet Information", self.show_worksheet_information, None, "worksheet")
         self._action(data, "Stored Constants…", self.stored_constants, None, "constants", True)
         data.addSeparator()
+        self._action(data, "Make Indicator Variables…", self.make_indicator_variables_dialog, None, "format_column", True)
         self._action(data, "Recall Named Selection…", self.recall_named_selection_dialog, None, "select_all", True)
         self._action(data, "Subset Worksheet from Selection…", self.subset_worksheet_from_selection, None, "subset", True)
+        self._action(data, "Subset Worksheet by Condition…", self.subset_by_condition_dialog, None, "subset", True)
         self._action(data, "Replay Saved Workflow…", self.replay_saved_workflow_dialog, None, "workflow", True)
         worksheets_menu = data.addMenu("Worksheets")
         self.rename_sheet_action = self._action(worksheets_menu, "Rename Worksheet…", self.rename_worksheet, None, "rename_sheet")
@@ -1245,6 +1247,8 @@ class ModernWindow(QMainWindow):
         # 4. Calc menu
         calc = bar.addMenu("&Calc")
         self._action(calc, "Calculator…", self.calculator, None, "calculator", True)
+        self._action(calc, "Column Statistics…", self.column_statistics_dialog, None, "summary", True)
+        self._action(calc, "Row Statistics…", self.row_statistics_dialog, None, "summary", True)
         self.assign_formula_action = self._action(calc, "Assign Formula to Column…", self.assign_formula_dialog, None, "assign_formula", True)
         self.standardize_action = self._action(calc, "Standardize…", self.standardize_dialog, None, "standardize", True)
         patterned_menu = calc.addMenu("Make Patterned Data")
@@ -1253,11 +1257,15 @@ class ModernWindow(QMainWindow):
         self._action(patterned_menu, "Text Values…", self.patterned_text_dialog, None, None, True)
         self._action(patterned_menu, "Date/Time Values…", self.patterned_datetime_dialog, None, None, True)
         random_menu = calc.addMenu("Random Data")
+        self._action(random_menu, "Sample from Columns…", self.sample_from_columns_dialog, None, None, True)
+        random_menu.addSeparator()
         self._action(random_menu, "Normal…", self.random_normal_dialog, None, None, True)
         self._action(random_menu, "Uniform…", self.random_uniform_dialog, None, None, True)
         self._action(random_menu, "Exponential…", self.random_exponential_dialog, None, None, True)
         self._action(random_menu, "Poisson…", self.random_poisson_dialog, None, None, True)
         self._action(random_menu, "Binomial…", self.random_binomial_dialog, None, None, True)
+        random_menu.addSeparator()
+        self._action(random_menu, "All Distributions (Weibull, Gamma, Lognormal, Beta…)…", self.random_all_distributions_dialog, None, None, True)
         matrix_menu = calc.addMenu("Matrices")
         self._action(matrix_menu, "Input Data…", self.stored_matrices, None, "matrices", True)
         self._action(matrix_menu, "Packed Triangular Solve…", self.triangular, None, "matrices", True)
@@ -5235,7 +5243,113 @@ class ModernWindow(QMainWindow):
         self._call(lambda: self.presenter.generate_random_data(s['target_col'], 'binomial', s.get('n', 50), s['trials'], s['prob']), result=False)
 
     def calculator(self):
-        self._dialog("Calculator", [], [{"key": "expression", "label": "Expression", "placeholder": "C1 + K1, SQRT(C1), C1 ^ 2"}, {"key": "destination", "label": "Store result", "default": "Calculated"}], lambda p: self.presenter.calculate(**p), "Columns: C1, C2…; stored numeric constants: K1, K2…. Destination: existing numeric column number or a name for a new column. Functions: ABS, SQRT, LOG, LOG10, EXP, SIN, COS, ROUND.")
+        self._dialog(
+            "Calculator",
+            [],
+            [
+                {"key": "expression", "label": "Expression", "placeholder": "IF(C1 > MEAN(C1), 'High', 'Low'), ROUND(C1, 2), ROWMEAN(C1, C2)"},
+                {"key": "destination", "label": "Store result in variable", "default": "Calculated"},
+            ],
+            lambda p: self.presenter.calculate(**p),
+            "Refs: C1, [ColName], K1. Destination: C1/col number or new column name.\nFunctions: MEAN, STDEV, MEDIAN, SUM, MIN, MAX, RANGE, N, Q1, Q3, ROWMEAN, ROWSUM, IF, AND, OR, NOT, ISMISS, ROUND(x,n), POWER, MOD, ABS, SQRT, LN, LOG10, EXP, SIN, COS, TAN, UPPER, LOWER, TRIM, CONCAT, LEFT, RIGHT, MID, REPLACE.",
+        )
+
+    def column_statistics_dialog(self):
+        from .calc_data import COLUMN_STAT_CHOICES
+        self._dialog(
+            "Column Statistics",
+            [selector("index", "Input variable", False, 1, 1, ("number",))],
+            [
+                {"key": "stat_name", "label": "Statistic", "choices": list(COLUMN_STAT_CHOICES), "default": "Mean"},
+                {"key": "store_constant_name", "label": "Store result in constant (optional)", "default": "", "placeholder": "e.g., ColMean or leave blank"},
+            ],
+            lambda p: self.presenter.column_statistics(p["index"], p["stat_name"], p.get("store_constant_name", "")),
+            "Computes a single scalar summary for the selected column and optionally stores it in Stored Constants.",
+        )
+
+    def row_statistics_dialog(self):
+        from .calc_data import ROW_STAT_CHOICES
+        self._dialog(
+            "Row Statistics",
+            [selector("indices", "Input variables", True, 1, None, ("number",))],
+            [
+                {"key": "stat_name", "label": "Statistic", "choices": list(ROW_STAT_CHOICES), "default": "Mean"},
+                {"key": "destination", "label": "Store result in", "default": "RowStat"},
+            ],
+            lambda p: self.presenter.row_statistics(p["indices"], p["stat_name"], p["destination"]),
+            "Computes row-by-row summary statistics across selected numeric columns.",
+        )
+
+    def sample_from_columns_dialog(self):
+        self._dialog(
+            "Sample from Columns",
+            [selector("indices", "Columns to sample from", True, 1, None, ("number", "text", "date"))],
+            [
+                numeric("n", "Number of rows to sample", 10, integer=True),
+                {"key": "replace", "label": "Sampling mode", "boolean": True, "text": "Sample with replacement"},
+            ],
+            lambda p: self.presenter.sample_from_columns(p["indices"], int(p["n"]), bool(p.get("replace", False))),
+            "Randomly samples rows simultaneously across selected columns.",
+        )
+
+    def random_all_distributions_dialog(self):
+        from . import probability
+        dialog = QDialog(self); dialog.setWindowTitle("Random Data Generator (All Distributions)"); dialog.setMinimumWidth(520)
+        layout = QVBoxLayout(dialog); layout.addWidget(label("Random Data Generator", "dialogHeading"))
+        form = QFormLayout()
+        n_edit = QLineEdit("50")
+        target_combo = QComboBox()
+        for i, col in enumerate(self.presenter.worksheet.columns):
+            target_combo.addItem(f"C{i + 1}  {col.name}", i)
+        target_combo.addItem(f"C{len(self.presenter.worksheet.columns) + 1}  (New Column)", -1)
+        target_combo.setCurrentIndex(target_combo.count() - 1)
+        distribution = QComboBox(); distribution.addItems(list(probability.PARAMETERS))
+        form.addRow("Number of rows to generate:", n_edit)
+        form.addRow("Store in column:", target_combo)
+        form.addRow("Distribution:", distribution)
+        layout.addLayout(form)
+        parameters_widget = QWidget(); parameters_layout = QFormLayout(parameters_widget); layout.addWidget(parameters_widget)
+        parameter_edits = []
+        def update_parameters():
+            while parameters_layout.rowCount():
+                parameters_layout.removeRow(0)
+            parameter_edits.clear()
+            for title, default in zip(probability.PARAMETERS[distribution.currentText()], probability.DEFAULTS[distribution.currentText()]):
+                edit = QLineEdit(str(default)); parameter_edits.append(edit); parameters_layout.addRow(title, edit)
+        distribution.currentTextChanged.connect(lambda _text: update_parameters()); update_parameters()
+        error = label("", "error"); layout.addWidget(error)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel); layout.addWidget(buttons)
+        def run_gen():
+            try:
+                n_val = int(n_edit.text().strip())
+                params = [finite_number(float(e.text())) for e in parameter_edits]
+                t_idx = target_combo.currentData()
+                self._call(lambda: self.presenter.generate_random_distribution_data(t_idx, distribution.currentText(), n_val, params), result=False)
+            except (ValueError, TypeError) as exc:
+                error.setText(str(exc)); return
+            dialog.accept()
+        buttons.accepted.connect(run_gen); buttons.rejected.connect(dialog.reject); dialog.exec()
+
+    def make_indicator_variables_dialog(self):
+        self._dialog(
+            "Make Indicator Variables",
+            [selector("index", "Categorical / Source column", False, 1, 1, ("number", "text", "date"))],
+            [{"key": "prefix", "label": "Prefix for indicator names (optional)", "default": ""}],
+            lambda p: self.presenter.make_indicator_variables(p["index"], p.get("prefix", "")),
+            "Generates binary 0/1 indicator columns for each unique category in the selected column.",
+        )
+
+    def subset_by_condition_dialog(self):
+        self._dialog(
+            "Subset Worksheet by Condition",
+            [],
+            [
+                {"key": "condition_expr", "label": "Condition expression", "placeholder": "e.g., C1 > 10 and C2 == 'Pass'"},
+                {"key": "name", "label": "New worksheet name", "default": self.presenter.worksheet.name + " (Filtered)"},
+            ],
+            lambda p: self.presenter.subset_worksheet_by_condition(p["condition_expr"], p.get("name", "")),
+            "Creates a new worksheet containing only rows where the formula evaluates to true.",
+        )
 
     def probability(self):
         from . import probability
@@ -6504,8 +6618,14 @@ class ModernWindow(QMainWindow):
         hi_lo_sub = cond_sub.addMenu("High/Low")
         hi_lo_sub.addAction("Highest Values...", lambda: self.conditional_formatting_dialog("highest", "Highest Values (Count)"))
         hi_lo_sub.addAction("Lowest Values...", lambda: self.conditional_formatting_dialog("lowest", "Lowest Values (Count)"))
+        hi_lo_sub.addAction("Top %...", lambda: self.conditional_formatting_dialog("top_percent", "Top Percentage"))
+        hi_lo_sub.addAction("Bottom %...", lambda: self.conditional_formatting_dialog("bottom_percent", "Bottom Percentage"))
         stat_sub = cond_sub.addMenu("Statistical")
         stat_sub.addAction("Outlier...", lambda: self._call(lambda: self.presenter.apply_conditional_formatting(cur_col, "outlier", color="#f8d7da")))
+        stat_sub.addAction("Outside ±3 StDev (3σ)...", lambda: self._call(lambda: self.presenter.apply_conditional_formatting(cur_col, "outside_3sigma", color="#f8d7da")))
+        stat_sub.addAction("Outside Spec Limits (LSL/USL)...", lambda: self.conditional_formatting_dialog("outside_specs", "Outside Spec Limits"))
+        stat_sub.addAction("Above Mean", lambda: self._call(lambda: self.presenter.apply_conditional_formatting(cur_col, "above_mean", color="#d4edda")))
+        stat_sub.addAction("Below Mean", lambda: self._call(lambda: self.presenter.apply_conditional_formatting(cur_col, "below_mean", color="#fff3cd")))
         clear_rules_sub = cond_sub.addMenu("Clear Rules")
         clear_rules_sub.addAction("Clear Rules from Selected Columns", lambda: self._call(lambda: self.presenter.clear_conditional_formatting(sel_c_range)))
         clear_rules_sub.addAction("Clear Rules from Entire Worksheet", lambda: self._call(lambda: self.presenter.clear_conditional_formatting(None)))
@@ -7773,16 +7893,68 @@ class ModernWindow(QMainWindow):
         self._hidden_columns.clear()
         self.refresh()
 
-    def conditional_formatting_dialog(self, rule_type, title):
+    def conditional_formatting_dialog(self, rule_type=None, title=None):
         self._commit_editor()
         c = max(0, min(self.table.currentColumn(), len(self.presenter.worksheet.columns) - 1))
-        dialog = QDialog(self); dialog.setWindowTitle(f"Conditional Formatting — {title}"); dialog.setMinimumWidth(380)
+        rule_catalog = [
+            ("Greater Than", "greater_than"),
+            ("Less Than", "less_than"),
+            ("Between", "between"),
+            ("Equal To", "equal_to"),
+            ("Text Contains", "contains"),
+            ("Highest N Values", "highest"),
+            ("Lowest N Values", "lowest"),
+            ("Top %", "top_percent"),
+            ("Bottom %", "bottom_percent"),
+            ("Outside Spec Limits (LSL/USL)", "outside_specs"),
+            ("Outside ±3 StDev (3σ)", "outside_3sigma"),
+            ("Above Mean", "above_mean"),
+            ("Below Mean", "below_mean"),
+            ("Statistical Outlier", "outlier"),
+            ("Missing Values", "missing"),
+        ]
+        resolved_title = title or next((lbl for lbl, code in rule_catalog if code == rule_type), "Column Rule")
+        dialog = QDialog(self); dialog.setWindowTitle(f"Conditional Formatting — {resolved_title}"); dialog.setMinimumWidth(400)
         layout = QVBoxLayout(dialog); form = QFormLayout()
+        rule_combo = QComboBox()
+        for lbl, code in rule_catalog:
+            rule_combo.addItem(lbl, code)
+        if rule_type:
+            idx = rule_combo.findData(rule_type)
+            if idx >= 0:
+                rule_combo.setCurrentIndex(idx)
+        else:
+            form.addRow("Rule Type:", rule_combo)
+
+        p1_label = QLabel("Value:")
         p1_edit = QLineEdit("0")
+        p2_label = QLabel("Maximum:")
         p2_edit = QLineEdit("10")
-        form.addRow("Value:" if rule_type != "between" else "Minimum:", p1_edit)
-        if rule_type == "between":
-            form.addRow("Maximum:", p2_edit)
+        form.addRow(p1_label, p1_edit)
+        form.addRow(p2_label, p2_edit)
+
+        def _sync_fields():
+            rtype = rule_type or rule_combo.currentData()
+            no_param = rtype in ("missing", "outlier", "outside_3sigma", "above_mean", "below_mean")
+            two_param = rtype in ("between", "outside_specs")
+            p1_label.setVisible(not no_param)
+            p1_edit.setVisible(not no_param)
+            p2_label.setVisible(two_param)
+            p2_edit.setVisible(two_param)
+            if rtype == "between":
+                p1_label.setText("Minimum:"); p2_label.setText("Maximum:")
+            elif rtype == "outside_specs":
+                p1_label.setText("Lower Spec (LSL):"); p2_label.setText("Upper Spec (USL):")
+            elif rtype in ("top_percent", "bottom_percent"):
+                p1_label.setText("Percent (%):"); p1_edit.setText("10")
+            elif rtype in ("highest", "lowest"):
+                p1_label.setText("Count (N):"); p1_edit.setText("3")
+            else:
+                p1_label.setText("Value:")
+
+        rule_combo.currentIndexChanged.connect(_sync_fields)
+        _sync_fields()
+
         color_combo = QComboBox()
         for label_text, hex_code in (("Light Red Fill", "#f8d7da"), ("Light Green Fill", "#d4edda"), ("Light Yellow Fill", "#fff3cd")):
             color_combo.addItem(label_text, hex_code)
@@ -7791,7 +7963,8 @@ class ModernWindow(QMainWindow):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         layout.addWidget(buttons)
         def accept_rule():
-            self._call(lambda: self.presenter.apply_conditional_formatting(c, rule_type, p1_edit.text().strip(), p2_edit.text().strip(), color_combo.currentData()))
+            chosen_type = rule_type or rule_combo.currentData()
+            self._call(lambda: self.presenter.apply_conditional_formatting(c, chosen_type, p1_edit.text().strip(), p2_edit.text().strip(), color_combo.currentData()))
             dialog.accept()
         buttons.accepted.connect(accept_rule); buttons.rejected.connect(dialog.reject)
         dialog.exec()

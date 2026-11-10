@@ -14,8 +14,12 @@ import math
 import re
 
 
-RULE_TYPES = frozenset(("missing", "greater_than", "less_than", "equal_to",
-                        "between", "contains", "highest", "lowest", "outlier"))
+RULE_TYPES = frozenset((
+    "missing", "greater_than", "less_than", "equal_to",
+    "between", "contains", "highest", "lowest", "outlier",
+    "above_mean", "below_mean", "outside_3sigma", "outside_specs",
+    "top_percent", "bottom_percent",
+))
 _FIELDS = frozenset(("type", "param1", "param2", "color"))
 
 
@@ -54,6 +58,20 @@ def validate_rule(rule):
         if first < 1 or not first.is_integer():
             raise ValueError("Count must be a positive whole number.")
         first, second = int(first), None
+    elif kind in ("top_percent", "bottom_percent"):
+        first = _number(10 if first is None else first, "Percent")
+        if not 0 < first <= 100:
+            raise ValueError("Percent must be between 0 (exclusive) and 100.")
+        second = None
+    elif kind == "outside_specs":
+        has_lsl = first is not None and str(first).strip() != ""
+        has_usl = second is not None and str(second).strip() != ""
+        if not has_lsl and not has_usl:
+            raise ValueError("Specify at least one specification limit (LSL or USL).")
+        first = _number(first, "LSL") if has_lsl else None
+        second = _number(second, "USL") if has_usl else None
+        if first is not None and second is not None and first > second:
+            first, second = second, first
     elif kind in ("equal_to", "contains"):
         if isinstance(first, bool) or not isinstance(first, (str, int, float)):
             raise ValueError("Enter a text or numeric comparison value.")
@@ -92,7 +110,14 @@ def effective_highlights(column, row_count=None, rules=None):
     count = max(row_count, len(column.values))
     checked = validate_rules(column.metadata.get("conditional_rules", []) if rules is None else rules)
     ordered = sorted(float(value) for value in column.values
-                     if isinstance(value, (int, float)) and not isinstance(value, bool))
+                     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value))
+    col_mean = sum(ordered) / len(ordered) if ordered else None
+    sigma_fences = None
+    if len(ordered) >= 2 and col_mean is not None:
+        s = math.sqrt(sum((v - col_mean) ** 2 for v in ordered) / (len(ordered) - 1))
+        if s > 0:
+            sigma_fences = (col_mean - 3.0 * s, col_mean + 3.0 * s)
+
     result = {}
     for rule in checked:
         kind, first, second = rule["type"], rule["param1"], rule["param2"]
@@ -100,6 +125,9 @@ def effective_highlights(column, row_count=None, rules=None):
         if kind in ("highest", "lowest") and ordered:
             position = min(first, len(ordered))
             cutoff = ordered[-position] if kind == "highest" else ordered[position - 1]
+        elif kind in ("top_percent", "bottom_percent") and ordered:
+            position = max(1, int((first / 100.0) * len(ordered)))
+            cutoff = ordered[-position] if kind == "top_percent" else ordered[position - 1]
         fences = None
         if kind == "outlier" and len(ordered) >= 4:
             q1, q3 = ordered[len(ordered) // 4], ordered[(3 * len(ordered)) // 4]
@@ -124,12 +152,20 @@ def effective_highlights(column, row_count=None, rules=None):
                         match = False
                 elif kind == "contains":
                     match = str(first).casefold() in str(value).casefold()
-                elif kind == "highest" and number and cutoff is not None:
+                elif kind in ("highest", "top_percent") and number and cutoff is not None:
                     match = value >= cutoff
-                elif kind == "lowest" and number and cutoff is not None:
+                elif kind in ("lowest", "bottom_percent") and number and cutoff is not None:
                     match = value <= cutoff
                 elif kind == "outlier" and number and fences:
                     match = value < fences[0] or value > fences[1]
+                elif kind == "above_mean" and number and col_mean is not None:
+                    match = value > col_mean
+                elif kind == "below_mean" and number and col_mean is not None:
+                    match = value < col_mean
+                elif kind == "outside_3sigma" and number and sigma_fences is not None:
+                    match = value < sigma_fences[0] or value > sigma_fences[1]
+                elif kind == "outside_specs" and number:
+                    match = (first is not None and value < first) or (second is not None and value > second)
             if match:
                 result[str(row)] = rule["color"]
     return result

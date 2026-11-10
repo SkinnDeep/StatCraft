@@ -194,3 +194,62 @@ def split_worksheet(sheet, by_indices, include_missing=True):
         sheet_title = f"{sheet.name} - {grp_name}"[:128]
         new_sheets.append(_sheet(sheet_title, sub_cols))
     return new_sheets
+
+
+def make_indicator_variables(sheet, col_index, prefix=""):
+    """Create binary 0/1 indicator columns for each distinct non-missing value."""
+    src = _columns(sheet, [col_index], 1)[0]
+    row_count = sheet.row_count
+    seen = {}
+    ordered_keys = []
+    for r in range(row_count):
+        val = src.values[r] if r < len(src.values) else None
+        if val is None or (isinstance(val, str) and not val.strip()):
+            continue
+        key = str(int(val)) if (isinstance(val, float) and val.is_integer()) else str(val)
+        if key not in seen:
+            seen[key] = val
+            ordered_keys.append(key)
+    if not ordered_keys:
+        raise ValueError("Source column contains no non-missing values to encode.")
+
+    _bound(row_count, len(sheet.columns) + len(ordered_keys))
+    base_prefix = prefix.strip() if prefix and prefix.strip() else src.name
+    existing_names = {c.name.casefold() for c in sheet.columns}
+    indicator_cols = []
+    for key in ordered_keys:
+        candidate = f"{base_prefix}_{key}"[:110]
+        final_name = candidate
+        suffix = 2
+        while final_name.casefold() in existing_names:
+            final_name = f"{candidate}_{suffix}"[:110]
+            suffix += 1
+        existing_names.add(final_name.casefold())
+        vals = []
+        for r in range(row_count):
+            v = src.values[r] if r < len(src.values) else None
+            if v is None or (isinstance(v, str) and not v.strip()):
+                vals.append(None)
+            else:
+                k = str(int(v)) if (isinstance(v, float) and v.is_integer()) else str(v)
+                vals.append(1.0 if k == key else 0.0)
+        indicator_cols.append(Column(final_name, "number", vals))
+    return indicator_cols
+
+
+def subset_by_condition(sheet, condition_expr, new_name="Subset"):
+    """Filter worksheet rows matching a boolean calculator expression."""
+    from .calculator import evaluate_advanced
+    flags = evaluate_advanced(condition_expr, sheet)
+    matched_rows = [
+        r for r, v in enumerate(flags)
+        if v is not None and v not in (0, 0.0, False, "")
+    ]
+    if not matched_rows:
+        raise ValueError("No rows matched the specified condition.")
+    sub_cols = []
+    for c in sheet.columns:
+        new_vals = [c.values[r] if r < len(c.values) else None for r in matched_rows]
+        sub_cols.append(Column(c.name, c.kind, new_vals, metadata=dict(c.metadata)))
+    clean_name = (new_name or f"{sheet.name} (Subset)").strip()[:128]
+    return _sheet(clean_name, sub_cols)
