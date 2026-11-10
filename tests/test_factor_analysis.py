@@ -112,6 +112,22 @@ class TestFactorAnalysis(unittest.TestCase):
         self.assertIn("Eigenvalues of the Correlation Matrix", text)
         self.assertIn("Rotated Factor Loadings", text)
 
+    def test_factor_loading_chart_rendering(self):
+        from PySide6.QtWidgets import QApplication
+        from statcraft.multivariate_chart import MultivariateChartWidget
+        app = QApplication.instance() or QApplication([])
+        res = fit_factor_analysis(
+            data_columns=[self.sweet, self.flavor, self.aftertaste, self.crisp, self.firm],
+            n_factors=2,
+            rotation="varimax",
+            variable_names=["Sweet", "Flavor", "Aftertaste", "Crisp", "Firm"],
+        )
+        entry = {"title": "Factor Analysis", "result": res}
+        widget = MultivariateChartWidget(entry)
+        widget.resize(700, 500)
+        pixmap = widget.grab()
+        self.assertFalse(pixmap.isNull())
+
 
 if __name__ == "__main__":
     unittest.main()

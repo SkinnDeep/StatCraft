@@ -90,6 +90,21 @@ class TestMultipleCorrespondence(unittest.TestCase):
         self.assertIn("Principal Inertias", text)
         self.assertIn("Category Coordinates", text)
 
+    def test_mca_chart_rendering(self):
+        from PySide6.QtWidgets import QApplication
+        from statcraft.multivariate_chart import MultivariateChartWidget
+        app = QApplication.instance() or QApplication([])
+        res = fit_multiple_correspondence(
+            data_columns=[self.age, self.car, self.purpose],
+            variable_names=["AgeGroup", "CarType", "Purpose"],
+            n_components=2,
+        )
+        entry = {"title": "MCA", "result": res}
+        widget = MultivariateChartWidget(entry)
+        widget.resize(700, 500)
+        pixmap = widget.grab()
+        self.assertFalse(pixmap.isNull())
+
 
 if __name__ == "__main__":
     unittest.main()

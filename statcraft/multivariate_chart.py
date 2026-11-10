@@ -98,6 +98,10 @@ class MultivariateChartWidget(GraphInteractionMixin, QWidget):
             self._paint_discriminant_score_plot(painter, rect)
         elif self.analysis == "simple_correspondence":
             self._paint_correspondence_plot(painter, rect)
+        elif self.analysis == "factor_analysis":
+            self._paint_factor_analysis_loading_plot(painter, rect)
+        elif self.analysis == "multiple_correspondence":
+            self._paint_mca_coordinate_plot(painter, rect)
         else:
             self._paint_pca_scree_plot(painter, rect)
 
@@ -738,3 +742,191 @@ class MultivariateChartWidget(GraphInteractionMixin, QWidget):
             painter.drawPath(path)
             painter.setPen(QColor(RED))
             painter.drawText(QRectF(pt.x() + 6, pt.y() - 10, 80, 20), Qt.AlignmentFlag.AlignLeft, c["name"])
+
+    # --------------------------------------------------------------------------
+    # 10. FACTOR ANALYSIS LOADING PLOT
+    # --------------------------------------------------------------------------
+    def _paint_factor_analysis_loading_plot(self, painter: QPainter, rect: QRectF) -> None:
+        loadings = self.result.get("rotated_loadings") or self.result.get("unrotated_loadings") or []
+        labels = self.result.get("factor_labels", [])
+        if not loadings or len(labels) < 2:
+            painter.setPen(QColor(MUTED))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Factor Analysis Loading Plot requires at least 2 factors.")
+            return
+
+        f1_key, f2_key = labels[0], labels[1]
+        top = 65.0
+        bottom = rect.height() - 55.0
+        left = 75.0
+        right = rect.width() - 40.0
+        plot_w = right - left
+        plot_h = bottom - top
+
+        # Title
+        rot = self.result.get("rotation", "Unrotated")
+        painter.setPen(QColor(INK))
+        painter.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        painter.drawText(QRectF(left, 15, rect.width() - left - 20, 25), Qt.AlignmentFlag.AlignLeft, f"Factor Loading Plot ({rot} Rotation)")
+
+        min_v, max_v = -1.15, 1.15
+
+        def x_pos(v: float) -> float:
+            return left + (v - min_v) / (max_v - min_v) * plot_w
+
+        def y_pos(v: float) -> float:
+            return bottom - (v - min_v) / (max_v - min_v) * plot_h
+
+        # Communality reference circle (radius 1.0)
+        c_center = QPointF(x_pos(0), y_pos(0))
+        rx = abs(x_pos(1.0) - x_pos(0))
+        ry = abs(y_pos(1.0) - y_pos(0))
+        painter.setPen(QPen(QColor("#e2e8f0"), 1.2, Qt.PenStyle.DashLine))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(c_center, rx, ry)
+
+        # Zero reference axes
+        painter.setPen(QPen(QColor(BORDER), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(QPointF(x_pos(0), top), QPointF(x_pos(0), bottom))
+        painter.drawLine(QPointF(left, y_pos(0)), QPointF(right, y_pos(0)))
+
+        # Border
+        painter.setPen(QPen(QColor(BORDER), 1))
+        painter.drawRect(QRectF(left, top, plot_w, plot_h))
+
+        # Draw loading vectors and labels
+        painter.setFont(QFont("Segoe UI", 8.5, QFont.Weight.Bold))
+        for idx, row in enumerate(loadings):
+            name = str(row.get("variable", f"Var {idx+1}"))
+            l1 = float(row.get(f1_key, 0.0))
+            l2 = float(row.get(f2_key, 0.0))
+            pt = QPointF(x_pos(l1), y_pos(l2))
+
+            # Ray from origin
+            col = QColor(PALETTE[idx % len(PALETTE)])
+            painter.setPen(QPen(col, 1.8))
+            painter.drawLine(c_center, pt)
+
+            # Arrow marker
+            painter.setBrush(col)
+            painter.drawEllipse(pt, 4.0, 4.0)
+
+            # Text label offset
+            painter.setPen(QColor(INK))
+            offset_x = 7 if l1 >= 0 else -60
+            offset_y = -7 if l2 >= 0 else 7
+            painter.drawText(QRectF(pt.x() + offset_x, pt.y() + offset_y, 65, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
+
+        # Axis ticks & titles
+        painter.setFont(QFont("Segoe UI", 8.5))
+        painter.setPen(QColor(MUTED))
+        for tick in (-1.0, -0.5, 0.0, 0.5, 1.0):
+            painter.drawText(QRectF(x_pos(tick) - 20, bottom + 5, 40, 16), Qt.AlignmentFlag.AlignCenter, f"{tick:.1f}")
+            painter.drawText(QRectF(left - 45, y_pos(tick) - 8, 38, 16), Qt.AlignmentFlag.AlignRight, f"{tick:.1f}")
+
+        painter.setFont(QFont("Segoe UI", 9.5, QFont.Weight.DemiBold))
+        painter.setPen(QColor(INK))
+        p_var = self.result.get("rotated_prop_var") or self.result.get("unrotated_prop_var") or [0.0, 0.0]
+        pct1 = (p_var[0] * 100) if len(p_var) > 0 else 0.0
+        pct2 = (p_var[1] * 100) if len(p_var) > 1 else 0.0
+        painter.drawText(QRectF(left, bottom + 25, plot_w, 20), Qt.AlignmentFlag.AlignCenter, f"{f1_key} ({pct1:.1f}% Variance)")
+
+        painter.save()
+        painter.translate(22, top + plot_h / 2)
+        painter.rotate(-90)
+        painter.drawText(QRectF(-plot_h / 2, -10, plot_h, 20), Qt.AlignmentFlag.AlignCenter, f"{f2_key} ({pct2:.1f}% Variance)")
+        painter.restore()
+
+    # --------------------------------------------------------------------------
+    # 11. MULTIPLE CORRESPONDENCE ANALYSIS (MCA) COORDINATE PLOT
+    # --------------------------------------------------------------------------
+    def _paint_mca_coordinate_plot(self, painter: QPainter, rect: QRectF) -> None:
+        cat_table = self.result.get("category_table", [])
+        if not cat_table:
+            painter.setPen(QColor(MUTED))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "No MCA category coordinates to display.")
+            return
+
+        top = 65.0
+        bottom = rect.height() - 55.0
+        left = 75.0
+        right = rect.width() - 140.0
+        plot_w = right - left
+        plot_h = bottom - top
+
+        # Title
+        painter.setPen(QColor(INK))
+        painter.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        painter.drawText(QRectF(left, 15, rect.width() - left - 20, 25), Qt.AlignmentFlag.AlignLeft, "MCA Category Coordinate Plot")
+
+        all_x = [float(r.get("coord_1", 0.0)) for r in cat_table]
+        all_y = [float(r.get("coord_2", 0.0)) for r in cat_table]
+        max_abs = max(max(abs(min(all_x, default=0)), abs(max(all_x, default=0))),
+                      max(abs(min(all_y, default=0)), abs(max(all_y, default=0))), 0.5) * 1.2
+        min_v, max_v = -max_abs, max_abs
+
+        def x_pos(x: float) -> float:
+            return left + (x - min_v) / (max_v - min_v) * plot_w
+
+        def y_pos(y: float) -> float:
+            return bottom - (y - min_v) / (max_v - min_v) * plot_h
+
+        # Axes at 0
+        painter.setPen(QPen(QColor(GRID), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(QPointF(x_pos(0), top), QPointF(x_pos(0), bottom))
+        painter.drawLine(QPointF(left, y_pos(0)), QPointF(right, y_pos(0)))
+
+        # Border
+        painter.setPen(QPen(QColor(BORDER), 1))
+        painter.drawRect(QRectF(left, top, plot_w, plot_h))
+
+        unique_vars = []
+        for r in cat_table:
+            v_name = str(r.get("variable", ""))
+            if v_name not in unique_vars:
+                unique_vars.append(v_name)
+
+        # Plot points
+        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        for r in cat_table:
+            v_name = str(r.get("variable", ""))
+            cat_name = str(r.get("category", ""))
+            c_idx = unique_vars.index(v_name) if v_name in unique_vars else 0
+            col = QColor(PALETTE[c_idx % len(PALETTE)])
+
+            cx = float(r.get("coord_1", 0.0))
+            cy = float(r.get("coord_2", 0.0))
+            pt = QPointF(x_pos(cx), y_pos(cy))
+
+            painter.setPen(QPen(col, 1.2))
+            painter.setBrush(col)
+            painter.drawEllipse(pt, 4.0, 4.0)
+
+            # Label
+            painter.setPen(QColor(INK))
+            painter.drawText(QRectF(pt.x() + 5, pt.y() - 8, 100, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, cat_name)
+
+        # Legend on right
+        leg_x = right + 15
+        leg_y = top + 10
+        painter.setFont(QFont("Segoe UI", 8.5))
+        for v_idx, v_name in enumerate(unique_vars):
+            col = QColor(PALETTE[v_idx % len(PALETTE)])
+            painter.setBrush(col)
+            painter.setPen(QPen(col, 1))
+            painter.drawEllipse(QPointF(leg_x + 8, leg_y + v_idx * 22 + 8), 4.5, 4.5)
+            painter.setPen(QColor(INK))
+            painter.drawText(QRectF(leg_x + 20, leg_y + v_idx * 22, 110, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, v_name)
+
+        # Axis ticks & titles
+        painter.setFont(QFont("Segoe UI", 9.5, QFont.Weight.DemiBold))
+        painter.setPen(QColor(INK))
+        in_table = self.result.get("inertia_table", [])
+        pct1 = (in_table[0].get("percent", 0.0)) if len(in_table) > 0 else 0.0
+        pct2 = (in_table[1].get("percent", 0.0)) if len(in_table) > 1 else 0.0
+        painter.drawText(QRectF(left, bottom + 25, plot_w, 20), Qt.AlignmentFlag.AlignCenter, f"Component 1 ({pct1:.1f}% Inertia)")
+
+        painter.save()
+        painter.translate(22, top + plot_h / 2)
+        painter.rotate(-90)
+        painter.drawText(QRectF(-plot_h / 2, -10, plot_h, 20), Qt.AlignmentFlag.AlignCenter, f"Component 2 ({pct2:.1f}% Inertia)")
+        painter.restore()

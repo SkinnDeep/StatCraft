@@ -5635,7 +5635,7 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') in ('trend_analysis', 'decomposition', 'moving_average', 'single_exp_smoothing', 'double_exp_smoothing', 'winters_method', 'arima', 'autocorrelation', 'partial_autocorrelation', 'cross_correlation'):
                     from .time_series_chart import TimeSeriesChartWidget
                     chart = TimeSeriesChartWidget(entry)
-                elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence'):
+                elif result.get('analysis') in ('pca', 'item_analysis', 'cluster_observations', 'cluster_kmeans', 'cluster_variables', 'discriminant_analysis', 'simple_correspondence', 'factor_analysis', 'multiple_correspondence'):
                     from .multivariate_chart import MultivariateChartWidget
                     chart = MultivariateChartWidget(entry)
                 elif result.get('analysis') in ('mann_whitney', 'kruskal_wallis', 'moods_median', 'runs_test'):
