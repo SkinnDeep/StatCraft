@@ -4966,6 +4966,13 @@ class ModernWindow(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self._call(lambda: self.presenter.marginal_plot(**dialog.settings()), result=True)
             return
+        if method == 'ecdf':
+            self._commit_editor()
+            from .ecdf_dialog import EmpiricalCDFDialog
+            dialog = EmpiricalCDFDialog(self, self.presenter.worksheet)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self._call(lambda: self.presenter.ecdf_plot(**dialog.settings()), result=True)
+            return
         if method not in ('scatter', 'histogram', 'boxplot'):
             self.expanded_graph_dialog(method); return
         if method == "scatter":
@@ -5664,6 +5671,9 @@ class ModernWindow(QMainWindow):
                 elif result.get('analysis') == 'attribute_gage' or result.get('graph') == 'attribute_gage':
                     from .attribute_gage_chart import AttributeGageChartWidget
                     chart = AttributeGageChartWidget(result)
+                elif result.get('analysis') == 'ecdf_plot' or result.get('graph') == 'ecdf_plot':
+                    from .ecdf_chart import EmpiricalCDFChartWidget
+                    chart = EmpiricalCDFChartWidget(entry)
                 elif result.get('analysis') == 'marginal_plot' or result.get('graph') == 'marginal_plot':
                     from .marginal_plot_chart import MarginalPlotChartWidget
                     chart = MarginalPlotChartWidget(entry)

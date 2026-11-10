@@ -78,6 +78,7 @@ FIELDS = {
     'multiple_correspondence': {'variable_indices', 'n_components'},
     'probability_distribution_plot': {'distribution', 'parameters', 'mode', 'shade_by', 'tail', 'prob_value', 'x_value', 'x_low', 'x_high'},
     'marginal_plot': {'y_index', 'x_index', 'marginal_type', 'show_normal_curve', 'bins', 'title'},
+    'ecdf_plot': {'variable_index', 'group_index', 'distribution', 'confidence', 'title'},
     'probit_analysis': {'response_index', 'trials_index', 'dose_index', 'distribution', 'dose_transform', 'confidence'},
     'nonparametric_growth_curve': {'time_index', 'system_index', 'event_index', 'cost_index', 'confidence'},
     'parametric_growth_curve': {'time_index', 'system_index', 'event_index', 'confidence'},
@@ -217,6 +218,11 @@ def columns(recipe):
         return []
     if action == 'marginal_plot':
         cols = [parameters.get('y_index'), parameters.get('x_index')]
+        return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
+    if action == 'ecdf_plot':
+        cols = [parameters.get('variable_index')]
+        if parameters.get('group_index') is not None:
+            cols.append(parameters.get('group_index'))
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
     if action == 'multiple_correspondence':
         return sorted(set([c for c in parameters.get('variable_indices', []) if isinstance(c, int) and c >= 0]))

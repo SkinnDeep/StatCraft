@@ -610,6 +610,28 @@ class Presenter:
             'method':method,'indices':list(indices),'group_index':group_index,'bins':bins,
             'confidence':confidence,'distribution':distribution,'parameters':parameters}})
 
+    def ecdf_plot(self, variable_index, group_index=None, distribution='None', confidence=0.95, title=None):
+        from .ecdf_plot import compute_ecdf_plot
+        result = compute_ecdf_plot(
+            self.worksheet,
+            variable_index=variable_index,
+            group_index=group_index,
+            distribution=distribution,
+            confidence=confidence,
+            title=title,
+        )
+        recipe = {
+            'action': 'ecdf_plot',
+            'parameters': {
+                'variable_index': variable_index,
+                'group_index': group_index,
+                'distribution': distribution,
+                'confidence': confidence,
+                'title': title,
+            }
+        }
+        return self._record(result['title'], result, recipe=recipe)
+
     def marginal_plot(self, y_index, x_index, marginal_type='histogram', show_normal_curve=False, bins=12, title=None):
         from .marginal_plot import compute_marginal_plot
         result = compute_marginal_plot(
@@ -7084,6 +7106,9 @@ def format_entry(entry):
     result = entry["result"]
     if isinstance(result, dict) and (result.get('analysis') == 'bootstrap_uncertainty' or 'bootstrap_report' in result):
         return title + result.get('text', '')
+    if isinstance(result, dict) and (result.get('analysis') == 'ecdf_plot' or result.get('graph') == 'ecdf_plot'):
+        from .ecdf_report import format_ecdf_report
+        return title + format_ecdf_report(result)
     if isinstance(result, dict) and (result.get('analysis') == 'marginal_plot' or result.get('graph') == 'marginal_plot'):
         from .marginal_plot_report import format_marginal_plot_report
         return title + format_marginal_plot_report(result)
