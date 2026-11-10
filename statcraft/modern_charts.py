@@ -361,8 +361,20 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         extra=max((label.count('\n')*16 for label in categories),default=0) if categories else 0
         left_margin=max(76,min(260,max((len(label)*6+30 for _,label in y_categories),default=76))) if y_categories else 76
         plot=QRectF(area.left()+left_margin,area.top()+28,max(20,area.width()-left_margin-105),max(20,area.height()-92-extra))
-        x=lambda v:plot.left()+(v-xb[0])/(xb[1]-xb[0])*plot.width()
-        y=lambda v:plot.bottom()-(v-yb[0])/(yb[1]-yb[0])*plot.height()
+        x_log = bool(getattr(self, 'annotation_x_log', False)) and not categories and not box and xb[0] > 0 and xb[1] > 0
+        y_log = bool(getattr(self, 'annotation_y_log', False)) and not y_categories and not probability and yb[0] > 0 and yb[1] > 0
+        if x_log:
+            _lx0, _lx1 = math.log10(xb[0]), math.log10(xb[1])
+            _xspan = max(1e-12, _lx1 - _lx0)
+            x = lambda v, _lx0=_lx0, _xspan=_xspan, _p=plot: _p.left() + (math.log10(max(v, 1e-12)) - _lx0) / _xspan * _p.width()
+        else:
+            x=lambda v:plot.left()+(v-xb[0])/(xb[1]-xb[0])*plot.width()
+        if y_log:
+            _ly0, _ly1 = math.log10(yb[0]), math.log10(yb[1])
+            _yspan = max(1e-12, _ly1 - _ly0)
+            y = lambda v, _ly0=_ly0, _yspan=_yspan, _p=plot: _p.bottom() - (math.log10(max(v, 1e-12)) - _ly0) / _yspan * _p.height()
+        else:
+            y=lambda v:plot.bottom()-(v-yb[0])/(yb[1]-yb[0])*plot.height()
         self.remember_axes(plot)
         axis=self.graph_style('axis',color=MUTED,line_width=1,visible=True)
         grid=self.graph_style('grid',color='#e9edf0',line_width=1,visible=True)
@@ -497,7 +509,7 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 if series['fit']: self._path(p,series['fit']['x'],series['fit']['y'],x,y,color,1.7,style=self.graph_style('fit'+str(index),color=color),target='fit'+str(index))
                 for point_index,(a,b) in enumerate(zip(series['x'],series['y'])):
                     rows=series.get('row_indices',[]);row=rows[point_index] if point_index<len(rows) else None
-                    self._marker(p,QPointF(x(a),y(b)),color,index,style,name,row,point_info(a,b,d['xlabel'],d['ylabel'],series.get('label',''),row))
+                    self._marker(p,QPointF(x(a),y(b)),color,index,style,name,row,point_info(a,b,d['xlabel'],d['ylabel'],series.get('label',''),row),label_val=_fmt(b))
         elif kind=='histogram':
             style=self.graph_style('bars',fill='#a7bfd2',edge='#ffffff',line_width=1)
             p.setPen(style_pen(style));p.setBrush(style_color(style['fill'],style.get('opacity',1)))
@@ -505,6 +517,8 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 for i,v in enumerate(d['counts']):
                     rect=QRectF(QPointF(x(d['edges'][i]),y(v)),QPointF(x(d['edges'][i+1]),y(0))).normalized()
                     p.drawRect(rect);self.remember_rect('bars',rect)
+                    if getattr(self, 'annotation_data_labels', False) and v > 0:
+                        self._text(p, QRectF(rect.left(), rect.top() - 16, rect.width(), 15), str(v), INK)
                     source=self.result.get('histogram_source',self.result.get('observations'))
                     if not isinstance(source,(list,tuple)) or any(isinstance(v,(list,dict)) for v in source):source=None
                     self.remember_hover(rect,histogram_info(d['edges'][i],d['edges'][i+1],v,d.get('ylabel','Frequency'),source=source,last=i==len(d['counts'])-1))
@@ -533,7 +547,8 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 color=RED if i in d.get('signals',()) else BLUE
                 rows=d.get('row_indices',[]);row=rows[i-1] if i-1<len(rows) else None
                 shown_y=100*NormalDist().cdf(b) if kind=='normal_probability' else b
-                self._marker(p,QPointF(x(a),y(b)),color,0,self.graph_style('s0',color=color),'s0',row,point_info(a,shown_y,d['xlabel'],d['ylabel'],row=row))
+                self._marker(p,QPointF(x(a),y(b)),color,0,self.graph_style('s0',color=color),'s0',row,point_info(a,shown_y,d['xlabel'],d['ylabel'],row=row),label_val=_fmt(shown_y))
+        self._draw_reference_overlays(p, plot, x, y, d)
         p.restore();p.setFont(QFont('Segoe UI',9))
         if kind=='multi_scatter' and d['legend_title']:
             self._text(p,QRectF(plot.right()+10,plot.top()-24,94,24),p.fontMetrics().elidedText(d['legend_title'],Qt.TextElideMode.ElideRight,90),INK)
@@ -559,9 +574,54 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 if style.get('visible',True):self._text(p,QRectF(plot.right()+10,plot.top()+i*28,92,25),label,style['color'],Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
             for i,(label,v) in enumerate(d['specs']):self._text(p,QRectF(plot.right()+10,plot.top()+70+i*25,92,25),label+' '+_fmt(v),RED,Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
 
-    def _marker(self,p,point,color,index,style=None,target=None,row=None,information=None):
+    def _draw_reference_overlays(self, p, plot, x_fn, y_fn, panel):
+        x_refs = getattr(self, 'annotation_x_ref', []) or []
+        y_refs = list(getattr(self, 'annotation_y_ref', []) or [])
+        mean_tag = None
+        if getattr(self, 'annotation_mean_line', False):
+            y_vals = []
+            if panel.get('y'):
+                y_vals.extend(v for v in panel['y'] if v is not None and isinstance(v, (int, float)) and math.isfinite(v))
+            for s in panel.get('series', []):
+                if isinstance(s, dict) and s.get('y'):
+                    y_vals.extend(v for v in s['y'] if v is not None and isinstance(v, (int, float)) and math.isfinite(v))
+            if y_vals:
+                mean_val = sum(y_vals) / len(y_vals)
+                y_refs.append(mean_val)
+                mean_tag = mean_val
+        if not x_refs and not y_refs:
+            return
+        p.setFont(QFont('Segoe UI', 8))
+        for xv in x_refs:
+            try:
+                px = x_fn(xv)
+            except Exception:
+                continue
+            if plot.left() - 2 <= px <= plot.right() + 2:
+                pen = QPen(QColor('#0284c7'), 1.3, Qt.PenStyle.DashLine)
+                p.setPen(pen)
+                p.drawLine(QPointF(px, plot.top()), QPointF(px, plot.bottom()))
+                self._text(p, QRectF(px + 3, plot.top() + 2, 68, 16), f'Ref {_fmt(xv)}', '#0369a1', Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for idx, yv in enumerate(y_refs):
+            try:
+                py = y_fn(yv)
+            except Exception:
+                continue
+            if plot.top() - 2 <= py <= plot.bottom() + 2:
+                is_mean = (mean_tag is not None and idx == len(y_refs) - 1)
+                col_hex = GREEN if is_mean else '#dc2626'
+                lbl = f'Mean {_fmt(yv)}' if is_mean else f'Ref {_fmt(yv)}'
+                pen = QPen(QColor(col_hex), 1.4, Qt.PenStyle.DashLine)
+                p.setPen(pen)
+                p.drawLine(QPointF(plot.left(), py), QPointF(plot.right(), py))
+                self._text(p, QRectF(plot.left() + 4, py - 16, 90, 15), lbl, col_hex, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+    def _marker(self,p,point,color,index,style=None,target=None,row=None,information=None,label_val=None):
         settings=dict(color=color);settings.update(style or {})
         draw_marker(p,point,settings,('circle','square','triangle')[index%3])
+        if label_val is not None and getattr(self, 'annotation_data_labels', False) and settings.get('visible', True):
+            p.setFont(QFont('Segoe UI', 8))
+            self._text(p, QRectF(point.x() - 24, point.y() - 18, 48, 14), str(label_val), INK)
         if target and settings.get('visible',True) and settings.get('marker')!='none':
             self.remember_marker(target,point,settings.get('marker_size',6.4),row)
             if information:self.remember_point_hover(point,information,settings.get('marker_size',6.4))

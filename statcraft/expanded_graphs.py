@@ -20,13 +20,13 @@ LABELS = {
     'interval_plot':'Interval Plot', 'individual_value':'Individual Value Plot',
     'line_plot':'Line Plot', 'time_series':'Time Series Plot',
     'parallel_coordinates':'Parallel Coordinates Plot', 'bar_chart':'Bar Chart',
-    'heatmap':'Heatmap', 'pie_chart':'Pie Chart', 'area_graph':'Area Graph',
+    'heatmap':'Heatmap', 'pie_chart':'Pie Chart', 'wafer_plot':'Wafer Plot', 'area_graph':'Area Graph',
     'contour':'Contour Plot', 'scatter3d':'3D Scatterplot', 'surface3d':'3D Surface Plot'}
 MAX_OBSERVATIONS = 5000
 MAX_CELLS = 10000
 _MULTI = {'matrix_plot','correlogram','parallel_coordinates','heatmap','dotplot','stem_leaf',
           'probability_plot','ecdf','interval_plot','individual_value','time_series'}
-_THREE = {'bubble','contour','scatter3d','surface3d'}
+_THREE = {'bubble','contour','scatter3d','surface3d','wafer_plot'}
 _TWO = {'binned_scatter','marginal'}
 GROUP_METHODS = {'binned_scatter','matrix_plot','bubble','marginal','dotplot','probability_plot',
                  'ecdf','interval_plot','individual_value','line_plot','time_series','area_graph'}
@@ -167,7 +167,7 @@ def compute(method, worksheet, indices, group_index=None, bins=10, confidence=.9
             values=[[float(stats.pearsonr(x,y).statistic) for x in vectors] for y in vectors]
             panels=[{'kind':'heatmap','title':'Pearson Correlation','x_labels':[c.name for c in cols],
                      'y_labels':[c.name for c in cols],'values':values}]
-    elif method in ('binned_scatter','bubble','marginal','scatter3d','contour','surface3d','parallel_coordinates','heatmap'):
+    elif method in ('binned_scatter','bubble','marginal','scatter3d','wafer_plot','contour','surface3d','parallel_coordinates','heatmap'):
         if not complete:raise ValueError('Graph requires complete nonmissing observations.')
         if method=='binned_scatter':
             xmin,xmax=min(v[0] for _,v,_ in complete),max(v[0] for _,v,_ in complete)
@@ -198,6 +198,9 @@ def compute(method, worksheet, indices, group_index=None, bins=10, confidence=.9
         elif method=='scatter3d':
             panels=[{'kind':'xyz','title':'3D Scatterplot','points':[list(v) for _,v,_ in complete],
                      'axes':[c.name for c in cols]}]
+        elif method=='wafer_plot':
+            dies=[{'x':float(v[0]),'y':float(v[1]),'val':float(v[2]),'row':r+1} for r,v,_ in complete]
+            panels=[{'kind':'wafer','title':f'Wafer Map of {cols[2].name}','dies':dies,'axes':[c.name for c in cols]}]
         else:
             grid={}
             for _,v,_ in complete:

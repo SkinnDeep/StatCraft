@@ -2,7 +2,7 @@
 import copy
 from PySide6.QtCore import Qt,Signal
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QSizePolicy,QToolButton
-from .graph_presentation import graph_presentation,validate_presentation
+from .graph_presentation import graph_presentation,validate_presentation,parse_ref_lines
 
 
 class AnnotationLabel(QLabel):
@@ -47,12 +47,14 @@ class GraphFrame(QWidget):
         self.btn_highlight = QToolButton(); self.btn_highlight.setText('Highlight in Table')
         self.btn_save = QToolButton(); self.btn_save.setText('Save Selection…')
         self.btn_analyze = QToolButton(); self.btn_analyze.setText('Analyze…')
+        self.btn_indicator = QToolButton(); self.btn_indicator.setText('Create Indicator')
         self.btn_r = QToolButton(); self.btn_r.setText('Open in R')
         self.btn_clear = QToolButton(); self.btn_clear.setText('✕'); self.btn_clear.setToolTip('Clear Selection')
 
         s_layout.addWidget(self.btn_highlight)
         s_layout.addWidget(self.btn_save)
         s_layout.addWidget(self.btn_analyze)
+        s_layout.addWidget(self.btn_indicator)
         s_layout.addWidget(self.btn_r)
         s_layout.addStretch()
         s_layout.addWidget(self.btn_clear)
@@ -95,6 +97,12 @@ class GraphFrame(QWidget):
         self.chart.annotation_positions={key:settings[key+'_position'] for key in ('x','y')}
         self.chart.annotation_limits={key:(settings[key+'_min'],settings[key+'_max']) for key in ('x','y') if settings[key+'_min'] is not None}
         self.chart.annotation_grid=settings['grid_enabled']
+        self.chart.annotation_x_ref=parse_ref_lines(settings.get('x_ref_line',''))
+        self.chart.annotation_y_ref=parse_ref_lines(settings.get('y_ref_line',''))
+        self.chart.annotation_x_log=bool(settings.get('x_log',False))
+        self.chart.annotation_y_log=bool(settings.get('y_log',False))
+        self.chart.annotation_data_labels=bool(settings.get('show_data_labels',False))
+        self.chart.annotation_mean_line=bool(settings.get('show_mean_line',False))
         self.chart.panels=copy.deepcopy(self.base_panels)
         if self.entry.get('histogram_settings') is not None:
             from .histogram_options import build_histogram_panel

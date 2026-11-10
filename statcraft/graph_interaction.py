@@ -86,7 +86,15 @@ class GraphInteractionMixin:
 
     def hover_text_at(self,position):
         info=self.hover_info_at(position)
-        return info.get('text','') if info else ''
+        if not info:return ''
+        text=info.get('text','')
+        id_info=getattr(self,'id_column_info',None)
+        row=info.get('row')
+        if id_info and isinstance(row,int) and row>=1:
+            col_name,vals=id_info
+            if row-1<len(vals) and vals[row-1] is not None:
+                text+=f"\nID ({col_name}): {vals[row-1]}"
+        return text
 
     def resizeEvent(self,event):
         self.clear_hover()

@@ -11,7 +11,7 @@ from test_mpx import scratch
 class ExpandedGraphAppTests(unittest.TestCase):
     def test_menu_inventory_has_working_backend_for_every_choice(self):
         items=[item for item in MENU if item]
-        self.assertEqual(len(items),27)
+        self.assertEqual(len(items),28)
         self.assertEqual({method for title,method in items},set(LABELS)|{'builder','histogram','scatter','boxplot','symmetry_plot'})
 
     def test_every_expanded_recipe_roundtrips_and_reruns(self):
@@ -21,7 +21,7 @@ class ExpandedGraphAppTests(unittest.TestCase):
             p.expanded_graph(method,indices)
         with scratch() as folder:
             path=Path(folder)/'all-graphs.mpx';p.save(path);q=Presenter();q.load(path)
-            self.assertEqual(len(q.history),22)
+            self.assertEqual(len(q.history),23)
             for entry in list(q.history):
                 with self.subTest(method=entry['result']['method']):
                     self.assertFalse(q.result_stale(entry));self.assertEqual(q.rerun_result(entry)['result'],entry['result'])

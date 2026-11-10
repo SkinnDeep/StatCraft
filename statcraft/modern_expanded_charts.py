@@ -297,6 +297,14 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
             if any(b <= a for axis in (x, y) for a, b in zip(axis, axis[1:])):
                 raise ValueError('Surface axes must increase.')
             p['_ranges'] = [_bounds(x), _bounds(y), _bounds([v for row in z for v in row])]
+        elif kind == 'wafer':
+            dies = p.get('dies', [])
+            if not dies:
+                raise ValueError('Wafer plot requires die coordinate and measurement rows.')
+            xs = _nums([d['x'] for d in dies]); ys = _nums([d['y'] for d in dies]); vs = _nums([d['val'] for d in dies])
+            p['_xrange'] = (min(xs), max(xs))
+            p['_yrange'] = (min(ys), max(ys))
+            p['_range'] = (min(vs), max(vs))
         elif kind == 'stem_leaf':
             if not isinstance(p['lines'], list) or not all(isinstance(line, str) for line in p['lines']):
                 raise ValueError('Stem-and-leaf lines must be text.')
@@ -345,9 +353,36 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
         q.rotate(-90)
         if axis['visible'] and positions.get('y')!='off':self._text(q, QRectF(-plot.height()/2, -10, plot.height(), 20), ylabel,color=axis['color'])
         q.restore()
+        x_log = bool(getattr(self, 'annotation_x_log', False)) and categories is None and not x_date and xb[0] > 0 and xb[1] > 0
+        y_log = bool(getattr(self, 'annotation_y_log', False)) and yb[0] > 0 and yb[1] > 0
+        _lx0, _lx1 = (math.log10(xb[0]), math.log10(xb[1])) if x_log else (0.0, 1.0)
+        _ly0, _ly1 = (math.log10(yb[0]), math.log10(yb[1])) if y_log else (0.0, 1.0)
         def point(x, y):
-            return QPointF(plot.left()+(x-xb[0])/(xb[1]-xb[0])*plot.width(),
-                           plot.bottom()-(y-yb[0])/(yb[1]-yb[0])*plot.height())
+            if x_log:
+                px = plot.left() + (math.log10(max(x, 1e-12)) - _lx0) / max(1e-12, _lx1 - _lx0) * plot.width()
+            else:
+                px = plot.left() + (x - xb[0]) / max(1e-12, xb[1] - xb[0]) * plot.width()
+            if y_log:
+                py = plot.bottom() - (math.log10(max(y, 1e-12)) - _ly0) / max(1e-12, _ly1 - _ly0) * plot.height()
+            else:
+                py = plot.bottom() - (y - yb[0]) / max(1e-12, yb[1] - yb[0]) * plot.height()
+            return QPointF(px, py)
+        for xv in (getattr(self, 'annotation_x_ref', []) or []):
+            try:
+                px = point(xv, yb[0]).x()
+                if plot.left() - 2 <= px <= plot.right() + 2:
+                    q.setPen(QPen(QColor('#0284c7'), 1.3, Qt.PenStyle.DashLine))
+                    q.drawLine(QPointF(px, plot.top()), QPointF(px, plot.bottom()))
+            except Exception:
+                pass
+        for yv in (getattr(self, 'annotation_y_ref', []) or []):
+            try:
+                py = point(xb[0], yv).y()
+                if plot.top() - 2 <= py <= plot.bottom() + 2:
+                    q.setPen(QPen(QColor('#dc2626'), 1.3, Qt.PenStyle.DashLine))
+                    q.drawLine(QPointF(plot.left(), py), QPointF(plot.right(), py))
+            except Exception:
+                pass
         return plot, point
 
     def _legend(self, q, area, labels):
@@ -390,6 +425,40 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
                 path=QPainterPath();path.moveTo(pie.center());path.arcTo(pie,angle/16,span/16);path.closeSubpath()
                 self.remember_hover(path,summary_info('pie',[('Category',p['categories'][i]),('Value',value),('Percent',100*value/total)]),pie)
                 angle += span
+            return
+        if kind == 'wafer':
+            dies = p['dies']
+            x0, x1 = p['_xrange']; y0, y1 = p['_yrange']; low, high = p['_range']
+            ux = sorted({d['x'] for d in dies}); uy = sorted({d['y'] for d in dies})
+            dx = min((b - a for a, b in zip(ux, ux[1:])), default=1.0)
+            dy = min((b - a for a, b in zip(uy, uy[1:])), default=1.0)
+            rect = bounds.adjusted(30, 8, -70, -24)
+            side = max(40.0, min(rect.width(), rect.height()))
+            wafer_rect = QRectF(rect.center().x() - side / 2, rect.center().y() - side / 2, side, side)
+            inner = wafer_rect.adjusted(side * 0.08, side * 0.08, -side * 0.08, -side * 0.08)
+            q.setPen(QPen(QColor('#475569'), 1.6))
+            q.setBrush(QColor('#f8fafc'))
+            q.drawEllipse(wafer_rect)
+            span_x = max(dx, (x1 - x0) + dx)
+            span_y = max(dy, (y1 - y0) + dy)
+            die_w = max(4.0, (dx / span_x) * inner.width() * 0.9)
+            die_h = max(4.0, (dy / span_y) * inner.height() * 0.9)
+            axes = p.get('axes', ['Die X', 'Die Y', 'Metric'])
+            for d in dies:
+                cx = inner.left() + ((d['x'] - x0 + dx * 0.5) / span_x) * inner.width()
+                cy = inner.bottom() - ((d['y'] - y0 + dy * 0.5) / span_y) * inner.height()
+                die_box = QRectF(cx - die_w / 2, cy - die_h / 2, die_w, die_h)
+                fill_c = _color(d['val'], low, high)
+                q.setPen(QPen(QColor('#ffffff'), 0.8))
+                q.setBrush(fill_c)
+                q.drawRect(die_box)
+                if getattr(self, 'annotation_data_labels', False) and len(dies) <= 64:
+                    self._text(q, die_box, _fmt(d['val']), color=INK)
+                self.remember_hover(die_box, summary_info('wafer', [(axes[0], d['x']), (axes[1], d['y']), (axes[2], d['val'])], row=d.get('row')), wafer_rect)
+            for i in range(100):
+                q.fillRect(QRectF(wafer_rect.right() + 14, wafer_rect.top() + i * wafer_rect.height() / 100, 12, wafer_rect.height() / 100 + 1), _color(high - (high - low) * i / 99, low, high))
+            self._text(q, QRectF(wafer_rect.right() + 10, wafer_rect.top() - 16, 48, 16), _fmt(high))
+            self._text(q, QRectF(wafer_rect.right() + 10, wafer_rect.bottom() + 1, 48, 16), _fmt(low))
             return
         if kind == 'heatmap':
             rows, cols = len(p['values']), len(p['values'][0])
@@ -459,6 +528,8 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
                     radius = 3 if len(raw) < 3 else (2+12*math.sqrt(raw[2]/maxsize) if maxsize else 2)
                     fill = QColor(color); fill.setAlpha(130 if len(raw) == 3 else 220)
                     draw_marker(q,pos,style,default_size=radius*2)
+                    if getattr(self, 'annotation_data_labels', False) and style.get('visible', True):
+                        self._text(q, QRectF(pos.x() - 24, pos.y() - 18, 48, 14), _fmt(raw[1]), color=INK)
                     if style.get('marker')!='none':
                         rows=s.get('row_indices',[]);row=rows[point_index] if point_index<len(rows) else None
                         self.remember_marker('s'+str(i),pos,style.get('marker_size',radius*2),row)
@@ -496,6 +567,8 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
                 left, right = (edges[i], edges[i+1]) if edges else (i+.65, i+1.35)
                 a, b = point(left, 0), point(right, value)
                 rect=QRectF(a,b).normalized();q.drawRect(rect);self.remember_rect('bars',rect)
+                if getattr(self, 'annotation_data_labels', False):
+                    self._text(q, QRectF(rect.left(), rect.top() - 16, rect.width(), 15), _fmt(value), color=INK)
                 info=histogram_info(left,right,value,p.get('y_label','Value')) if edges else point_info(p['categories'][i],value,p.get('x_label','Category'),p.get('y_label','Value'))
                 if not edges:info['kind']='bar'
                 self.remember_hover(rect,info,plot)

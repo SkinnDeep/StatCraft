@@ -7137,6 +7137,26 @@ class Presenter:
         self.dirty = True
         return new_sheet
 
+    @undoable
+    def create_indicator_from_brushed(self, row_numbers, col_name="Brushed_Indicator"):
+        """Create a binary 0/1 indicator column marking brushed 1-based row numbers."""
+        total = self.worksheet.row_count
+        if total == 0:
+            raise ValueError("Worksheet is empty.")
+        brushed_set = {int(r) for r in (row_numbers or ()) if 1 <= int(r) <= total}
+        vals = [1.0 if (idx + 1) in brushed_set else 0.0 for idx in range(total)]
+        base = (col_name or "Brushed_Indicator").strip() or "Brushed_Indicator"
+        existing = {c.name.casefold() for c in self.worksheet.columns}
+        final_name = base
+        suffix = 2
+        while final_name.casefold() in existing:
+            final_name = f"{base}_{suffix}"
+            suffix += 1
+        col = Column(final_name, "number", vals)
+        self.worksheet.columns.append(col)
+        self.dirty = True
+        return col
+
     def delete_result(self, entry):
         if entry in self.history:
             self.history.remove(entry)

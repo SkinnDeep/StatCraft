@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt,QMimeData,QTimer,QSize
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QListWidget,QListWidgetItem,
     QLineEdit,QPushButton,QGroupBox,QSplitter,QWidget,QScrollArea,QDialogButtonBox,QCheckBox,QSpinBox,QDoubleSpinBox,QComboBox,QAbstractItemView)
-from .graph_builder import TYPES,DEFAULTS,validate_mapping,compute_builder
+from .graph_builder import TYPES,ALL_TYPES,DEFAULTS,validate_mapping,compute_builder
 from .variable_dialogs import format_variable_reference
 from .modern_icons import tool_icon
 
@@ -64,10 +64,12 @@ class GraphBuilderDialog(QDialog):
         self.available.itemDoubleClicked.connect(lambda item:self.assign_columns(self.active_role,[item.data(Qt.ItemDataRole.UserRole)]))
         self.add_button=QPushButton('Add selected →');self.add_button.clicked.connect(self.add_selected);ll.addWidget(self.add_button);ll.addWidget(QLabel('Graph type'))
         self.gallery=QListWidget();self.gallery.setIconSize(QSize(22,22));self.gallery.setMinimumHeight(200)
-        for kind,title in TYPES.items():
-            item=QListWidgetItem(tool_icon({'individual_value':'individual','interval_plot':'interval'}.get(kind,kind)),title);item.setData(Qt.ItemDataRole.UserRole,kind);self.gallery.addItem(item)
-            if kind==self.graph_type:self.gallery.setCurrentItem(item)
-        self.gallery.currentItemChanged.connect(self.change_type);ll.addWidget(self.gallery,2);split.addWidget(left)
+        self._populate_gallery(False)
+        self.gallery.currentItemChanged.connect(self.change_type);ll.addWidget(self.gallery,2)
+        self.show_all_check=QCheckBox('Show Extended Graphs (21 Types)')
+        self.show_all_check.toggled.connect(self._toggle_extended_gallery)
+        ll.addWidget(self.show_all_check)
+        split.addWidget(left)
         center=QWidget();cl=QVBoxLayout(center);cl.setContentsMargins(4,0,4,0);role_row=QHBoxLayout();self.roles={};self.role_groups={};self.role_buttons={}
         for key,title in (('response_indices','Y variables'),('x_index','X variable'),('group_indices','Categorical variables')):
             group=QGroupBox(title);layout=QVBoxLayout(group);role=RoleList(key,self);self.roles[key]=role;self.role_groups[key]=group;layout.addWidget(role)
@@ -96,8 +98,24 @@ class GraphBuilderDialog(QDialog):
         self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Create');self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);bottom.addWidget(self.buttons);outer.addLayout(bottom)
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(180);self.timer.timeout.connect(self.update_preview)
         self._loading=False;self.configure_type();self.refresh_roles();self.update_preview()
+        if self.graph_type not in TYPES and self.graph_type in ALL_TYPES:
+            self.show_all_check.setChecked(True)
         if lock_variables:
-            for widget in (self.available,self.gallery,self.add_button,self.reset_button,*self.roles.values(),*self.role_buttons.values()):widget.setEnabled(False)
+            for widget in (self.available,self.gallery,self.show_all_check,self.add_button,self.reset_button,*self.roles.values(),*self.role_buttons.values()):widget.setEnabled(False)
+
+    def _populate_gallery(self, extended=False):
+        self._loading=True
+        self.gallery.clear()
+        source=ALL_TYPES if extended else TYPES
+        for kind,title in source.items():
+            item=QListWidgetItem(tool_icon({'individual_value':'individual','interval_plot':'interval'}.get(kind,kind)),title);item.setData(Qt.ItemDataRole.UserRole,kind);self.gallery.addItem(item)
+            if kind==self.graph_type:self.gallery.setCurrentItem(item)
+        self._loading=False
+
+    def _toggle_extended_gallery(self, checked):
+        self._populate_gallery(bool(checked))
+        if self.gallery.currentItem() is None and self.gallery.count():
+            self.gallery.setCurrentRow(0)
 
     def filter_columns(self,text):
         self.available.clearSelection()
@@ -106,12 +124,17 @@ class GraphBuilderDialog(QDialog):
     def show_error(self,message):self.error.setText(message);self.error.setStyleSheet('color:#b3261e;')
 
     def allowed_kinds(self,role):
-        return ('number','text') if role=='group_indices' or role=='response_indices' and self.graph_type=='bar_chart' else ('number','date') if role=='x_index' and self.graph_type=='time_series' else ('number',)
+        return ('number','text') if role=='group_indices' or role=='response_indices' and self.graph_type in ('bar_chart','pie_chart') else ('number','date') if role=='x_index' and self.graph_type=='time_series' else ('number',)
 
     def maximum(self,role):
         if role=='x_index':return 1
-        if role=='group_indices':return 0 if self.graph_type in ('bar_chart','matrix_plot') else 1 if self.graph_type in ('scatter','histogram','time_series') else 4
-        return 1 if self.graph_type in ('scatter','bar_chart') else 8 if self.graph_type in ('time_series','matrix_plot') else 16
+        no_group = ('bar_chart','pie_chart','matrix_plot','correlogram','heatmap','parallel_coordinates','symmetry_plot','wafer_plot')
+        one_group = ('scatter','histogram','time_series','binned_scatter','bubble','marginal','ecdf','probability_plot','area_graph')
+        if role=='group_indices':return 0 if self.graph_type in no_group else 1 if self.graph_type in one_group else 4
+        if self.graph_type in ('scatter','bar_chart','pie_chart','symmetry_plot'):return 1
+        if self.graph_type in ('binned_scatter','marginal'):return 2
+        if self.graph_type in ('bubble','wafer_plot'):return 3
+        return 8 if self.graph_type in ('time_series','matrix_plot','correlogram','heatmap','parallel_coordinates') else 16
 
     def assign_columns(self,role,indices):
         if self.lock_variables:return False
@@ -141,7 +164,9 @@ class GraphBuilderDialog(QDialog):
                 item=QListWidgetItem(format_variable_reference(index,self.worksheet));item.setData(Qt.ItemDataRole.UserRole,index);widget.addItem(item)
 
     def set_graph_type(self,kind):
-        if kind not in TYPES:raise ValueError('Unsupported graph type.')
+        if kind not in ALL_TYPES:raise ValueError('Unsupported graph type.')
+        if kind not in TYPES and not self.show_all_check.isChecked():
+            self.show_all_check.setChecked(True)
         for i in range(self.gallery.count()):
             if self.gallery.item(i).data(Qt.ItemDataRole.UserRole)==kind:self.gallery.setCurrentRow(i);return
 
@@ -149,17 +174,21 @@ class GraphBuilderDialog(QDialog):
         if self._loading or current is None:return
         self.graph_type=current.data(Qt.ItemDataRole.UserRole)
         for key in self.mapping:self.mapping[key]=[i for i in self.mapping[key] if self.worksheet.columns[i].kind in self.allowed_kinds(key)][:self.maximum(key)]
-        if self.graph_type not in ('scatter','time_series'):self.mapping['x_index']=[]
+        x_opt = ('scatter','time_series','binned_scatter','marginal','bubble','wafer_plot','area_graph')
+        if self.graph_type not in x_opt:self.mapping['x_index']=[]
         self.configure_type();self.refresh_roles();self.schedule_preview()
 
     def configure_type(self):
         kind=self.graph_type
-        if self.active_role=='x_index' and kind not in ('scatter','time_series') or self.active_role=='group_indices' and kind in ('bar_chart','matrix_plot'):self.active_role='response_indices'
-        self.role_groups['response_indices'].setTitle('Categorical variable' if kind=='bar_chart' else 'Continuous variables' if kind not in ('scatter',) else 'Y variable')
-        self.role_groups['x_index'].setVisible(kind in ('scatter','time_series'));self.role_groups['x_index'].setTitle('X / time variable (optional)' if kind=='time_series' else 'X variable')
-        self.role_groups['group_indices'].setVisible(kind not in ('bar_chart','matrix_plot'))
+        x_opt = ('scatter','time_series','binned_scatter','marginal','bubble','wafer_plot','area_graph')
+        no_group = ('bar_chart','pie_chart','matrix_plot','correlogram','heatmap','parallel_coordinates','symmetry_plot','wafer_plot')
+        if self.active_role=='x_index' and kind not in x_opt or self.active_role=='group_indices' and kind in no_group:self.active_role='response_indices'
+        y_title = 'Categorical variable' if kind in ('bar_chart','pie_chart') else 'Y (and Z/Size) variables' if kind in ('bubble','wafer_plot') else 'Y variable' if kind in ('scatter','binned_scatter','marginal') else 'Continuous variables'
+        self.role_groups['response_indices'].setTitle(y_title)
+        self.role_groups['x_index'].setVisible(kind in x_opt);self.role_groups['x_index'].setTitle('X / time variable (optional)' if kind!='scatter' else 'X variable')
+        self.role_groups['group_indices'].setVisible(kind not in no_group)
         for key,(label,control) in self.option_fields.items():
-            visible=key=='title' or key=='bins' and kind in ('histogram','dotplot') or key=='fit' and kind in ('histogram','scatter') or key=='stack' and kind=='dotplot' or key in ('variable_position','layout') and kind in ('histogram','boxplot','dotplot','individual_value','interval_plot') or key in ('confidence','pooled','bonferroni') and kind=='interval_plot'
+            visible=key=='title' or key=='bins' and kind in ('histogram','dotplot','binned_scatter','marginal') or key=='fit' and kind in ('histogram','scatter') or key=='stack' and kind=='dotplot' or key in ('variable_position','layout') and kind in ('histogram','boxplot','dotplot','individual_value','interval_plot') or key in ('confidence','pooled','bonferroni') and kind in ('interval_plot',)
             control.setVisible(visible)
             if self.form.labelForField(control):self.form.labelForField(control).setVisible(visible)
         self.fit.setText('Linear regression fit' if kind=='scatter' else 'Normal fit')

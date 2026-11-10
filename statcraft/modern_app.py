@@ -6751,6 +6751,8 @@ class ModernWindow(QMainWindow):
             brush_action.setCheckable(True)
             brush_action.setChecked(target_entry is self.selected_entry and getattr(getattr(self,'_active_chart_widget',None),'is_brushing',False))
             menu.addAction(tool_icon("layout_tool"), "Layout Tool...", lambda: self.layout_tool_dialog(target_entry))
+            menu.addAction("Set ID Column for Hover…", lambda: self.set_graph_id_column_dialog(target_entry))
+            menu.addAction("Rename Graph…", lambda: self.rename_output_dialog(target_entry))
             menu.addAction("Reset to Default Size", self.reset_graph_size)
             menu.addSeparator()
             menu.addAction(tool_icon("save"), "Save Graph As...", lambda: self.save_graph_as(target_entry))
@@ -6774,6 +6776,7 @@ class ModernWindow(QMainWindow):
             menu.addAction("Highlight in Worksheet", lambda: self.highlight_brushed_selection())
             menu.addAction("Save Selection…", lambda: self.save_brushed_selection())
             menu.addAction("Analyze Selection…", lambda: self.analyze_brushed_selection())
+            menu.addAction("Create Indicator Variable from Selection…", lambda: self.create_indicator_from_brushed_dialog())
             menu.addAction("Open Selection in R Workbench…", lambda: self.open_brushed_selection_in_r())
             menu.addAction("Clear Selection", lambda: self.clear_brushed_selection())
 
@@ -7323,12 +7326,58 @@ class ModernWindow(QMainWindow):
 
     def _setup_graph_frame(self, graph_frame, chart, entry):
         self._active_graph_frame = graph_frame
+        id_idx = entry.get("id_column_index") if isinstance(entry, dict) else None
+        if isinstance(id_idx, int) and 0 <= id_idx < len(self.presenter.worksheet.columns):
+            c = self.presenter.worksheet.columns[id_idx]
+            chart.id_column_info = (c.name, c.values)
+        else:
+            chart.id_column_info = None
         if hasattr(graph_frame, 'btn_highlight'):
             graph_frame.btn_highlight.clicked.connect(lambda: self.highlight_brushed_selection())
             graph_frame.btn_save.clicked.connect(lambda: self.save_brushed_selection())
             graph_frame.btn_analyze.clicked.connect(lambda: self.analyze_brushed_selection())
+            if hasattr(graph_frame, 'btn_indicator'):
+                graph_frame.btn_indicator.clicked.connect(lambda: self.create_indicator_from_brushed_dialog())
             graph_frame.btn_r.clicked.connect(lambda: self.open_brushed_selection_in_r())
             graph_frame.btn_clear.clicked.connect(lambda: self.clear_brushed_selection())
+
+    def create_indicator_from_brushed_dialog(self, rows=None, name=None):
+        target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
+        if not target_rows:
+            QMessageBox.information(self, "Create Indicator Variable", "Please brush or select observations on a graph first.")
+            return
+        if name is None:
+            text, ok = QInputDialog.getText(self, "Create Indicator Variable", "New binary indicator column name:", text="Brushed_Indicator")
+            if not ok or not text.strip():
+                return
+            name = text.strip()
+        col = self._call(lambda: self.presenter.create_indicator_from_brushed(target_rows, col_name=name))
+        self.refresh()
+        if col is not None:
+            self.statusBar().showMessage(f"Created binary indicator column '{col.name}' ({len(target_rows)} selected rows marked 1)", 5000)
+
+    def set_graph_id_column_dialog(self, entry=None):
+        target = entry or self.selected_entry
+        if not isinstance(target, dict):
+            return
+        cols = self.presenter.worksheet.columns
+        items = ["(None — row numbers only)"] + [f"C{i+1}: {c.name}" for i, c in enumerate(cols)]
+        cur_idx = target.get("id_column_index")
+        default_pos = (cur_idx + 1) if isinstance(cur_idx, int) and 0 <= cur_idx < len(cols) else 0
+        chosen, ok = QInputDialog.getItem(self, "Set ID Column for Hover", "Display ID column in point tooltips:", items, default_pos, False)
+        if not ok:
+            return
+        sel_pos = items.index(chosen)
+        target["id_column_index"] = None if sel_pos == 0 else sel_pos - 1
+        chart = getattr(self, "_active_chart_widget", None)
+        if chart is not None and target is self.selected_entry:
+            if target["id_column_index"] is not None:
+                c = cols[target["id_column_index"]]
+                chart.id_column_info = (c.name, c.values)
+            else:
+                chart.id_column_info = None
+        self.presenter.dirty = True
+        self.statusBar().showMessage(f"Hover ID set to: {chosen}", 4000)
 
     def connect_compare_implementations(self, entry):
         conn_dict = entry.get("connected_analysis")

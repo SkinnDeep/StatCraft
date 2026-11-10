@@ -7,6 +7,6 @@ MENU=[('Graph Builder','builder'),None,
     ('Probability Distribution Plot','distribution_plot'),('Symmetry Plot','symmetry_plot'),None,
     ('Boxplot','boxplot'),('Interval Plot','interval_plot'),('Individual Value Plot','individual_value'),
     ('Line Plot','line_plot'),('Parallel Coordinates Plot','parallel_coordinates'),None,
-    ('Bar Chart','bar_chart'),('Heatmap','heatmap'),('Pie Chart','pie_chart'),None,
+    ('Bar Chart','bar_chart'),('Heatmap','heatmap'),('Pie Chart','pie_chart'),('Wafer Plot','wafer_plot'),None,
     ('Time Series Plot','time_series'),('Area Graph','area_graph'),None,
     ('Contour Plot','contour'),('3D Scatterplot','scatter3d'),('3D Surface Plot','surface3d')]

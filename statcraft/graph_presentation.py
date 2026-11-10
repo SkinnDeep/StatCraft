@@ -5,18 +5,42 @@ result snapshots and do not alter the underlying statistical calculation.
 """
 import math
 import numbers
+import re
 
 
 FIELDS = {
     'title', 'subtitle', 'footnote', 'title_enabled', 'subtitle_enabled',
     'footnote_enabled', 'x_label', 'y_label', 'x_position', 'y_position',
     'x_min', 'x_max', 'y_min', 'y_max', 'grid_enabled',
+    'x_ref_line', 'y_ref_line', 'x_log', 'y_log', 'show_data_labels', 'show_mean_line',
 }
-DEFAULTS = dict(title='', subtitle='', footnote='', title_enabled=True,
-                subtitle_enabled=False, footnote_enabled=False,
-                x_label='', y_label='', x_position='low', y_position='low',
-                x_min=None, x_max=None, y_min=None, y_max=None,
-                grid_enabled=True)
+DEFAULTS = dict(
+    title='', subtitle='', footnote='', title_enabled=True,
+    subtitle_enabled=False, footnote_enabled=False,
+    x_label='', y_label='', x_position='low', y_position='low',
+    x_min=None, x_max=None, y_min=None, y_max=None,
+    grid_enabled=True,
+    x_ref_line='', y_ref_line='', x_log=False, y_log=False,
+    show_data_labels=False, show_mean_line=False,
+)
+
+
+def parse_ref_lines(raw):
+    """Parse comma/space-separated finite reference line coordinates."""
+    if not raw or not str(raw).strip():
+        return []
+    out = []
+    for tok in re.split(r'[\s,;]+', str(raw).strip()):
+        if not tok:
+            continue
+        try:
+            v = float(tok)
+        except ValueError as exc:
+            raise ValueError('Reference lines must contain finite numeric values (e.g. 5, 10).') from exc
+        if not math.isfinite(v):
+            raise ValueError('Reference lines must contain finite numeric values.')
+        out.append(v)
+    return out
 
 
 def validate_presentation(settings):
@@ -29,7 +53,13 @@ def validate_presentation(settings):
         value = result[name]
         if not isinstance(value, str) or len(value) > 145:
             raise ValueError(name.replace('_', ' ').capitalize() + ' must contain at most 145 characters.')
-    for name in ('title_enabled', 'subtitle_enabled', 'footnote_enabled', 'grid_enabled'):
+    for name in ('x_ref_line', 'y_ref_line'):
+        value = result[name]
+        if not isinstance(value, str) or len(value) > 145:
+            raise ValueError('Reference line list must be a string up to 145 characters.')
+        parse_ref_lines(value)
+    for name in ('title_enabled', 'subtitle_enabled', 'footnote_enabled', 'grid_enabled',
+                 'x_log', 'y_log', 'show_data_labels', 'show_mean_line'):
         if type(result[name]) is not bool:
             raise ValueError(name.replace('_', ' ').capitalize() + ' must be on or off.')
     for axis in ('x', 'y'):
@@ -55,7 +85,7 @@ def graph_presentation(entry):
     entry = entry if isinstance(entry, dict) else {}
     result = entry.get('result', {})
     result = result if isinstance(result, dict) else {}
-    if result.get('analysis')=='native_saved_output':
+    if result.get('analysis') == 'native_saved_output':
         from .native_graph_view import presentation
         return presentation(entry)
     panels = result.get('panels', [])
@@ -65,7 +95,8 @@ def graph_presentation(entry):
     text = lambda value: str(value)[:145] if value is not None else ''
     defaults = dict(DEFAULTS)
     defaults['title'] = text(result.get('plot_title', entry.get('title', result.get('title', 'Graph'))))
-    if result.get('graph')=='graph_layout':defaults['title']=text(result.get('title','Graph Layout'))
+    if result.get('graph') == 'graph_layout':
+        defaults['title'] = text(result.get('title', 'Graph Layout'))
     defaults['subtitle'] = text(result.get('subtitle', ''))
     defaults['footnote'] = text(result.get('footnote', ''))
     defaults['title_enabled'] = bool(defaults['title'])
@@ -75,8 +106,9 @@ def graph_presentation(entry):
         axes[0] if axes else result.get('variable', '')))))
     defaults['y_label'] = text(result.get('ylabel', first.get('y_label', first.get('ylabel',
         axes[1] if len(axes) > 1 else 'Frequency' if result.get('graph') == 'histogram' else ''))))
-    if result.get('graph')=='histogram' and entry.get('histogram_settings'):
-        options=entry['histogram_settings'];defaults['y_label']=('Cumulative ' if options.get('cumulative') else '')+options.get('scale','Frequency')
+    if result.get('graph') == 'histogram' and entry.get('histogram_settings'):
+        options = entry['histogram_settings']
+        defaults['y_label'] = ('Cumulative ' if options.get('cumulative') else '') + options.get('scale', 'Frequency')
     saved = entry.get('graph_presentation')
     if isinstance(saved, dict):
         defaults.update(saved)

@@ -133,9 +133,20 @@ class GraphOptionsPane(QWidget):
                 self.controls[key] = field; form.addRow(axis.upper() + ' ' + edge + ':', field)
                 field.textEdited.connect(self._schedule); field.editingFinished.connect(self.flush)
         more.addLayout(form)
+        ref_form = QFormLayout()
+        for axis in ('x', 'y'):
+            rkey = axis + '_ref_line'
+            rfield = QLineEdit(); rfield.setPlaceholderText('e.g. 5, 10'); rfield.setMaxLength(145)
+            rfield.setAccessibleName(axis.upper() + '-axis reference lines')
+            self.controls[rkey] = rfield; ref_form.addRow(axis.upper() + ' Ref Lines:', rfield)
+            rfield.textEdited.connect(self._schedule); rfield.editingFinished.connect(self.flush)
+        more.addLayout(ref_form)
         self.controls['grid_enabled'] = QCheckBox('Major grid lines')
         self.controls['grid_enabled'].toggled.connect(self._schedule)
         more.addWidget(self.controls['grid_enabled'])
+        for key, caption in (('x_log', 'Logarithmic X scale'), ('y_log', 'Logarithmic Y scale'), ('show_mean_line', 'Show mean reference line'), ('show_data_labels', 'Show data value labels')):
+            chk = QCheckBox(caption); chk.toggled.connect(self._schedule)
+            self.controls[key] = chk; more.addWidget(chk)
         caveat = QLabel('Enter both limits, or leave both blank for automatic scaling. Limits apply to Cartesian plots; other types retain their own scales.')
         caveat.setWordWrap(True); caveat.setStyleSheet('color: #666; font-size: 9pt;'); more.addWidget(caveat)
         self.more_body.hide(); self.more_button.toggled.connect(self.more_body.setVisible)
@@ -180,8 +191,8 @@ class GraphOptionsPane(QWidget):
             for key, value in settings.items():
                 if key in ('x_position', 'y_position'):
                     self.controls[key[0] + '_' + value].setChecked(True)
-                elif key.endswith('_enabled'):
-                    self.controls[key].setChecked(value)
+                elif key.endswith('_enabled') or key in ('x_log', 'y_log', 'show_data_labels', 'show_mean_line'):
+                    self.controls[key].setChecked(bool(value))
                 else:
                     self.controls[key].setText('' if value is None else str(value))
             self._baseline = settings
@@ -208,16 +219,16 @@ class GraphOptionsPane(QWidget):
         self.object_button.setEnabled(not composite and not static_plot)
         for axis in ('x','y'):
             for key in ('label','off','low','high'):self.controls[axis+'_'+key].setEnabled(not composite and not static_plot and not mixture_exploration)
-        for key in ('x_min','x_max','y_min','y_max','grid_enabled'):
+        for key in ('x_min','x_max','y_min','y_max','grid_enabled','x_ref_line','y_ref_line','x_log','y_log','show_mean_line','show_data_labels'):
             self.controls[key].setEnabled(cartesian)
             self.controls[key].setToolTip('' if cartesian else 'Cartesian plots support this control; this graph retains its own scale.')
         if mixture_exploration:self.controls['grid_enabled'].setEnabled(True)
 
     def _settings(self):
         values = {}
-        for key in ('title', 'subtitle', 'footnote', 'x_label', 'y_label'):
+        for key in ('title', 'subtitle', 'footnote', 'x_label', 'y_label', 'x_ref_line', 'y_ref_line'):
             values[key] = self.controls[key].text()
-        for key in ('title_enabled', 'subtitle_enabled', 'footnote_enabled', 'grid_enabled'):
+        for key in ('title_enabled', 'subtitle_enabled', 'footnote_enabled', 'grid_enabled', 'x_log', 'y_log', 'show_data_labels', 'show_mean_line'):
             values[key] = self.controls[key].isChecked()
         for axis in ('x', 'y'):
             values[axis + '_position'] = next((p for p in ('off', 'low', 'high') if self.controls[axis + '_' + p].isChecked()), 'low')
