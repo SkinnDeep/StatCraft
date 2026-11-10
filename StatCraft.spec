@@ -13,6 +13,24 @@ datas = [
 a = Analysis(
     [str(root / 'launch_modern.py')],
     pathex=[str(root)],
+    hiddenimports=[
+        'statcraft.resampling',
+        'statcraft.count_models',
+        'statcraft.power_extended',
+        'statcraft.advanced_anova',
+        'statcraft.mixed_reml',
+        'statcraft.survival_advanced',
+        'statcraft.six_sigma',
+        'statcraft.predictive_ml',
+        'statcraft.assistant_wizard',
+        'statcraft.monte_carlo',
+        'statcraft.phase6_charts',
+        'statcraft.graph_builder',
+        'statcraft.graph_builder_dialog',
+        'statcraft.calc_data',
+        'statcraft.calc_data_dialogs',
+        'statcraft.session_commands',
+    ],
     datas=datas,
     excludes=['tkinter', '_tkinter', 'pandas', 'matplotlib', 'IPython', 'pytest']
 )
@@ -73,8 +91,8 @@ if sys.platform == 'darwin':
             'CFBundleName': 'StatCraft',
             'CFBundleDisplayName': 'StatCraft',
             'CFBundleIdentifier': 'com.statcraft.desktop',
-            'CFBundleVersion': '106.0.0',
-            'CFBundleShortVersionString': '106.0.0',
+            'CFBundleVersion': '116.1.0',
+            'CFBundleShortVersionString': '116.1.0',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '11.0',
         }

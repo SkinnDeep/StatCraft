@@ -28,6 +28,9 @@ def _fmt(value):
 
 def supported(entry):
     r = entry.get("result", entry) if isinstance(entry, dict) else {}
+    from .phase6_charts import supported as phase6_supported
+    if phase6_supported(r):
+        return True
     if isinstance(r, dict) and r.get("analysis") in (
         "graphical_summary", "run_chart", "multivari", "outlier_test", "cross_correlation",
         "fitted_line_plot",
@@ -170,6 +173,10 @@ class ChartWidget(GraphInteractionMixin,QWidget):
             prepare_mixture(self,self.result);return
         r=self.result
         if not isinstance(r,dict):return
+        from .phase6_charts import supported as phase6_supported, prepare as phase6_prepare
+        if phase6_supported(r):
+            phase6_prepare(self, r)
+            return
         if r.get('analysis') == 'subgroup_control':
             from .subgroup_control_chart import prepare
             prepare(self, r)
@@ -428,6 +435,10 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         if kind in ('model_main_effects','model_interaction','model_contour','model_surface'):
             from .model_plots_chart import draw_panel
             draw_panel(self,p,area,d);return
+        if kind == 'phase6_chart':
+            from .phase6_charts import draw_panel
+            draw_panel(self, p, area, d)
+            return
         if kind == 'subgroup_control':
             from .subgroup_control_chart import draw_panel
             draw_panel(self, p, area, d)

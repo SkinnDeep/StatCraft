@@ -216,6 +216,8 @@ def monte_carlo_simulation(
             "variance_contribution_pct": pct_var,
         })
 
+    h_counts, h_edges = np.histogram(y, bins=24)
+
     return {
         "analysis": "monte_carlo_simulation",
         "formula": formula,
@@ -223,6 +225,7 @@ def monte_carlo_simulation(
         "lsl": float(lsl) if lsl is not None else None,
         "usl": float(usl) if usl is not None else None,
         "inputs": input_summaries,
+        "histogram": {"edges": [float(e) for e in h_edges], "counts": [int(c) for c in h_counts]},
         "summary": {
             "mean": mean_y,
             "stdev": sd_y,

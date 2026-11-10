@@ -31,6 +31,11 @@ def _clean_arr(values: Sequence[Any], label: str = "Variable") -> np.ndarray:
     return np.asarray(nums, dtype=float)
 
 
+def _resample_hist(arr: np.ndarray, bins: int = 24) -> Dict[str, List[float]]:
+    counts, edges = np.histogram(arr, bins=bins)
+    return {"edges": [float(e) for e in edges], "counts": [int(c) for c in counts]}
+
+
 def bootstrap_1sample(
     values: Sequence[Any],
     statistic: str = "Mean",
@@ -87,6 +92,7 @@ def bootstrap_1sample(
         "se_bootstrap": boot_se,
         "ci_low": ci_low,
         "ci_high": ci_high,
+        "histogram": _resample_hist(boot_vals),
     }
 
 
@@ -152,6 +158,7 @@ def bootstrap_2sample(
         "se_bootstrap": boot_se,
         "ci_low": ci_low,
         "ci_high": ci_high,
+        "histogram": _resample_hist(boot_vals),
     }
 
 
@@ -196,6 +203,7 @@ def randomization_1sample(
         "alternative": alt,
         "extreme_count": extreme,
         "p_value": float(p_value),
+        "histogram": _resample_hist(perm_means),
     }
 
 
@@ -252,6 +260,7 @@ def randomization_2sample(
         "alternative": alt,
         "extreme_count": extreme,
         "p_value": float(p_value),
+        "histogram": _resample_hist(perm_diffs),
     }
 
 

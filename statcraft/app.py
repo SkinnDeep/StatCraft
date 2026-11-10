@@ -433,7 +433,9 @@ class Presenter:
             raise ValueError('C'+str(column+1)+' is calculated. Remove its formula or turn off automatic calculation before editing its cells.')
         kind = col.kind
         s = raw.strip()
-        is_missing = s in ("", "*") or s.lower() in ("na", "n/a", "nan", "none", ".", "-")
+        if kind != "text" and s.lower() in ("nan", "inf", "-inf", "+inf", "infinity", "-infinity", "+infinity"):
+            raise ValueError("Nonfinite cells are unsupported; use None or * for missing data.")
+        is_missing = s in ("", "*") or s.lower() in ("na", "n/a", "none", ".", "-")
         if kind == 'number' and col.metadata.get('auto_type') and not is_missing:
             try:
                 float(raw)
@@ -563,7 +565,7 @@ class Presenter:
             col = columns[column + position]
             if headers is not None and headers[position]:
                 col.name = headers[position]
-            if col.metadata.get("auto_type") or all(v is None for v in col.values):
+            if all(v is None for v in col.values):
                 try:
                     for cells in rows:
                         if cells[position].strip() not in ("", "*", "NA", "N/A", "nan", "NaN"):

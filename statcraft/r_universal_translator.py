@@ -88,8 +88,146 @@ def translate_entry_to_r(entry: Dict[str, Any], worksheet: Worksheet) -> Tuple[s
     b_body: List[str] = []
     t_body: List[str] = []
 
+    if analysis in ("random_forest", "treenet_gbm", "mars_regression", "discover_best_model"):
+        r_idx = params.get("response_index", 0)
+        p_idxs = params.get("predictor_indices") or [1]
+        y_col = worksheet.columns[r_idx].name if 0 <= r_idx < len(worksheet.columns) else worksheet.columns[0].name
+        x_cols = [worksheet.columns[i].name for i in p_idxs if 0 <= i < len(worksheet.columns)] or [worksheet.columns[-1].name]
+        rhs = " + ".join(f"`{c}`" for c in x_cols)
+        if analysis == "random_forest":
+            pkg = "randomForest"
+            call_lines = [
+                f"fit <- randomForest(`{y_col}` ~ {rhs}, data = df_ml, ntree = {params.get('n_trees', 80)}, importance = TRUE)",
+                "print(fit)",
+                "varImpPlot(fit, main = 'Random Forest Variable Importance')",
+            ]
+        elif analysis == "treenet_gbm":
+            pkg = "gbm"
+            call_lines = [
+                f"fit <- gbm(`{y_col}` ~ {rhs}, data = df_ml, n.trees = {params.get('n_trees', 100)}, shrinkage = {params.get('learning_rate', 0.08)}, interaction.depth = {params.get('max_depth', 3)}, bag.fraction = {params.get('subsample', 0.8)})",
+                "summary(fit)",
+            ]
+        elif analysis == "mars_regression":
+            pkg = "earth"
+            call_lines = [
+                f"fit <- earth(`{y_col}` ~ {rhs}, data = df_ml, degree = {params.get('max_degree', 2)}, nk = {params.get('max_terms', 16)})",
+                "print(summary(fit))",
+            ]
+        else:
+            pkg = "caret"
+            call_lines = [
+                f"# AutoML Benchmark Comparison for `{y_col}`",
+                f"summary(lm(`{y_col}` ~ {rhs}, data = df_ml))",
+            ]
+        b_body = [
+            f"if (!requireNamespace('{pkg}', quietly = TRUE)) install.packages('{pkg}')",
+            f"library({pkg})",
+            f"df_ml <- na.omit(df[, c({_escape_str(y_col)}, {', '.join(_escape_str(c) for c in x_cols)}), drop = FALSE])",
+            *call_lines,
+        ]
+        t_body = list(b_body) + [
+            f"# Visualize top relationship",
+            f"ggplot(df_ml, aes(x = .data[[{_escape_str(x_cols[0])}]], y = .data[[{_escape_str(y_col)}]])) + geom_point(alpha = 0.7, color = '#2563eb') + geom_smooth(se = FALSE, color = '#dc2626') + labs(title = {repr(title)}) + theme_minimal()",
+        ]
+
+    elif analysis in ("mixed_reml", "cox_ph_regression", "negative_binomial_regression"):
+        if analysis == "mixed_reml":
+            r_col = worksheet.columns[params.get("response_index", 0)].name
+            f_names = [worksheet.columns[i].name for i in (params.get("fixed_indices") or []) if 0 <= i < len(worksheet.columns)]
+            rnd_names = [worksheet.columns[i].name for i in (params.get("random_indices") or []) if 0 <= i < len(worksheet.columns)]
+            fixed_part = " + ".join(f"`{c}`" for c in f_names) if f_names else "1"
+            rnd_part = " + ".join(f"(1 | `{c}`)" for c in rnd_names) if rnd_names else "(1 | 1)"
+            b_body = [
+                "if (!requireNamespace('lme4', quietly = TRUE)) install.packages('lme4')",
+                "library(lme4)",
+                f"fit_reml <- lmer(`{r_col}` ~ {fixed_part} + {rnd_part}, data = df, REML = TRUE)",
+                "print(summary(fit_reml))",
+                "print(VarCorr(fit_reml))",
+            ]
+        elif analysis == "cox_ph_regression":
+            t_col = worksheet.columns[params.get("time_index", 0)].name
+            e_col = worksheet.columns[params.get("event_index", 1)].name
+            c_names = [worksheet.columns[i].name for i in (params.get("covariate_indices") or [2]) if 0 <= i < len(worksheet.columns)]
+            rhs = " + ".join(f"`{c}`" for c in c_names)
+            b_body = [
+                "if (!requireNamespace('survival', quietly = TRUE)) install.packages('survival')",
+                "library(survival)",
+                f"fit_cox <- coxph(Surv(`{t_col}`, `{e_col}` == {params.get('event_value', 1)}) ~ {rhs}, data = df)",
+                "print(summary(fit_cox))",
+                "plot(survfit(fit_cox), col = '#2563eb', main = 'Cox Proportional Hazards Survival Curve')",
+            ]
+        else:
+            r_col = worksheet.columns[params.get("response_index", 0)].name
+            p_names = [worksheet.columns[i].name for i in (params.get("predictor_indices") or [1]) if 0 <= i < len(worksheet.columns)]
+            rhs = " + ".join(f"`{c}`" for c in p_names)
+            b_body = [
+                "if (!requireNamespace('MASS', quietly = TRUE)) install.packages('MASS')",
+                f"fit_nb <- MASS::glm.nb(`{r_col}` ~ {rhs}, data = df)",
+                "print(summary(fit_nb))",
+            ]
+        t_body = list(b_body)
+
+    elif analysis in ("bootstrap_1sample", "bootstrap_2sample"):
+        c1 = worksheet.columns[params.get("index", params.get("index1", 0))].name
+        b_body = [
+            "if (!requireNamespace('boot', quietly = TRUE)) install.packages('boot')",
+            "library(boot)",
+            f"x <- na.omit(df[[{_escape_str(c1)}]])",
+            f"b_out <- boot(x, function(d, i) mean(d[i]), R = {params.get('resamples', params.get('n_resamples', 2000))})",
+            "print(b_out)",
+            f"print(boot.ci(b_out, conf = {params.get('confidence', 0.95)}, type = c('perc', 'bca')))",
+            "hist(b_out$t, col = '#93c5fd', border = 'white', main = 'Bootstrap Distribution')",
+        ]
+        t_body = list(b_body)
+
+    elif analysis in ("balanced_anova", "fully_nested_anova", "oneway_manova"):
+        if analysis == "oneway_manova":
+            r_cols = [worksheet.columns[i].name for i in (params.get("response_indices") or [0, 1]) if 0 <= i < len(worksheet.columns)]
+            f_col = worksheet.columns[params.get("factor_index", 2)].name
+            lhs = ", ".join(f"`{c}`" for c in r_cols)
+            b_body = [
+                f"fit_man <- manova(cbind({lhs}) ~ factor(`{f_col}`), data = df)",
+                "print(summary(fit_man, test = 'Wilks'))",
+                "print(summary(fit_man, test = 'Pillai'))",
+            ]
+        else:
+            r_col = worksheet.columns[params.get("response_index", 0)].name
+            f_cols = [worksheet.columns[i].name for i in (params.get("factor_indices") or [1]) if 0 <= i < len(worksheet.columns)]
+            rhs = " / ".join(f"factor(`{c}`)" for c in f_cols) if analysis == "fully_nested_anova" else " * ".join(f"factor(`{c}`)" for c in f_cols)
+            b_body = [
+                f"fit_aov <- aov(`{r_col}` ~ {rhs}, data = df)",
+                "print(summary(fit_aov))",
+            ]
+        t_body = list(b_body)
+
+    elif analysis == "monte_carlo_simulation":
+        inps = result.get("inputs") or []
+        sim_n = int(result.get("n_sims", 10000))
+        b_body = [f"set.seed({params.get('seed', 42)})", f"N <- {sim_n}"]
+        for inp in inps:
+            nm = inp["name"]
+            dist = inp["distribution"].lower()
+            ps = ", ".join(str(x) for x in inp["params"])
+            fn_map = {"normal": "rnorm", "uniform": "runif", "lognormal": "rlnorm", "exponential": "rexp", "weibull": "rweibull"}
+            if dist in fn_map:
+                if dist == "exponential":
+                    b_body.append(f"{nm} <- rexp(N, rate = 1 / ({inp['params'][0]}))")
+                elif dist == "weibull":
+                    b_body.append(f"{nm} <- rweibull(N, shape = {inp['params'][0]}, scale = {inp['params'][1]})")
+                else:
+                    b_body.append(f"{nm} <- {fn_map[dist]}(N, {ps})")
+            else:
+                b_body.append(f"{nm} <- runif(N, {inp['params'][0]}, {inp['params'][-1]})")
+        eq = str(result.get("formula", "X1")).strip()
+        b_body += [
+            f"Y <- {eq}",
+            "cat('Mean:', mean(Y), 'SD:', sd(Y), '\n')",
+            "hist(Y, breaks = 30, col = '#3b82f6', border = 'white', main = 'Monte Carlo Simulation Output')",
+        ]
+        t_body = list(b_body)
+
     # 1. ORTHOGONAL REGRESSION (DEMING)
-    if analysis == "orthogonal_regression" or action == "orthogonal_regression":
+    elif analysis == "orthogonal_regression" or action == "orthogonal_regression":
         y_name = result.get("response_name") or (worksheet.columns[params["response_index"]].name if "response_index" in params else "Y")
         x_name = result.get("predictor_name") or (worksheet.columns[params["predictor_index"]].name if "predictor_index" in params else "X")
         delta = float(params.get("error_variance_ratio", result.get("error_variance_ratio", 1.0)))

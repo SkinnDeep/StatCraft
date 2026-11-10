@@ -402,6 +402,122 @@ def execute_command_block(presenter, main_cmd: str, subcommands: List[str] | Tup
             "plot_path": res.get("plot_path"),
         })
 
+    def _split_eq(expr_str: str) -> Tuple[List[int], List[int]]:
+        if "=" in expr_str:
+            lhs_s, rhs_s = expr_str.split("=", 1)
+            return (
+                resolve_variables(lhs_s, presenter.worksheet, ("number", "text")),
+                resolve_variables(rhs_s, presenter.worksheet, ("number", "text")),
+            )
+        cols_all = resolve_variables(expr_str, presenter.worksheet, ("number", "text"))
+        if len(cols_all) < 2:
+            raise ValueError("Provide response and predictor columns (e.g., CMD C1 = C2 C3).")
+        return [cols_all[0]], cols_all[1:]
+
+    if verb == "BOOTSTRAP":
+        cols = resolve_variables(rest, presenter.worksheet, ("number",))
+        opts = {k.upper(): v for k, v in (sub.split(None, 1) for sub in subcommands if sub.strip() and " " in sub.strip())}
+        n_res = int(opts.get("RESAMPLES", 1000))
+        stat = opts.get("STATISTIC", "Mean" if len(cols) == 1 else "Mean Difference")
+        if len(cols) == 1:
+            return presenter.bootstrap_1sample(cols[0], statistic=stat, n_resamples=n_res)
+        if len(cols) == 2:
+            return presenter.bootstrap_2sample(cols[0], cols[1], statistic=stat, n_resamples=n_res)
+        raise ValueError("Syntax: BOOTSTRAP C1 [C2]")
+
+    if verb == "RANDTEST":
+        cols = resolve_variables(rest, presenter.worksheet, ("number",))
+        if len(cols) == 1:
+            return presenter.randomization_1sample(cols[0], n_resamples=1000)
+        if len(cols) == 2:
+            return presenter.randomization_2sample(cols[0], cols[1], n_resamples=1000)
+        raise ValueError("Syntax: RANDTEST C1 [C2]")
+
+    if verb == "PGOF":
+        cols = resolve_variables(rest, presenter.worksheet, ("number",))
+        return presenter.goodness_of_fit_poisson(cols[0])
+
+    if verb == "NBREG":
+        lhs, rhs = _split_eq(rest)
+        return presenter.negative_binomial_regression(lhs[0], rhs)
+
+    if verb == "BANOVA":
+        lhs, rhs = _split_eq(rest)
+        return presenter.balanced_anova(lhs[0], rhs)
+
+    if verb == "NESTED":
+        lhs, rhs = _split_eq(rest)
+        return presenter.fully_nested_anova(lhs[0], rhs)
+
+    if verb == "MANOVA":
+        lhs, rhs = _split_eq(rest)
+        return presenter.oneway_manova(lhs, rhs[0])
+
+    if verb in ("REML", "MIXED"):
+        lhs, rhs = _split_eq(rest)
+        rnd_cols = []
+        for sub in subcommands:
+            if sub.strip().upper().startswith("RANDOM "):
+                rnd_cols.extend(resolve_variables(sub.strip()[7:], presenter.worksheet, ("number", "text")))
+        fixed_cols = [c for c in rhs if c not in rnd_cols]
+        if not rnd_cols:
+            rnd_cols = [rhs[-1]]
+            fixed_cols = rhs[:-1]
+        return presenter.fit_mixed_reml(lhs[0], fixed_indices=fixed_cols, random_indices=rnd_cols)
+
+    if verb == "COXPH":
+        lhs, rhs = _split_eq(rest)
+        if len(lhs) != 2:
+            raise ValueError("Syntax: COXPH Time Event = Covariates")
+        return presenter.cox_ph_regression(lhs[0], lhs[1], rhs)
+
+    if verb == "SIXSIGMA":
+        cols = resolve_variables(rest, presenter.worksheet, ("number",))
+        lsl, usl, sub_sz = None, None, 1
+        for sub in subcommands:
+            toks = sub.strip().split()
+            if len(toks) >= 2 and toks[0].upper() == "LSL":
+                lsl = float(toks[1])
+            elif len(toks) >= 2 and toks[0].upper() == "USL":
+                usl = float(toks[1])
+            elif len(toks) >= 2 and toks[0].upper() == "SUBGROUP":
+                sub_sz = int(float(toks[1]))
+        return presenter.six_sigma_process_report(cols[0], lsl=lsl, usl=usl, subgroup_size=sub_sz)
+
+    if verb == "RANDOMFOREST":
+        lhs, rhs = _split_eq(rest)
+        return presenter.random_forest(lhs[0], rhs)
+
+    if verb == "TREENET":
+        lhs, rhs = _split_eq(rest)
+        return presenter.treenet_gbm(lhs[0], rhs)
+
+    if verb == "MARS":
+        lhs, rhs = _split_eq(rest)
+        return presenter.mars_regression(lhs[0], rhs)
+
+    if verb == "BESTMODEL":
+        lhs, rhs = _split_eq(rest)
+        return presenter.discover_best_model(lhs[0], rhs)
+
+    if verb == "MONTECARLO":
+        inputs_s = rest or "X1: Normal(10, 0.5)"
+        formula_s = "X1"
+        lsl, usl, n_sims = None, None, 5000
+        for sub in subcommands:
+            s_up = sub.strip().upper()
+            if s_up.startswith("FORMULA "):
+                formula_s = sub.strip()[8:].strip().strip('"').strip("'")
+            elif s_up.startswith("INPUTS "):
+                inputs_s = sub.strip()[7:].strip().strip('"').strip("'")
+            elif s_up.startswith("LSL "):
+                lsl = float(sub.strip().split()[1])
+            elif s_up.startswith("USL "):
+                usl = float(sub.strip().split()[1])
+            elif s_up.startswith("SIMS "):
+                n_sims = int(float(sub.strip().split()[1]))
+        return presenter.monte_carlo_simulation(inputs_s, formula_s, lsl=lsl, usl=usl, n_sims=n_sims)
+
     raise ValueError(f"Unsupported session command '{verb}'.")
 
 
