@@ -6557,25 +6557,59 @@ class Presenter:
         self.dirty = True
 
     @undoable
+    @undoable
+    def duplicate_column(self, col_index):
+        if not 0 <= col_index < len(self.worksheet.columns):
+            raise ValueError("Select a valid column to duplicate.")
+        col = self.worksheet.columns[col_index]
+        new_name = f"{col.name} (Copy)"
+        existing_names = {c.name for c in self.worksheet.columns}
+        count = 1
+        while new_name in existing_names:
+            count += 1
+            new_name = f"{col.name} (Copy {count})"
+        new_col = Column(new_name, col.kind, list(col.values), metadata=copy.deepcopy(col.metadata))
+        insert_pos = col_index + 1
+        self.worksheet.columns.insert(insert_pos, new_col)
+        self.dirty = True
+        return insert_pos
+
+    @undoable
     def sort_columns(self, target_indices, by_index, descending=False):
         if not target_indices or any(not 0 <= i < len(self.worksheet.columns) for i in target_indices):
             raise ValueError("Select at least one column to sort.")
-        if not 0 <= by_index < len(self.worksheet.columns):
+        by_indices = [by_index] if isinstance(by_index, int) else list(by_index)
+        if not by_indices or any(not 0 <= i < len(self.worksheet.columns) for i in by_indices):
             raise ValueError("Select a valid column to sort by.")
         if self.native_project is not None and not getattr(self.native_project, "statcraft_owned", False):
             raise ValueError("Sorting in imported native projects is supported via Save Copy on StatCraft-owned workbooks.")
-        by_col = self.worksheet.columns[by_index]
-        rows = max([len(by_col.values)] + [len(self.worksheet.columns[i].values) for i in target_indices])
+        by_cols = [self.worksheet.columns[i] for i in by_indices]
+        rows = max([len(c.values) for c in by_cols] + [len(self.worksheet.columns[i].values) for i in target_indices])
         if rows == 0:
             raise ValueError("Selected columns contain no observations to sort.")
+
+        def sort_key_for_row(r):
+            key_parts = []
+            has_missing = False
+            for col in by_cols:
+                val = col.values[r] if r < len(col.values) else None
+                if val is None or (col.kind == "text" and val == ""):
+                    has_missing = True
+                    key_parts.append((1, ""))
+                else:
+                    k = str(val).casefold() if col.kind == "text" else float(val)
+                    key_parts.append((0, k))
+            return (1 if has_missing else 0, tuple(key_parts), r)
+
         present, missing = [], []
         for r in range(rows):
-            val = by_col.values[r] if r < len(by_col.values) else None
-            if val is None or (by_col.kind == "text" and val == ""):
+            k = sort_key_for_row(r)
+            if k[0] == 1:
                 missing.append(r)
             else:
-                present.append((val, r))
-        present.sort(key=lambda item: (str(item[0]).casefold() if by_col.kind == "text" else float(item[0]), item[1]), reverse=bool(descending))
+                present.append((k, r))
+
+        present.sort(key=lambda item: item[0], reverse=bool(descending))
         order = [r for _, r in present] + missing
         for idx in set(target_indices):
             col = self.worksheet.columns[idx]
@@ -6585,9 +6619,10 @@ class Presenter:
             from .connect import permute_row_identities
             permute_row_identities(self.worksheet, order)
         self.dirty = True
-        return self._record("Sort — by " + by_col.name, {
+        by_names = ", ".join(c.name for c in by_cols)
+        return self._record("Sort — by " + by_names, {
             "sorted_columns": [self.worksheet.columns[i].name for i in target_indices],
-            "by_variable": by_col.name,
+            "by_variable": by_names,
             "order": "Descending" if descending else "Ascending",
             "rows_sorted": rows,
         })

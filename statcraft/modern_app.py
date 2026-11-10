@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
     QLabel, QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QComboBox, QToolBar, QStyle,
-    QTabWidget, QScrollArea, QPlainTextEdit, QDialog, QDialogButtonBox,
+    QTabWidget, QScrollArea, QPlainTextEdit, QTextEdit, QDialog, QDialogButtonBox,
     QFormLayout, QLineEdit, QListWidget, QListWidgetItem, QPushButton,
     QMessageBox, QFileDialog, QInputDialog, QCheckBox, QTabBar, QMenu,
     QToolButton, QSlider, QRadioButton, QGroupBox, QGridLayout, QFrame,QTableWidgetSelectionRange,
@@ -1146,6 +1146,7 @@ class ModernWindow(QMainWindow):
         self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
         self._action(file, "Save Project As…", lambda: self.save_document(True), QKeySequence.StandardKey.SaveAs, "save_copy")
         self._action(file, "Save Current Worksheet As…", self.export_data, None, "export")
+        self._action(file, "Export All Graphs in Project…", self.export_all_graphs_dialog, None, "export")
         self._action(file, "Export Output to Modern &Tidyverse / ggplot2 (.R)…", self.export_active_r_file, None, "save")
         self._action(file, "Export Output to Pure &Base R Script (.R)…", self.export_active_base_r_file, None, "save")
         self._action(file, "Export Worksheet with &vroom / readxl (.R)…", self.export_worksheet_vroom, None, "save")
@@ -1184,6 +1185,7 @@ class ModernWindow(QMainWindow):
         self.paste_action = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
         edit.addSeparator()
         self._action(edit, "Select All Cells in Worksheet", self.select_all_dataset, QKeySequence.StandardKey.SelectAll)
+        self._action(edit, "Clear Session Output", self.clear_session_output, None, "clear")
         self.last_dialog_action = self._action(edit, "Edit Last Dialog", self.edit_last_dialog, QKeySequence("Ctrl+E"), "last_dialog")
         edit.addSeparator()
         self.find_action = self._action(edit, "Find…", self.find_dialog, QKeySequence.StandardKey.Find, "find", True)
@@ -1208,6 +1210,7 @@ class ModernWindow(QMainWindow):
         self._action(data, "Delete Rows…", self.delete_rows_dialog, None, "delete", True)
         self._action(data, "Erase Variables…", self.erase_variables_dialog, None, "erase", True)
         data.addSeparator()
+        self._action(data, "Duplicate Column…", self.duplicate_column_action, None, "copy", True)
         self._action(data, "Rename Column…", self.rename_column, None, "rename_sheet", True)
         self._action(data, "Change Data Type…", self.change_type, None, "format_column", True)
         recode_menu = data.addMenu("Recode")
@@ -1598,6 +1601,8 @@ class ModernWindow(QMainWindow):
         view.addSeparator()
         view.addSeparator()
         self._action(view,"Show ReportPad",lambda:self._workspace.show_pad())
+        self._action(view, "Next Output Tab", self.next_output_tab, QKeySequence("Ctrl+Tab"))
+        self._action(view, "Previous Output Tab", self.prev_output_tab, QKeySequence("Ctrl+Shift+Tab"))
         self._action(view,"Reopen Closed Output Tab",lambda:self._workspace.reopen())
         self._action(view,"Close Other Output Tabs",lambda:self._workspace.close_all(self._workspace.state['active']))
         self._action(view,"Close All Output Tabs",lambda:self._workspace.close_all())
@@ -2163,6 +2168,22 @@ class ModernWindow(QMainWindow):
         self.table.setHorizontalHeaderLabels(headers)
         self._displayed_date_columns = {i for i, c in enumerate(sheet.columns) if c.kind == 'date'}
         self.column_names.setHorizontalHeaderLabels(headers)
+        for i, column in enumerate(sheet.columns):
+            address = "C" + str(i + 1)
+            tip_parts = [f"Column {address}: {column.name} ({column.kind})"]
+            if column.metadata.get("formula"):
+                tip_parts.append(f"Formula: {column.metadata['formula']}")
+            if column.metadata.get("description"):
+                tip_parts.append(f"Description: {column.metadata['description']}")
+            elif column.metadata.get("comment"):
+                tip_parts.append(f"Comment: {column.metadata['comment']}")
+            full_header_tip = "\n".join(tip_parts)
+            h_item = self.table.horizontalHeaderItem(i)
+            if h_item:
+                h_item.setToolTip(full_header_tip)
+            cn_item = self.column_names.horizontalHeaderItem(i)
+            if cn_item:
+                cn_item.setToolTip(full_header_tip)
         formula_cols = {i for i, c in enumerate(sheet.columns) if c.metadata.get('formula')}
         if hasattr(self.table.horizontalHeader(), 'formula_columns'):
             self.table.horizontalHeader().formula_columns = formula_cols
@@ -2586,8 +2607,9 @@ class ModernWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction(self.new_sheet_action)
         menu.addSeparator()
-        menu.addAction(self.delete_sheet_action)
+        menu.addAction(self.duplicate_sheet_action)
         menu.addAction(self.rename_sheet_action)
+        menu.addAction(self.delete_sheet_action)
         menu.addAction(self.duplicate_sheet_action)
         menu.addSeparator()
         desc_act = menu.addAction("Worksheet Description…")
@@ -2915,6 +2937,24 @@ class ModernWindow(QMainWindow):
         dialog.exec()
 
     def find_dialog(self):
+        focus_w = QApplication.focusWidget()
+        target_text_edit = None
+        if isinstance(focus_w, (QTextEdit, QPlainTextEdit)):
+            target_text_edit = focus_w
+        elif hasattr(self, "result_tabs") and (
+            self.result_tabs.hasFocus()
+            or (focus_w is not None and self.result_tabs.isAncestorOf(focus_w))
+            or (not (focus_w is not None and (self.table.hasFocus() or self.table.isAncestorOf(focus_w))) and isinstance(self.result_tabs.currentWidget(), (QTextEdit, QPlainTextEdit)))
+        ):
+            curr = self.result_tabs.currentWidget()
+            if isinstance(curr, (QTextEdit, QPlainTextEdit)):
+                target_text_edit = curr
+            elif hasattr(curr, "findChild"):
+                target_text_edit = curr.findChild(QTextEdit) or curr.findChild(QPlainTextEdit)
+        if target_text_edit is not None:
+            self._find_in_text_dialog(target_text_edit)
+            return
+
         self._commit_editor()
         dialog = QDialog(self); dialog.setWindowTitle("Find"); dialog.setMinimumWidth(420)
         layout = QVBoxLayout(dialog)
@@ -3345,6 +3385,107 @@ class ModernWindow(QMainWindow):
         if accepted and count > 0:
             self._call(lambda: self.presenter.autofill_column(cur_c, first_r, sample_len, count))
             self.statusBar().showMessage(f"Generated {count} values in C{cur_c + 1}", 4000)
+
+    def duplicate_column_action(self, col=None):
+        self._commit_editor()
+        c = self._current_column() if col is None else col
+        if 0 <= c < len(self.presenter.worksheet.columns):
+            new_idx = self._call(lambda: self.presenter.duplicate_column(c))
+            self.refresh()
+            if new_idx is not None:
+                self.table.setCurrentCell(0, new_idx)
+                self.statusBar().showMessage(f"Duplicated column C{c+1} -> C{new_idx+1}", 4000)
+
+    def next_output_tab(self):
+        count = self.result_tabs.count()
+        if count > 1:
+            self.result_tabs.setCurrentIndex((self.result_tabs.currentIndex() + 1) % count)
+
+    def prev_output_tab(self):
+        count = self.result_tabs.count()
+        if count > 1:
+            self.result_tabs.setCurrentIndex((self.result_tabs.currentIndex() - 1) % count)
+
+    def clear_session_output(self):
+        if not self.presenter.history:
+            self.statusBar().showMessage("Session output is already clear.", 3000)
+            return
+        choice = QMessageBox.question(self, "Clear Session Output", "Clear all output from the session?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if choice == QMessageBox.StandardButton.Yes:
+            self.presenter.history.clear()
+            self.selected_entry = None
+            self.refresh()
+            self._show_welcome()
+            self.statusBar().showMessage("Cleared all session output", 4000)
+
+    def export_all_graphs_dialog(self):
+        from .modern_charts import supported
+        graphs = [e for e in self.presenter.history if supported(e)]
+        if not graphs:
+            QMessageBox.information(self, "Export All Graphs", "No graphs have been generated in this session yet.")
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Select Directory to Export Graphs")
+        if not folder:
+            return
+        from pathlib import Path
+        import re
+        saved_count = 0
+        dest_dir = Path(folder)
+        for i, entry in enumerate(graphs):
+            title = entry.get("title", f"Graph_{i+1}")
+            clean_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', title).strip(' .')[:60]
+            filename = dest_dir / f"{i+1:02d}_{clean_title}.png"
+            self.show_result(entry)
+            frame = getattr(self, "_active_graph_frame", None)
+            if frame is not None:
+                pix = frame.capture()
+                if not pix.isNull():
+                    pix.save(str(filename), "PNG")
+                    saved_count += 1
+        self.statusBar().showMessage(f"Successfully exported {saved_count} graph(s) to {folder}", 6000)
+
+    def _find_in_text_dialog(self, text_edit):
+        dialog = QDialog(self); dialog.setWindowTitle("Find in Output"); dialog.setMinimumWidth(380)
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        query_edit = QLineEdit(getattr(self, "_output_find_query", ""))
+        form.addRow("Find what:", query_edit)
+        layout.addLayout(form)
+        match_case = QCheckBox("Match case")
+        layout.addWidget(match_case)
+        status_lbl = QLabel("")
+        layout.addWidget(status_lbl)
+        btn_row = QHBoxLayout(); btn_row.addStretch()
+        find_btn = QPushButton("Find Next"); find_btn.setDefault(True)
+        close_btn = QPushButton("Cancel")
+        btn_row.addWidget(find_btn); btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        def do_find():
+            query = query_edit.text()
+            if not query:
+                return
+            self._output_find_query = query
+            from PySide6.QtGui import QTextDocument
+            flags = QTextDocument.FindFlag(0)
+            if match_case.isChecked():
+                flags |= QTextDocument.FindFlag.FindCaseSensitively
+            found = text_edit.find(query, flags)
+            if not found:
+                cursor = text_edit.textCursor()
+                cursor.movePosition(cursor.MoveOperation.Start)
+                text_edit.setTextCursor(cursor)
+                found = text_edit.find(query, flags)
+                if not found:
+                    status_lbl.setText("Text not found in output.")
+                else:
+                    status_lbl.setText("Wrapped to beginning of output.")
+            else:
+                status_lbl.setText("")
+
+        find_btn.clicked.connect(do_find)
+        close_btn.clicked.connect(dialog.reject)
+        dialog.exec()
 
     def rename_column(self):
         index = self._current_column(); old = self.presenter.worksheet.columns[index].name
@@ -6301,6 +6442,7 @@ class ModernWindow(QMainWindow):
         menu.addAction(f"Sort Ascending ({col_label} / Smallest to Largest)", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, False), result=True))
         menu.addAction(f"Sort Descending ({col_label} / Largest to Smallest)", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, True), result=True))
         menu.addAction("Custom Sort...", self.sort_dialog)
+        menu.addAction("Duplicate Column", lambda: self.duplicate_column_action(cur_col))
         menu.addAction("Autofill / Extend Series...", self.autofill_dialog)
         cur_val = None
         if cur_col < len(self.presenter.worksheet.columns) and cur_row < len(self.presenter.worksheet.columns[cur_col].values):
@@ -6317,8 +6459,14 @@ class ModernWindow(QMainWindow):
         cell_sub.addAction("Comment...", self.cell_comment_dialog)
         cell_sub.addSeparator()
         first_r, last_r, left_c, right_c = self._range()
-        sel_r_range = list(range(first_r, last_r + 1))
-        sel_c_range = list(range(left_c, right_c + 1))
+        selected_cols = list(self._selected_columns) if getattr(self, "_selected_columns", None) else []
+        if selected_cols:
+            full_r_range = list(range(self.presenter.worksheet.row_count))
+            sel_r_range = full_r_range if full_r_range else list(range(first_r, last_r + 1))
+            sel_c_range = selected_cols
+        else:
+            sel_r_range = list(range(first_r, last_r + 1))
+            sel_c_range = list(range(left_c, right_c + 1))
         cell_sub.addAction("Highlight Red", lambda: self._call(lambda: self.presenter.set_cell_highlight(sel_r_range, sel_c_range, "#f8d7da")))
         cell_sub.addAction("Highlight Green", lambda: self._call(lambda: self.presenter.set_cell_highlight(sel_r_range, sel_c_range, "#d4edda")))
         cell_sub.addAction("Highlight Yellow", lambda: self._call(lambda: self.presenter.set_cell_highlight(sel_r_range, sel_c_range, "#fff3cd")))
@@ -8024,12 +8172,20 @@ class ModernWindow(QMainWindow):
         target = entry or self.selected_entry
         if target is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Graph As", target.get("title", "Graph") + ".png", "PNG Image (*.png);;Text Report (*.txt)")
+        path, sel_filter = QFileDialog.getSaveFileName(self, "Save Graph As", target.get("title", "Graph") + ".png", "PNG Image (*.png);;Scalable Vector Graphic (*.svg);;Text Report (*.txt)")
         if not path:
             return
         if target is not self.selected_entry:self.show_result(target)
         self.graph_options_pane.flush()
         chart = getattr(self, "_active_graph_frame", None)
+        if Path(path).suffix.lower() == ".svg" or "svg" in sel_filter.lower():
+            if not str(path).lower().endswith(".svg"):
+                path = str(path) + ".svg"
+            if self.copy_active_chart_svg():
+                svg_data = QApplication.clipboard().text()
+                Path(path).write_text(svg_data, encoding="utf-8")
+                self.statusBar().showMessage("Saved vector SVG to " + str(path), 6000)
+                return
         if Path(path).suffix.lower() == ".png" and chart is not None:
             chart.capture().save(path, "PNG")
         else:
