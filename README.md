@@ -70,6 +70,23 @@ StatCraft delivers identical statistical reporting and diagnostic rigor to Minit
 
 ---
 
+## 🚀 Unique Innovations (Beyond Traditional Minitab)
+
+StatCraft breaks free from the rigid, static 1990s desktop paradigm with modern, workflow-accelerating features unavailable in traditional commercial packages:
+
+1. **Interactive "What-If" Spec & Tolerance Sliders**: Non-destructive, live simulation on Capability and Distribution outputs. Tweak LSL, USL, or target tolerances on the fly with instant recalculation of $C_p$, $C_{pk}$, and expected PPM directly on dynamic vector curves without touching worksheet data.
+2. **Automated "Plain English" Executive Summary**: Instant, audit-ready 3-sentence executive briefings for non-statistical managers and PowerPoint slides, translating $p$-values, effect sizes, and $R^2$ into clear, actionable prose.
+3. **One-Click "Clean for Audit" Dataset Anonymizer**: Sanitize confidential medical device, aerospace, and pharmaceutical datasets for external consultants and auditors by hashing IDs into consistent pseudonyms while mathematically preserving exact distributions, correlations, and ANOVA results.
+4. **Interactive Cross-Highlighting ("Brush & Link")**: Lasso or select outlier points on any scatterplot, control chart, or residual plot to instantly cross-highlight corresponding rows in the Data Table and open diagnostic charts in real time.
+5. **Side-by-Side Model & Run Comparator**: Compare two statistical runs (e.g. Before vs. After Kaizen, or Stepwise vs. Full Model) with side-by-side delta tables ($\Delta R^2$, $\Delta C_{pk}$, $\Delta \text{PPM}$) and overlaid dual-curve visuals.
+6. **Pre-Flight Data Doctor (Automated Sanity Audit)**: 5ms columnar audit that catches invisible whitespace in factor levels, zero-variance columns, extreme sentinel missing codes (e.g., -999), and near-collinear predictors before they cause cryptic crashes.
+7. **Copy as Scalable Vector Graphics (SVG) & Clean Single-File HTML**: Direct-to-clipboard lossless vector export for crystal-clear pasting into Word, LaTeX, or Figma, plus single-file zero-dependency interactive HTML session reports.
+8. **Smart "Next Best Step" Guidance Chips**: Context-aware workflow recommendations (e.g., automatically suggesting a Johnson Transformation when normality fails, or Tukey HSD when ANOVA is significant) with 1-click dialog pre-population.
+9. **Live Formula Column Preview**: An intuitive formula bar (`= C1 * 1.05`, `= log(Yield)`) with instant 5-row calculated previews before committing changes.
+10. **100% Air-Gapped Zero-Install Portability**: Runs standalone with zero telemetry, zero licensing daemons, and zero network pings—fully compliant with classified defense networks, cleanrooms, and air-gapped industrial SCADA environments.
+
+---
+
 ## Capabilities & Features
 
 ### 1. Basic Statistics & Distribution Analysis
