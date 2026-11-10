@@ -66,12 +66,21 @@ def unstack_columns(sheet, indices, group_index, name='Unstacked', include_missi
 
 def transpose(sheet, indices, name='Transposed'):
     columns=_columns(sheet,indices)
-    if len({c.kind for c in columns})!=1:raise ValueError('Transpose columns of the same data type.')
-    rows=max(len(c.values) for c in columns)
+    kinds = {c.kind for c in columns}
+    is_mixed = len(kinds) > 1
+    target_kind = 'text' if is_mixed else (list(kinds)[0] if kinds else 'text')
+    rows=max(len(c.values) for c in columns) if columns else 0
     if not rows:raise ValueError('Choose columns containing data.')
     _bound(len(columns),rows+1)
     output=[Column('Source','text',[c.name for c in columns])]
-    output.extend(Column('Row '+str(r+1),columns[0].kind,[c.values[r] if r<len(c.values) else None for c in columns]) for r in range(rows))
+    for r in range(rows):
+        row_vals = []
+        for c in columns:
+            val = c.values[r] if r < len(c.values) else None
+            if is_mixed and val is not None:
+                val = str(val)
+            row_vals.append(val)
+        output.append(Column('Row ' + str(r + 1), target_kind, row_vals))
     return _sheet(name,output)
 
 

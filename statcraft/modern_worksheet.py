@@ -141,6 +141,8 @@ class WorksheetDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         super().setEditorData(editor, index)
         if isinstance(editor, QLineEdit):
+            if not self.is_column_names and editor.text() == "*":
+                editor.setText("")
             self._initial_editor_text = editor.text()
 
     def eventFilter(self, editor, event):
@@ -274,6 +276,27 @@ class WorksheetTable(QTableWidget):
             if direction is not None:
                 self.navigate(direction)
                 return True
+
+            # Task 5 & 6: Backspace clears & edits; printable character type-over entry
+            if not (mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)):
+                if key == Qt.Key.Key_Backspace:
+                    item = self.currentItem()
+                    if item:
+                        self.editItem(item)
+                        editor = self.findChild(QLineEdit)
+                        if editor:
+                            editor.setText("")
+                        return True
+                if key not in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab, Qt.Key.Key_Backtab, Qt.Key.Key_Escape, Qt.Key.Key_Delete, Qt.Key.Key_Backspace, Qt.Key.Key_Space):
+                    text = event.text()
+                    if text and text.isprintable():
+                        item = self.currentItem()
+                        if item:
+                            self.editItem(item)
+                            editor = self.findChild(QLineEdit)
+                            if editor:
+                                editor.setText(text)
+                            return True
         return super().event(event)
 
     def wheelEvent(self, event):

@@ -883,6 +883,7 @@ class ModernWindow(QMainWindow):
         self.col_header_view = WorksheetHeaderView(Qt.Orientation.Horizontal, self.column_names)
         self.column_names.setHorizontalHeader(self.col_header_view)
         self.col_header_view.sectionClicked.connect(self._on_column_header_clicked)
+        self.col_header_view.sectionHandleDoubleClicked.connect(self.auto_fit_column_width)
         self.col_header_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.col_header_view.customContextMenuRequested.connect(self._on_column_header_context_menu)
         self.column_names.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -979,6 +980,7 @@ class ModernWindow(QMainWindow):
         self.worksheet_tab_strip.scrollStateChanged.connect(self._update_tab_navigation)
         self.worksheet_tabs.currentChanged.connect(self._select_sheet)
         self.worksheet_tabs.tabBarDoubleClicked.connect(self._rename_tab)
+        self.worksheet_tabs.tabMoved.connect(self._on_worksheet_tab_moved)
         self.worksheet_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.worksheet_tabs.customContextMenuRequested.connect(self._worksheet_menu)
         tab_row.addWidget(self.worksheet_tab_strip, 1)
@@ -1049,6 +1051,11 @@ class ModernWindow(QMainWindow):
         self.status_update_btn.setVisible(False)
         self.status_update_btn.clicked.connect(self.check_for_updates_dialog)
         sb.addPermanentWidget(self.status_update_btn)
+
+        self.status_selection_summary = QLabel("")
+        self.status_selection_summary.setObjectName("statusSelectionSummary")
+        self.status_selection_summary.setStyleSheet("color: #38bdf8; font-weight: 500; font-size: 8.5pt; padding: 0 8px;")
+        sb.addPermanentWidget(self.status_selection_summary)
 
         # Right-side permanent StatCraft controls: pane layout buttons, zoom controls, Command Line toggle
         self.view_mode_buttons = {}
@@ -1149,11 +1156,12 @@ class ModernWindow(QMainWindow):
         self.delete_action = self._action(edit, "Delete Cells", self.delete_selected_rows, None, "delete")
         self.cut_action = self._action(edit, "Cut Cells", self.cut_cells, QKeySequence.StandardKey.Cut, "cut")
         self.copy_action = self._action(edit, "Copy Cells", self.copy_cells, QKeySequence.StandardKey.Copy, "copy")
+        self.copy_with_headers_action = self._action(edit, "Copy with Column Names", self.copy_with_column_names, QKeySequence("Ctrl+Shift+C"), "copy")
         self._action(edit, "Copy &R Script for Active Output\tCtrl+Alt+R", self.copy_active_r_script, "Ctrl+Alt+R", "copy")
         self._action(edit, "Copy Chart as &SVG (Crisp Vector)\tCtrl+Alt+S", self.copy_active_chart_svg, "Ctrl+Alt+S", "copy")
         self.paste_action = self._action(edit, "Paste Cells", self.paste_cells, QKeySequence.StandardKey.Paste, "paste")
         edit.addSeparator()
-        self._action(edit, "Select All Cells in Worksheet", self.table.selectAll, QKeySequence.StandardKey.SelectAll)
+        self._action(edit, "Select All Cells in Worksheet", self.select_all_dataset, QKeySequence.StandardKey.SelectAll)
         self.last_dialog_action = self._action(edit, "Edit Last Dialog", self.edit_last_dialog, QKeySequence("Ctrl+E"), "last_dialog")
         edit.addSeparator()
         self.find_action = self._action(edit, "Find…", self.find_dialog, QKeySequence.StandardKey.Find, "find", True)
@@ -2532,6 +2540,19 @@ class ModernWindow(QMainWindow):
         if self._call(self.presenter.delete_worksheet) and clear:
             self._workspace.rebuild();self._show_welcome();self.result_title.setText('Select a result')
 
+    def _on_worksheet_tab_moved(self, from_idx, to_idx):
+        if hasattr(self.presenter, "reorder_worksheets"):
+            self.presenter.reorder_worksheets(from_idx, to_idx)
+        elif self.presenter.native_project is not None:
+            sheets = self.presenter.native_project.worksheets
+            if 0 <= from_idx < len(sheets) and 0 <= to_idx < len(sheets):
+                item = sheets.pop(from_idx)
+                sheets.insert(to_idx, item)
+                self.presenter.native_project.active_index = to_idx
+                self.presenter.worksheet = sheets[to_idx]
+                self.presenter.dirty = True
+        self.refresh()
+
     def _rename_tab(self, index):
         if index >= 0 and self.rename_sheet_action.isEnabled():
             self._select_sheet(index); self.rename_worksheet()
@@ -2615,6 +2636,37 @@ class ModernWindow(QMainWindow):
         self._commit_editor()
         self._call(lambda: QApplication.clipboard().setText(self.presenter.cut_block(*self._range())))
 
+    def select_all_dataset(self):
+        self._commit_editor()
+        num_cols = len(self.presenter.worksheet.columns)
+        self._selected_columns = set(range(num_cols))
+        self._selected_rows = set()
+        self.table.selectAll()
+        self._sync_selection_highlights()
+        self.statusBar().showMessage(f"Selected all {self.presenter.worksheet.row_count} rows across all {num_cols} columns", 3000)
+
+    def copy_with_column_names(self):
+        focused = QApplication.focusWidget()
+        if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not self.table.isAncestorOf(focused):
+            focused.copy()
+            return
+        self._commit_editor()
+        def copy():
+            if getattr(self, '_selected_columns', None) and len(self._selected_columns) == len(self.presenter.worksheet.columns):
+                first = 0
+                last = max(0, self.presenter.worksheet.row_count - 1)
+                left = 0
+                right = max(0, len(self.presenter.worksheet.columns) - 1)
+            else:
+                first, last, left, right = self._range()
+            raw_block = self.presenter.copy_block(first, last, left, right)
+            headers = [self.presenter.worksheet.columns[c].name for c in range(left, right + 1) if c < len(self.presenter.worksheet.columns)]
+            header_line = "\t".join(headers) + "\n"
+            full_text = header_line + raw_block
+            QApplication.clipboard().setText(full_text)
+            self.statusBar().showMessage("Copied data with column names to clipboard", 4000)
+        self._call(copy)
+
     def copy_cells(self):
         focused = QApplication.focusWidget()
         if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not self.table.isAncestorOf(focused): focused.copy(); return
@@ -2625,6 +2677,11 @@ class ModernWindow(QMainWindow):
                 QApplication.clipboard().setText("\t".join(self.column_names.item(0, c).text() for c in range(area.leftColumn(), area.rightColumn() + 1)))
             return
         self._commit_editor()
+        if getattr(self, '_selected_columns', None) and len(self._selected_columns) == len(self.presenter.worksheet.columns):
+            total_rows = self.presenter.worksheet.row_count
+            total_cols = len(self.presenter.worksheet.columns)
+            self._call(lambda: QApplication.clipboard().setText(self.presenter.copy_block(0, max(0, total_rows - 1), 0, max(0, total_cols - 1))))
+            return
         self._call(lambda: QApplication.clipboard().setText(self.presenter.copy_block(*self._range())))
 
     def paste_cells(self):
@@ -6031,6 +6088,36 @@ class ModernWindow(QMainWindow):
         extend = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
         self.select_worksheet_row(logical_index, extend=extend)
 
+    def _update_selection_summary(self):
+        if not hasattr(self, "status_selection_summary"):
+            return
+        ranges = self.table.selectedRanges()
+        if not ranges:
+            self.status_selection_summary.setText("")
+            return
+        vals = []
+        for area in ranges:
+            for r in range(area.topRow(), area.bottomRow() + 1):
+                for c in range(area.leftColumn(), area.rightColumn() + 1):
+                    item = self.table.item(r, c)
+                    if item and item.text() and item.text() != "*":
+                        try:
+                            vals.append(float(item.text().replace(",", "")))
+                        except ValueError:
+                            pass
+        if len(vals) >= 2:
+            s_sum = sum(vals)
+            s_mean = s_sum / len(vals)
+            s_min = min(vals)
+            s_max = max(vals)
+            self.status_selection_summary.setText(
+                f"Count: {len(vals)} | Sum: {s_sum:g} | Mean: {s_mean:g} | Min: {s_min:g} | Max: {s_max:g}"
+            )
+        elif len(vals) == 1:
+            self.status_selection_summary.setText(f"Count: 1 | Value: {vals[0]:g}")
+        else:
+            self.status_selection_summary.setText("")
+
     def _sync_selection_highlights(self):
         if self._refreshing:
             return
@@ -6072,6 +6159,7 @@ class ModernWindow(QMainWindow):
         self.row_header_view.viewport().update()
         self.column_names.viewport().update()
         self.table.viewport().update()
+        self._update_selection_summary()
 
     # --- Worksheet Right-Click Context Menu (`RT_MENU 9839`) ---
 
@@ -6112,6 +6200,7 @@ class ModernWindow(QMainWindow):
             del_act.triggered.connect(self.delete_selected_rows)
         copy_act = menu.addAction(tool_icon("copy"), "Copy Cells\tCtrl+C")
         copy_act.triggered.connect(self.copy_cells)
+        copy_hdr_act = menu.addAction("Copy with Column Names\tCtrl+Shift+C", self.copy_with_column_names)
         cut_act = menu.addAction(tool_icon("cut"), "Cut Cells\tCtrl+X")
         cut_act.triggered.connect(self.cut_cells)
         paste_act = menu.addAction(tool_icon("paste"), "Paste Cells\tCtrl+V")
@@ -6137,6 +6226,13 @@ class ModernWindow(QMainWindow):
         menu.addAction(f"Sort Descending ({col_label} / Largest to Smallest)", lambda: self._call(lambda: self.presenter.sort_columns(all_cols, cur_col, True), result=True))
         menu.addAction("Custom Sort...", self.sort_dialog)
         menu.addAction("Autofill / Extend Series...", self.autofill_dialog)
+        cur_val = None
+        if cur_col < len(self.presenter.worksheet.columns) and cur_row < len(self.presenter.worksheet.columns[cur_col].values):
+            cur_val = self.presenter.worksheet.columns[cur_col].values[cur_row]
+        if cur_val is not None and str(cur_val).strip() != "":
+            val_str = str(cur_val)
+            display_val = val_str[:20] + "…" if len(val_str) > 20 else val_str
+            menu.addAction(f"Subset Worksheet by '{display_val}'", lambda: self.subset_by_cell_value(cur_col, cur_val))
 
         menu.addSeparator()
 
@@ -7007,6 +7103,22 @@ class ModernWindow(QMainWindow):
         self.statusBar().showMessage(f"Created subset worksheet '{getattr(new_sheet, "name", "Subset")}' with {len(row_indices_0)} observations.", 6000)
         return new_sheet
 
+    def subset_by_cell_value(self, col_index, target_value):
+        src = self.presenter.worksheet
+        if not 0 <= col_index < len(src.columns):
+            return None
+        col = src.columns[col_index]
+        matching_rows = [i for i, v in enumerate(col.values) if v == target_value or str(v) == str(target_value)]
+        if not matching_rows:
+            self.statusBar().showMessage("No matching rows found to subset.", 4000)
+            return None
+        clean_val = str(target_value)[:15]
+        subset_name = f"{src.name} ({col.name}={clean_val})"
+        new_sheet = self.presenter.subset_worksheet(subset_name, "include", matching_rows)
+        self.refresh()
+        self.statusBar().showMessage(f"Created subset worksheet '{new_sheet.name}' with {len(matching_rows)} rows", 5000)
+        return new_sheet
+
     def open_brushed_selection_in_r(self, rows=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
         if not target_rows:
@@ -7396,6 +7508,24 @@ class ModernWindow(QMainWindow):
             for idx in targets:
                 self.table.setColumnWidth(idx, val)
                 self.column_names.setColumnWidth(idx, val)
+
+    def auto_fit_column_width(self, col_index):
+        if col_index < 0 or col_index >= self.table.columnCount():
+            return
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(self.table.font())
+        header_text = self.column_names.horizontalHeaderItem(col_index)
+        max_w = fm.horizontalAdvance(header_text.text() if header_text else f"C{col_index+1}") + 24
+        name_item = self.column_names.item(0, col_index)
+        if name_item and name_item.text():
+            max_w = max(max_w, fm.horizontalAdvance(name_item.text()) + 24)
+        for r in range(min(100, self.table.rowCount())):
+            item = self.table.item(r, col_index)
+            if item and item.text():
+                max_w = max(max_w, fm.horizontalAdvance(item.text()) + 20)
+        final_w = max(45, min(500, max_w))
+        self.table.setColumnWidth(col_index, final_w)
+        self.column_names.setColumnWidth(col_index, final_w)
 
     def standard_column_width_dialog(self):
         cur_w = self.table.horizontalHeader().defaultSectionSize()

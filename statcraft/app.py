@@ -172,6 +172,18 @@ class Presenter:
         self.native_project = None
         self._reset_edits()
 
+    def reorder_worksheets(self, from_idx, to_idx):
+        if self.native_project is None:
+            return
+        sheets = self.native_project.worksheets
+        if not (0 <= from_idx < len(sheets) and 0 <= to_idx < len(sheets)):
+            return
+        item = sheets.pop(from_idx)
+        sheets.insert(to_idx, item)
+        self.native_project.active_index = to_idx
+        self.worksheet = sheets[to_idx]
+        self.dirty = True
+
     def select_worksheet(self, index):
         if self.native_project is None:
             if index != 0:

@@ -19,7 +19,7 @@ class WorksheetTabStrip(QScrollArea):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Preferred)
         self.tabs=QTabBar();self.tabs.setObjectName('worksheetTabs')
         self.tabs.setExpanding(False);self.tabs.setUsesScrollButtons(False)
-        self.tabs.setElideMode(Qt.TextElideMode.ElideNone)
+        self.tabs.setElideMode(Qt.TextElideMode.ElideNone);self.tabs.setMovable(True)
         self.setWidget(self.tabs)
         self.horizontalScrollBar().valueChanged.connect(self.scrollStateChanged)
         self.horizontalScrollBar().rangeChanged.connect(lambda *_:self.scrollStateChanged.emit())
