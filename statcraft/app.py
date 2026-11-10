@@ -4059,6 +4059,136 @@ class Presenter:
         recipe = {"action": "factorial_power", "parameters": {"settings": copy.deepcopy(settings)}}
         return self._record(res["title"], res, recipe=recipe)
 
+    def _phase3_col(self, index, label="Variable", numeric=True):
+        if index is None or not (0 <= int(index) < len(self.worksheet.columns)):
+            raise ValueError(f"{label} requires a valid column index.")
+        col = self.worksheet.columns[int(index)]
+        return col.name, (col.numeric_values(True) if numeric else list(col.values))
+
+    def bootstrap_1sample(self, index, statistic="Mean", n_resamples=2000, confidence=0.95, seed=42):
+        from .resampling import bootstrap_1sample as _fn
+        name, vals = self._phase3_col(index, "Variable", numeric=True)
+        res = _fn(vals, statistic=statistic, n_resamples=int(n_resamples), confidence=float(confidence), seed=int(seed), variable_name=name)
+        recipe = {"action": "bootstrap_1sample", "parameters": {"index": index, "statistic": statistic, "n_resamples": n_resamples, "confidence": confidence, "seed": seed}}
+        return self._record(f"1-Sample Bootstrap ({statistic}): {name}", res, recipe=recipe)
+
+    def bootstrap_2sample(self, index1, index2, statistic="Mean Difference", n_resamples=2000, confidence=0.95, seed=42):
+        from .resampling import bootstrap_2sample as _fn
+        n1, v1 = self._phase3_col(index1, "Sample 1", numeric=True)
+        n2, v2 = self._phase3_col(index2, "Sample 2", numeric=True)
+        res = _fn(v1, v2, statistic=statistic, n_resamples=int(n_resamples), confidence=float(confidence), seed=int(seed), name1=n1, name2=n2)
+        recipe = {"action": "bootstrap_2sample", "parameters": {"index1": index1, "index2": index2, "statistic": statistic, "n_resamples": n_resamples, "confidence": confidence, "seed": seed}}
+        return self._record(f"2-Sample Bootstrap ({statistic}): {n1}, {n2}", res, recipe=recipe)
+
+    def randomization_1sample(self, index, hypothesized_mean=0.0, alternative="two_sided", n_resamples=2000, seed=42):
+        from .resampling import randomization_1sample as _fn
+        name, vals = self._phase3_col(index, "Variable", numeric=True)
+        res = _fn(vals, hypothesized_mean=float(hypothesized_mean), alternative=alternative, n_resamples=int(n_resamples), seed=int(seed), variable_name=name)
+        recipe = {"action": "randomization_1sample", "parameters": {"index": index, "hypothesized_mean": hypothesized_mean, "alternative": alternative, "n_resamples": n_resamples, "seed": seed}}
+        return self._record(f"1-Sample Randomization Test: {name}", res, recipe=recipe)
+
+    def randomization_2sample(self, index1, index2, alternative="two_sided", n_resamples=2000, seed=42):
+        from .resampling import randomization_2sample as _fn
+        n1, v1 = self._phase3_col(index1, "Sample 1", numeric=True)
+        n2, v2 = self._phase3_col(index2, "Sample 2", numeric=True)
+        res = _fn(v1, v2, alternative=alternative, n_resamples=int(n_resamples), seed=int(seed), name1=n1, name2=n2)
+        recipe = {"action": "randomization_2sample", "parameters": {"index1": index1, "index2": index2, "alternative": alternative, "n_resamples": n_resamples, "seed": seed}}
+        return self._record(f"2-Sample Randomization Test: {n1}, {n2}", res, recipe=recipe)
+
+    def goodness_of_fit_poisson(self, index):
+        from .count_models import goodness_of_fit_poisson as _fn
+        name, vals = self._phase3_col(index, "Counts", numeric=True)
+        res = _fn(vals, variable_name=name)
+        recipe = {"action": "goodness_of_fit_poisson", "parameters": {"index": index}}
+        return self._record(f"Goodness-of-Fit Test for Poisson: {name}", res, recipe=recipe)
+
+    def negative_binomial_regression(self, response_index, predictor_indices, exposure_index=None):
+        from .count_models import negative_binomial_regression as _fn
+        res = _fn(self.worksheet, response_index, list(predictor_indices), exposure_index=exposure_index)
+        recipe = {"action": "negative_binomial_regression", "parameters": {"response_index": response_index, "predictor_indices": list(predictor_indices), "exposure_index": exposure_index}}
+        return self._record(f"Negative Binomial Regression: {res['response']}", res, recipe=recipe)
+
+    def extended_power(self, kind, **kwargs):
+        from . import power_extended as _pe
+        table = {
+            "one_variance": (_pe.one_variance_power, "Power and Sample Size: 1 Variance", "one_variance_power"),
+            "two_variances": (_pe.two_variances_power, "Power and Sample Size: 2 Variances", "two_variances_power"),
+            "one_poisson_rate": (_pe.one_poisson_rate_power, "Power and Sample Size: 1-Sample Poisson Rate", "one_poisson_rate_power"),
+            "two_poisson_rates": (_pe.two_poisson_rates_power, "Power and Sample Size: 2-Sample Poisson Rates", "two_poisson_rates_power"),
+            "equivalence_tost": (_pe.equivalence_tost_power, "Power and Sample Size: Equivalence (TOST)", "equivalence_tost_power"),
+            "estimation": (_pe.sample_size_estimation, "Sample Size for Estimation", "sample_size_estimation"),
+            "tolerance_interval": (_pe.sample_size_tolerance_interval, "Sample Size for Tolerance Intervals", "sample_size_tolerance_interval"),
+        }
+        if kind not in table:
+            raise ValueError(f"Unsupported extended power calculation kind: {kind}")
+        fn, title, graph_tag = table[kind]
+        clean_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        res = fn(**clean_kwargs)
+        res["graph"] = graph_tag
+        res["title"] = title
+        recipe = {"action": "extended_power", "parameters": {"kind": kind, **clean_kwargs}}
+        return self._record(title, res, recipe=recipe)
+
+    def balanced_anova(self, response_index, factor_indices, include_interactions=True):
+        from .advanced_anova import balanced_anova as _fn
+        res = _fn(self.worksheet, response_index, list(factor_indices), include_interactions=bool(include_interactions))
+        recipe = {"action": "balanced_anova", "parameters": {"response_index": response_index, "factor_indices": list(factor_indices), "include_interactions": bool(include_interactions)}}
+        return self._record(f"Balanced ANOVA: {res['response']}", res, recipe=recipe)
+
+    def fully_nested_anova(self, response_index, factor_indices):
+        from .advanced_anova import fully_nested_anova as _fn
+        res = _fn(self.worksheet, response_index, list(factor_indices))
+        recipe = {"action": "fully_nested_anova", "parameters": {"response_index": response_index, "factor_indices": list(factor_indices)}}
+        return self._record(f"Fully Nested ANOVA: {res['response']}", res, recipe=recipe)
+
+    def oneway_manova(self, response_indices, factor_index):
+        from .advanced_anova import oneway_manova as _fn
+        res = _fn(self.worksheet, list(response_indices), factor_index)
+        recipe = {"action": "oneway_manova", "parameters": {"response_indices": list(response_indices), "factor_index": factor_index}}
+        return self._record(f"One-Way MANOVA: {', '.join(res['responses'])}", res, recipe=recipe)
+
+    def fit_mixed_reml(self, response_index, fixed_indices=(), random_indices=()):
+        from .mixed_reml import fit_mixed_reml as _fn
+        res = _fn(self.worksheet, response_index, fixed_indices=list(fixed_indices), random_indices=list(random_indices))
+        recipe = {"action": "fit_mixed_reml", "parameters": {"response_index": response_index, "fixed_indices": list(fixed_indices), "random_indices": list(random_indices)}}
+        return self._record(f"Mixed Effects Model (REML): {res['response']}", res, recipe=recipe)
+
+    def cox_ph_regression(self, time_index, event_index, covariate_indices, event_value=1):
+        from .survival_advanced import cox_ph_regression as _fn
+        res = _fn(self.worksheet, time_index, event_index, list(covariate_indices), event_value=event_value)
+        recipe = {"action": "cox_ph_regression", "parameters": {"time_index": time_index, "event_index": event_index, "covariate_indices": list(covariate_indices), "event_value": event_value}}
+        return self._record("Cox Proportional Hazards Regression", res, recipe=recipe)
+
+    def warranty_analysis(self, ages_index, fails_index, at_risk_total=None, forecast_horizon=12.0):
+        from .survival_advanced import warranty_analysis as _fn
+        _, ages = self._phase3_col(ages_index, "Age intervals", numeric=True)
+        _, fails = self._phase3_col(fails_index, "Failure counts", numeric=True)
+        if at_risk_total is None:
+            raise ValueError("Warranty Analysis requires total units in field (at risk).")
+        res = _fn(ages, fails, float(at_risk_total), forecast_horizon=float(forecast_horizon))
+        recipe = {"action": "warranty_analysis", "parameters": {"ages_index": ages_index, "fails_index": fails_index, "at_risk_total": at_risk_total, "forecast_horizon": forecast_horizon}}
+        return self._record("Warranty Analysis & Claims Forecast", res, recipe=recipe)
+
+    def six_sigma_process_report(self, index, lsl=None, usl=None, subgroup_size=1, sigma_shift=1.5):
+        from .six_sigma import six_sigma_process_report as _fn
+        name, vals = self._phase3_col(index, "Process measurement", numeric=True)
+        res = _fn(vals, lsl=lsl, usl=usl, subgroup_size=int(subgroup_size), sigma_shift=float(sigma_shift), variable_name=name)
+        recipe = {"action": "six_sigma_process_report", "parameters": {"index": index, "lsl": lsl, "usl": usl, "subgroup_size": subgroup_size, "sigma_shift": sigma_shift}}
+        return self._record(f"Six Sigma Process Report: {name}", res, recipe=recipe)
+
+    def rolled_throughput_yield(self, step_yields=None, index=None, process_name="Product Process"):
+        from .six_sigma import rolled_throughput_yield as _fn
+        if index is not None:
+            name, vals = self._phase3_col(index, "Step yields (%)", numeric=True)
+            yields = [v for v in vals if v is not None]
+            if process_name == "Product Process":
+                process_name = name
+        else:
+            yields = list(step_yields or [])
+        res = _fn(yields, process_name=process_name)
+        recipe = {"action": "rolled_throughput_yield", "parameters": {"step_yields": yields, "index": index, "process_name": process_name}}
+        return self._record(f"Six Sigma Product Report (RTY): {process_name}", res, recipe=recipe)
+
     def cross_tabulation(self, settings=None):
         settings = self._bound_settings("cross_tabulation", settings)
         import copy
@@ -7341,6 +7471,36 @@ def format_entry(entry):
     if isinstance(result, dict) and result.get('analysis') == 'attribute_capability':
         from .attribute_capability_report import generate_attribute_capability_report
         return title + generate_attribute_capability_report(result)
+    if isinstance(result, dict):
+        _p3_formatters = {
+            'bootstrap_1sample': ('.resampling', 'format_resampling_report'),
+            'bootstrap_2sample': ('.resampling', 'format_resampling_report'),
+            'randomization_1sample': ('.resampling', 'format_resampling_report'),
+            'randomization_2sample': ('.resampling', 'format_resampling_report'),
+            'poisson_gof': ('.count_models', 'format_count_report'),
+            'negative_binomial_regression': ('.count_models', 'format_count_report'),
+            'one_variance_power': ('.power_extended', 'format_power_extended_report'),
+            'two_variances_power': ('.power_extended', 'format_power_extended_report'),
+            'one_poisson_rate_power': ('.power_extended', 'format_power_extended_report'),
+            'two_poisson_rates_power': ('.power_extended', 'format_power_extended_report'),
+            'equivalence_tost_power': ('.power_extended', 'format_power_extended_report'),
+            'sample_size_estimation': ('.power_extended', 'format_power_extended_report'),
+            'sample_size_tolerance_interval': ('.power_extended', 'format_power_extended_report'),
+            'balanced_anova': ('.advanced_anova', 'format_advanced_anova_report'),
+            'fully_nested_anova': ('.advanced_anova', 'format_advanced_anova_report'),
+            'oneway_manova': ('.advanced_anova', 'format_advanced_anova_report'),
+            'mixed_reml': ('.mixed_reml', 'format_mixed_reml_report'),
+            'cox_ph_regression': ('.survival_advanced', 'format_survival_advanced_report'),
+            'warranty_analysis': ('.survival_advanced', 'format_survival_advanced_report'),
+            'six_sigma_process_report': ('.six_sigma', 'format_six_sigma_report'),
+            'six_sigma_product_report': ('.six_sigma', 'format_six_sigma_report'),
+        }
+        _p3_key = result.get('analysis')
+        if _p3_key in _p3_formatters:
+            import importlib
+            _mod_name, _fn_name = _p3_formatters[_p3_key]
+            _mod = importlib.import_module(_mod_name, package=__package__)
+            return title + getattr(_mod, _fn_name)(result)
     if isinstance(result,dict) and result.get('graph')=='categorical_points':
         lines=['Variable             Group               N       Mean          Median        StDev         SE Mean       Lower         Upper']
         for panel in result['panels']:

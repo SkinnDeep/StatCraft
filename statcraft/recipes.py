@@ -178,6 +178,21 @@ FIELDS = {
     'multivari': {'response_index', 'factor_indices'},
     'outlier_test': {'variable_index', 'alpha', 'alternative'},
     'graph': {'method', 'indices', 'bins'},
+    'bootstrap_1sample': {'index', 'statistic', 'n_resamples', 'confidence', 'seed'},
+    'bootstrap_2sample': {'index1', 'index2', 'statistic', 'n_resamples', 'confidence', 'seed'},
+    'randomization_1sample': {'index', 'hypothesized_mean', 'alternative', 'n_resamples', 'seed'},
+    'randomization_2sample': {'index1', 'index2', 'alternative', 'n_resamples', 'seed'},
+    'goodness_of_fit_poisson': {'index'},
+    'negative_binomial_regression': {'response_index', 'predictor_indices', 'exposure_index'},
+    'extended_power': {'kind'},
+    'balanced_anova': {'response_index', 'factor_indices', 'include_interactions'},
+    'fully_nested_anova': {'response_index', 'factor_indices'},
+    'oneway_manova': {'response_indices', 'factor_index'},
+    'fit_mixed_reml': {'response_index', 'fixed_indices', 'random_indices'},
+    'cox_ph_regression': {'time_index', 'event_index', 'covariate_indices', 'event_value'},
+    'warranty_analysis': {'ages_index', 'fails_index', 'at_risk_total', 'forecast_horizon'},
+    'six_sigma_process_report': {'index', 'lsl', 'usl', 'subgroup_size', 'sigma_shift'},
+    'rolled_throughput_yield': {'step_yields', 'index', 'process_name'},
 }
 
 
@@ -216,6 +231,32 @@ def columns(recipe):
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
     if action == 'probability_distribution_plot':
         return []
+    if action == 'extended_power':
+        return []
+    _p3_col_keys = {
+        'bootstrap_1sample': (('index',), ()),
+        'bootstrap_2sample': (('index1', 'index2'), ()),
+        'randomization_1sample': (('index',), ()),
+        'randomization_2sample': (('index1', 'index2'), ()),
+        'goodness_of_fit_poisson': (('index',), ()),
+        'negative_binomial_regression': (('response_index', 'exposure_index'), ('predictor_indices',)),
+        'balanced_anova': (('response_index',), ('factor_indices',)),
+        'fully_nested_anova': (('response_index',), ('factor_indices',)),
+        'oneway_manova': (('factor_index',), ('response_indices',)),
+        'fit_mixed_reml': (('response_index',), ('fixed_indices', 'random_indices')),
+        'cox_ph_regression': (('time_index', 'event_index'), ('covariate_indices',)),
+        'warranty_analysis': (('ages_index', 'fails_index'), ()),
+        'six_sigma_process_report': (('index',), ()),
+        'rolled_throughput_yield': (('index',), ()),
+    }
+    if action in _p3_col_keys:
+        if action not in ('extended_power',) and not isinstance(parameters, dict):
+            raise ValueError('Unsupported analysis recipe or parameters.')
+        single_keys, list_keys = _p3_col_keys[action]
+        cols = [parameters.get(k) for k in single_keys]
+        for lk in list_keys:
+            cols.extend(parameters.get(lk) or [])
+        return sorted(set(c for c in cols if isinstance(c, int) and c >= 0))
     if action == 'marginal_plot':
         cols = [parameters.get('y_index'), parameters.get('x_index')]
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))

@@ -1287,6 +1287,7 @@ class ModernWindow(QMainWindow):
         self._action(basic, "Correlation…", self.correlation, None, "correlation", True)
         self.covariance_action = self._action(basic, "Covariance…", self.covariance_dialog, None, "covariance", True)
         self._action(basic, "Normality Test…", self.normality, None, "normality", True)
+        self._action(basic, "Goodness-of-Fit Test for Poisson…", self.goodness_of_fit_poisson_dialog, None, "bar_chart", True)
         self.one_variance_action = self._action(basic, "1 Varianc&e…", self.one_sample_variance_dialog, None, "probability", True)
         self.two_variances_action = self._action(basic, "2 V&ariances…", self.two_sample_variances_dialog, None, "probability", True)
         self.one_proportion_action = self._action(basic, "1 Proportion…", self.one_sample_proportion_dialog, None, "pie_chart", True)
@@ -1304,6 +1305,10 @@ class ModernWindow(QMainWindow):
         self.main_effects_plot_action = self._action(anova, "Main Effects Plot…", self.main_effects_plot_dialog, None, "line_plot", True)
         self.interactions_plot_action = self._action(anova, "Interactions Plot…", self.interactions_plot_dialog, None, "line_plot", True)
         self.test_equal_variances_action = self._action(anova, "Test for Equal Variances…", self.test_equal_variances_dialog, None, "interval", True)
+        self._action(anova, "Balanced ANOVA…", self.balanced_anova_dialog, None, "table", True)
+        self._action(anova, "Fully Nested ANOVA…", self.fully_nested_anova_dialog, None, "table", True)
+        self._action(anova, "General MANOVA (One-Way)…", self.oneway_manova_dialog, None, "table", True)
+        self._action(anova, "Mixed Effects Model (REML)…", self.mixed_reml_dialog, None, "regression", True)
         glm_menu=anova.addMenu("General Linear Model")
         self.glm_fit_action=self._action(glm_menu,"Fit General Linear Model…",self.general_linear_model,None,"regression",True)
         self.predict_actions={}; self.optimizer_actions={}; self.factorial_plot_actions={}; self.contour_plot_actions={}; self.surface_plot_actions={}; self.profiler_actions={}
@@ -1342,6 +1347,7 @@ class ModernWindow(QMainWindow):
         self.optimizer_actions['fit_binary_logistic']=self._action(binary,'Response Optimizer…',lambda:self.optimize_responses('logistic'),None,None,True)
         poisson_menu = regression_root.addMenu("Poisson Regression")
         self._action(poisson_menu, "Fit Poisson Model…", self.poisson_regression_dialog, None, "regression", True)
+        self._action(poisson_menu, "Fit Negative Binomial Model…", self.negative_binomial_regression_dialog, None, "regression", True)
         doe = stat.addMenu("DOE")
         self._action(doe,'DOE Planner…',self.doe_planner,None,'doe',True)
         doe.addSeparator(); factorial = doe.addMenu("Factorial")
@@ -1462,6 +1468,9 @@ class ModernWindow(QMainWindow):
         self._action(gage,'&Attribute Gage Study (Analytic Method)…',self.attribute_gage_dialog,None,"chart",True)
         self._action(gage,'Evaluating the &Measurement Process (EMP)…',self.emp_dialog,None,"run_chart",True)
         self._action(quality, '&Attribute Agreement Analysis…', self.attribute_agreement_dialog, None, "table", True)
+        six_sigma_menu = quality.addMenu("Six &Sigma Quality")
+        self._action(six_sigma_menu, "Six Sigma &Process Report…", self.six_sigma_process_dialog, None, "capability", True)
+        self._action(six_sigma_menu, "Six Sigma &Product Report (RTY)…", self.six_sigma_product_dialog, None, "table", True)
 
         # 5b. Reliability/Survival menu
         reliability = stat.addMenu("&Reliability/Survival")
@@ -1475,6 +1484,8 @@ class ModernWindow(QMainWindow):
         repairable_menu = reliability.addMenu("Repairable &Systems Analysis")
         self._action(repairable_menu, "Nonparametric &Growth Curve…", self.nonparametric_growth_curve_dialog, None, "reliability", True)
         self._action(repairable_menu, "&Parametric Growth Curve…", self.parametric_growth_curve_dialog, None, "reliability", True)
+        self._action(reliability, "&Cox Proportional Hazards Regression…", self.cox_ph_dialog, None, "reliability", True)
+        self._action(reliability, "&Warranty Analysis…", self.warranty_analysis_dialog, None, "reliability", True)
 
         # 5c. Time Series menu
         time_series = stat.addMenu("&Time Series")
@@ -1543,6 +1554,19 @@ class ModernWindow(QMainWindow):
         self._action(power_menu, "2 P&roportions...", self.two_proportions_power_dialog, None, None, True)
         self._action(power_menu, "&One-Way ANOVA...", self.oneway_anova_power_dialog, None, None, True)
         self._action(power_menu, "2-Level &Factorial Design...", self.factorial_power_dialog, None, None, True)
+        power_menu.addSeparator()
+        self._action(power_menu, "&1 Variance…", self.one_variance_power_dialog, None, None, True)
+        self._action(power_menu, "&2 Variances…", self.two_variances_power_dialog, None, None, True)
+        self._action(power_menu, "1-Sample &Poisson Rate…", self.one_poisson_rate_power_dialog, None, None, True)
+        self._action(power_menu, "2-Sample Poisson &Rates…", self.two_poisson_rates_power_dialog, None, None, True)
+        self._action(power_menu, "&Equivalence Tests (TOST)…", self.equivalence_tost_power_dialog, None, None, True)
+        self._action(power_menu, "Sample Size for &Estimation…", self.sample_size_estimation_dialog, None, None, True)
+        self._action(power_menu, "Sample Size for &Tolerance Intervals…", self.sample_size_tolerance_dialog, None, None, True)
+        resampling_menu = stat.addMenu("Resam&pling")
+        self._action(resampling_menu, "1-Sample &Bootstrap…", self.bootstrap_1sample_dialog, None, None, True)
+        self._action(resampling_menu, "2-Sample B&ootstrap…", self.bootstrap_2sample_dialog, None, None, True)
+        self._action(resampling_menu, "1-Sample &Randomization Test…", self.randomization_1sample_dialog, None, None, True)
+        self._action(resampling_menu, "2-Sample Rando&mization Test…", self.randomization_2sample_dialog, None, None, True)
 
         # 5h. Tables menu
         tables_menu = stat.addMenu("&Tables")
@@ -4821,6 +4845,301 @@ class ModernWindow(QMainWindow):
                 entry = self._call(lambda: self.presenter.factorial_power(settings=p), result=True)
                 if entry:
                     self.show_result(entry)
+
+    def bootstrap_1sample_dialog(self):
+        self._dialog(
+            "1-Sample Bootstrap",
+            [selector("index", "Variable")],
+            [
+                {"key": "statistic", "label": "Statistic", "choices": ["Mean", "Median", "StDev", "Variance", "IQR"], "default": "Mean"},
+                numeric("n_resamples", "Number of resamples", 2000, integer=True),
+                numeric("confidence", "Confidence level (0–1)", 0.95),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.bootstrap_1sample(p["index"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"]),
+            "Percentile/pivot bootstrap confidence intervals for a single sample.",
+        )
+
+    def bootstrap_2sample_dialog(self):
+        self._dialog(
+            "2-Sample Bootstrap",
+            [selector("index1", "Sample 1"), selector("index2", "Sample 2")],
+            [
+                {"key": "statistic", "label": "Statistic", "choices": ["Mean Difference", "Median Difference", "Ratio of StDevs"], "default": "Mean Difference"},
+                numeric("n_resamples", "Number of resamples", 2000, integer=True),
+                numeric("confidence", "Confidence level (0–1)", 0.95),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.bootstrap_2sample(p["index1"], p["index2"], p["statistic"], p["n_resamples"], p["confidence"], p["seed"]),
+            "Two-sample independent bootstrap confidence intervals.",
+        )
+
+    def randomization_1sample_dialog(self):
+        self._dialog(
+            "1-Sample Randomization Test",
+            [selector("index", "Variable")],
+            [
+                numeric("hypothesized_mean", "Hypothesized mean", 0.0),
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+                numeric("n_resamples", "Number of permutations", 2000, integer=True),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.randomization_1sample(p["index"], p["hypothesized_mean"], p["alternative"], p["n_resamples"], p["seed"]),
+            "Sign-flipping Monte Carlo randomization test for location.",
+        )
+
+    def randomization_2sample_dialog(self):
+        self._dialog(
+            "2-Sample Randomization Test",
+            [selector("index1", "Sample 1"), selector("index2", "Sample 2")],
+            [
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+                numeric("n_resamples", "Number of permutations", 2000, integer=True),
+                numeric("seed", "Random seed", 42, integer=True),
+            ],
+            lambda p: self.presenter.randomization_2sample(p["index1"], p["index2"], p["alternative"], p["n_resamples"], p["seed"]),
+            "Label-permutation test for difference between two independent samples.",
+        )
+
+    def goodness_of_fit_poisson_dialog(self):
+        self._dialog(
+            "Goodness-of-Fit Test for Poisson",
+            [selector("index", "Counts variable")],
+            [],
+            lambda p: self.presenter.goodness_of_fit_poisson(p["index"]),
+            "Tests whether observed integer counts follow a Poisson distribution (Chi-square GOF + dispersion index).",
+        )
+
+    def negative_binomial_regression_dialog(self):
+        self._dialog(
+            "Negative Binomial Regression",
+            [
+                selector("response_index", "Response (counts)"),
+                selector("predictor_indices", "Predictors", True, 1, None, ("number", "text")),
+                selector("exposure_indices", "Exposure / Offset (optional)", True, 0, 1, ("number",)),
+            ],
+            [],
+            lambda p: self.presenter.negative_binomial_regression(
+                p["response_index"],
+                p["predictor_indices"],
+                exposure_index=(p["exposure_indices"][0] if p["exposure_indices"] else None),
+            ),
+            "NB2 maximum-likelihood regression for overdispersed count data with likelihood-ratio test vs Poisson.",
+        )
+
+    def balanced_anova_dialog(self):
+        self._dialog(
+            "Balanced ANOVA",
+            [
+                selector("response_index", "Response"),
+                selector("factor_indices", "Factors", True, 1, None, ("number", "text")),
+            ],
+            [{"key": "include_interactions", "label": "Model terms", "boolean": True, "text": "Include 2-way interactions", "default": True}],
+            lambda p: self.presenter.balanced_anova(p["response_index"], p["factor_indices"], p["include_interactions"]),
+            "Multi-factor balanced ANOVA with sequential Type I sums of squares and R-squared statistics.",
+        )
+
+    def fully_nested_anova_dialog(self):
+        self._dialog(
+            "Fully Nested ANOVA",
+            [
+                selector("response_index", "Response"),
+                selector("factor_indices", "Hierarchical factors (outer to inner)", True, 2, None, ("number", "text")),
+            ],
+            [],
+            lambda p: self.presenter.fully_nested_anova(p["response_index"], p["factor_indices"]),
+            "Hierarchical nested ANOVA with variance components and percentage contribution by level.",
+        )
+
+    def oneway_manova_dialog(self):
+        self._dialog(
+            "One-Way MANOVA",
+            [
+                selector("response_indices", "Responses (2+ numeric)", True, 2),
+                selector("factor_index", "Factor", False, 1, 1, ("number", "text")),
+            ],
+            [],
+            lambda p: self.presenter.oneway_manova(p["response_indices"], p["factor_index"]),
+            "Multivariate ANOVA reporting Wilks' Lambda, Pillai's Trace, Hotelling-Lawley Trace, and Roy's Largest Root.",
+        )
+
+    def mixed_reml_dialog(self):
+        self._dialog(
+            "Mixed Effects Model (REML)",
+            [
+                selector("response_index", "Response"),
+                selector("fixed_indices", "Fixed effects (optional)", True, 0, None, ("number", "text")),
+                selector("random_indices", "Random grouping factors", True, 1, None, ("number", "text")),
+            ],
+            [],
+            lambda p: self.presenter.fit_mixed_reml(p["response_index"], p["fixed_indices"], p["random_indices"]),
+            "Restricted Maximum Likelihood (REML) linear mixed model with variance components and EBLUPs.",
+        )
+
+    def cox_ph_dialog(self):
+        self._dialog(
+            "Cox Proportional Hazards Regression",
+            [
+                selector("time_index", "Time"),
+                selector("event_index", "Event / Censor indicator", False, 1, 1, ("number", "text")),
+                selector("covariate_indices", "Covariates", True, 1, None, ("number", "text")),
+            ],
+            [numeric("event_value", "Event value (failure code)", 1)],
+            lambda p: self.presenter.cox_ph_regression(p["time_index"], p["event_index"], p["covariate_indices"], p["event_value"]),
+            "Breslow partial-likelihood Cox PH regression with hazard ratios and Harrell's C-index.",
+        )
+
+    def warranty_analysis_dialog(self):
+        self._dialog(
+            "Warranty Analysis",
+            [
+                selector("ages_index", "Age intervals"),
+                selector("fails_index", "Failure / Claim counts"),
+            ],
+            [
+                numeric("at_risk_total", "Total units in field (at risk)", 1000),
+                numeric("forecast_horizon", "Forecast horizon", 12),
+            ],
+            lambda p: self.presenter.warranty_analysis(p["ages_index"], p["fails_index"], p["at_risk_total"], p["forecast_horizon"]),
+            "Weibull warranty claim trend estimation and cumulative future claims forecast.",
+        )
+
+    def six_sigma_process_dialog(self):
+        self._dialog(
+            "Six Sigma Process Report",
+            [selector("index", "Process variable")],
+            [
+                numeric("lsl", "Lower spec (LSL)", "", optional=True),
+                numeric("usl", "Upper spec (USL)", "", optional=True),
+                numeric("subgroup_size", "Subgroup size", 1, integer=True),
+                numeric("sigma_shift", "Sigma shift", 1.5),
+            ],
+            lambda p: self.presenter.six_sigma_process_report(p["index"], p.get("lsl"), p.get("usl"), p["subgroup_size"], p["sigma_shift"]),
+            "Comprehensive Six Sigma Z-bench, DPMO, yield, and Cp/Cpk/Pp/Ppk summary.",
+        )
+
+    def six_sigma_product_dialog(self):
+        self._dialog(
+            "Six Sigma Product Report (RTY)",
+            [selector("index", "Step yields (%) column (optional)", True, 0, 1)],
+            [
+                {"key": "yields", "label": "Or enter step yields (%)", "default": "99.2, 98.5, 99.0"},
+                {"key": "process_name", "label": "Process name", "default": "Product Process"},
+            ],
+            lambda p: self.presenter.rolled_throughput_yield(
+                step_yields=(None if p["index"] else _number_list(p["yields"])),
+                index=(p["index"][0] if p["index"] else None),
+                process_name=p["process_name"] or "Product Process",
+            ),
+            "Computes Rolled Throughput Yield (RTY), total DPU, DPMO, and equivalent Z-score.",
+        )
+
+    def one_variance_power_dialog(self):
+        self._dialog(
+            "Power and Sample Size: 1 Variance",
+            [],
+            [
+                numeric("ratio", "Hypothesized ratio (sigma / sigma0)", 1.5),
+                numeric("sample_size", "Sample size (leave blank to solve)", "", optional=True, integer=True),
+                numeric("target_power", "Target power (leave blank to solve)", 0.80, optional=True),
+                numeric("alpha", "Significance level (alpha)", 0.05),
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+            ],
+            lambda p: self.presenter.extended_power("one_variance", **p),
+            "Provide either Sample size OR Target power.",
+        )
+
+    def two_variances_power_dialog(self):
+        self._dialog(
+            "Power and Sample Size: 2 Variances",
+            [],
+            [
+                numeric("ratio", "Hypothesized StDev ratio (sigma1 / sigma2)", 1.5),
+                numeric("sample_size", "Sample size per group (leave blank to solve)", "", optional=True, integer=True),
+                numeric("target_power", "Target power (leave blank to solve)", 0.80, optional=True),
+                numeric("alpha", "Significance level (alpha)", 0.05),
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+            ],
+            lambda p: self.presenter.extended_power("two_variances", **p),
+            "Provide either Sample size per group OR Target power.",
+        )
+
+    def one_poisson_rate_power_dialog(self):
+        self._dialog(
+            "Power and Sample Size: 1-Sample Poisson Rate",
+            [],
+            [
+                numeric("baseline_rate", "Baseline rate (lambda0)", 2.0),
+                numeric("comparison_rate", "Comparison rate (lambda1)", 3.0),
+                numeric("sample_size", "Sample size (leave blank to solve)", "", optional=True, integer=True),
+                numeric("target_power", "Target power (leave blank to solve)", 0.80, optional=True),
+                numeric("alpha", "Significance level (alpha)", 0.05),
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+            ],
+            lambda p: self.presenter.extended_power("one_poisson_rate", **p),
+            "Provide either Sample size OR Target power.",
+        )
+
+    def two_poisson_rates_power_dialog(self):
+        self._dialog(
+            "Power and Sample Size: 2-Sample Poisson Rates",
+            [],
+            [
+                numeric("rate1", "Comparison rate 1 (lambda1)", 3.0),
+                numeric("rate2", "Baseline rate 2 (lambda2)", 2.0),
+                numeric("sample_size", "Sample size per group (leave blank to solve)", "", optional=True, integer=True),
+                numeric("target_power", "Target power (leave blank to solve)", 0.80, optional=True),
+                numeric("alpha", "Significance level (alpha)", 0.05),
+                {"key": "alternative", "label": "Alternative", "choices": ["two_sided", "less", "greater"], "default": "two_sided"},
+            ],
+            lambda p: self.presenter.extended_power("two_poisson_rates", **p),
+            "Provide either Sample size per group OR Target power.",
+        )
+
+    def equivalence_tost_power_dialog(self):
+        self._dialog(
+            "Power and Sample Size: Equivalence Tests (TOST)",
+            [],
+            [
+                {"key": "design", "label": "Design", "choices": ["1-Sample", "2-Sample", "Paired"], "default": "2-Sample"},
+                numeric("lower_limit", "Lower equivalence limit", -1.0),
+                numeric("upper_limit", "Upper equivalence limit", 1.0),
+                numeric("difference", "Expected difference", 0.0),
+                numeric("stdev", "Standard deviation", 1.0),
+                numeric("sample_size", "Sample size (leave blank to solve)", "", optional=True, integer=True),
+                numeric("target_power", "Target power (leave blank to solve)", 0.80, optional=True),
+                numeric("alpha", "Significance level (alpha)", 0.05),
+            ],
+            lambda p: self.presenter.extended_power("equivalence_tost", **p),
+            "Provide either Sample size OR Target power for TOST equivalence.",
+        )
+
+    def sample_size_estimation_dialog(self):
+        self._dialog(
+            "Sample Size for Estimation",
+            [],
+            [
+                {"key": "parameter", "label": "Parameter", "choices": ["Mean (Normal)", "Proportion (Binomial)", "Poisson Rate"], "default": "Mean (Normal)"},
+                numeric("planning_value", "Planning value (StDev, Proportion, or Rate)", 1.0),
+                numeric("margin_of_error", "Desired margin of error", 0.2),
+                numeric("confidence", "Confidence level (0–1)", 0.95),
+            ],
+            lambda p: self.presenter.extended_power("estimation", **p),
+            "Computes minimum sample size to bound confidence interval half-width.",
+        )
+
+    def sample_size_tolerance_dialog(self):
+        self._dialog(
+            "Sample Size for Tolerance Intervals",
+            [],
+            [
+                numeric("coverage", "Minimum % of population (0–1)", 0.95),
+                numeric("confidence", "Confidence level (0–1)", 0.95),
+                numeric("margin_ratio", "Precision margin factor (> 1)", 1.25),
+            ],
+            lambda p: self.presenter.extended_power("tolerance_interval", **p),
+            "Computes minimum N for normal two-sided tolerance intervals.",
+        )
 
     def cross_tabulation_dialog(self):
         from .tables_dialogs import CrossTabulationDialog
