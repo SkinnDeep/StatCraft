@@ -202,6 +202,7 @@ class TimeWeightedControlChartWidget(GraphInteractionMixin, QWidget):
         )
 
         # Draw Upper and Lower Control Limits
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         pen_limit = QPen(QColor(RED), 1.2, Qt.PenStyle.DashLine)
         painter.setPen(pen_limit)
 
@@ -297,6 +298,7 @@ class TimeWeightedControlChartWidget(GraphInteractionMixin, QWidget):
             for i in range(1, k_subgroups):
                 path_series.lineTo(map_x(i), map_y(values[i]))
 
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(BLUE), 1.5))
             painter.drawPath(path_series)
 

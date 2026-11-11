@@ -264,6 +264,7 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
                 painter.drawRect(QRectF(px - 3.5, py - 3.5, 7.0, 7.0))
 
             # Prediction limit lines (Lower and Upper)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             pen_limits = QPen(QColor(GREEN_BAND), 1.5, Qt.PenStyle.DotLine)
             painter.setPen(pen_limits)
             path_low = QPainterPath()

@@ -56,8 +56,8 @@ def selector(key, title, multiple=False, minimum=1, maximum=None, kinds=("number
 
 
 class WelcomeWatermarkWidget(QWidget):
-    """Statistical `#e6e6e6` output-pane watermark with centered title, mark, and shortcut table."""
-    def __init__(self, on_open, on_new_project, on_new_worksheet, on_try_connect=None, on_overview=None, parent=None):
+    """Centered Quick-Start welcome card with interactive starter datasets, guided tour, and shortcuts."""
+    def __init__(self, on_open, on_new_project, on_new_worksheet, on_try_connect=None, on_overview=None, on_sample_library=None, on_guided_tour=None, parent=None):
         super().__init__(parent)
         self.setObjectName("welcomeStage")
         outer = QVBoxLayout(self)
@@ -68,33 +68,38 @@ class WelcomeWatermarkWidget(QWidget):
         center.setObjectName("welcomeCard")
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(8)
+        center_layout.setSpacing(10)
 
         logo = WelcomeLogoBanner()
         center_layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
 
         tagline = QLabel("Modern Statistical Analysis & Quality Engineering Software")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tagline.setStyleSheet("color: #64748b; font-size: 9pt; font-style: italic; padding-bottom: 4px;")
+        tagline.setStyleSheet("color: #475569; font-size: 9.5pt; font-weight: 500; padding-bottom: 6px;")
         center_layout.addWidget(tagline)
 
         shortcuts = QWidget()
         grid = QGridLayout(shortcuts)
         grid.setContentsMargins(0, 4, 0, 0)
         grid.setHorizontalSpacing(22)
-        grid.setVerticalSpacing(6)
+        grid.setVerticalSpacing(7)
         rows = [
-            ("Open Project", "Ctrl+O", on_open),
+            ("Open File (Excel .xlsx / CSV / MPX)", "Ctrl+O", on_open),
             ("New Project", "Ctrl+Shift+N", on_new_project),
             ("New Worksheet", "Ctrl+N", on_new_worksheet),
-            ("Sample Data (Chemical Process)", "Dataset", on_try_connect),
+            ("Load Chemical Yield Sample (25 runs)", "Quick Start", on_try_connect),
         ]
+        if callable(on_sample_library):
+            rows.append(("Browse Sample Datasets (4 Ready)…", "Library", on_sample_library))
+        if callable(on_guided_tour):
+            rows.append(("Interactive Quick Tour (5 Steps)…", "Guide", on_guided_tour))
         for row_idx, (action_label, accel, callback) in enumerate(rows):
             btn = QPushButton(action_label)
             btn.setObjectName("watermarkLink")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFlat(True)
-            btn.clicked.connect(callback)
+            if callable(callback):
+                btn.clicked.connect(callback)
             key_lbl = QLabel(accel)
             key_lbl.setObjectName("watermarkKey")
             grid.addWidget(btn, row_idx, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -239,11 +244,11 @@ def get_theme_stylesheet(is_dark: bool) -> str:
             }
             QToolButton#outputDropdownBtn:hover { background-color: #3f3f46; border-color: #0284c7; color: #38bdf8; }
             QPushButton#watermarkLink {
-                background: transparent; border: none; color: #a1a1aa;
-                font-size: 9.5pt; font-weight: 600; text-align: left; padding: 1px 2px;
+                background: transparent; border: none; color: #38bdf8;
+                font-size: 9.5pt; font-weight: 600; text-align: left; padding: 3px 6px; border-radius: 4px;
             }
-            QPushButton#watermarkLink:hover { color: #38bdf8; text-decoration: underline; }
-            QLabel#watermarkKey { background: transparent; color: #a1a1aa; font-size: 9.5pt; font-weight: 600; }
+            QPushButton#watermarkLink:hover { background-color: #1e293b; color: #7dd3fc; text-decoration: underline; }
+            QLabel#watermarkKey { background: transparent; color: #94a3b8; font-size: 8.5pt; font-weight: 600; }
             QTableWidget {
                 background-color: #18181b; color: #f4f4f5; gridline-color: #27272a; border: none;
                 selection-background-color: #094771; selection-color: #ffffff;
@@ -428,11 +433,11 @@ def get_theme_stylesheet(is_dark: bool) -> str:
             }
             QToolButton#outputDropdownBtn:hover { background-color: #e0f2fe; border-color: #005a9e; color: #005a9e; }
             QPushButton#watermarkLink {
-                background: transparent; border: none; color: #64748b;
-                font-size: 9.5pt; font-weight: 600; text-align: left; padding: 1px 2px;
+                background: transparent; border: none; color: #0369a1;
+                font-size: 9.5pt; font-weight: 600; text-align: left; padding: 3px 6px; border-radius: 4px;
             }
-            QPushButton#watermarkLink:hover { color: #005a9e; text-decoration: underline; }
-            QLabel#watermarkKey { background: transparent; color: #64748b; font-size: 9.5pt; font-weight: 600; }
+            QPushButton#watermarkLink:hover { background-color: #e0f2fe; color: #0c4a6e; text-decoration: underline; }
+            QLabel#watermarkKey { background: transparent; color: #475569; font-size: 8.5pt; font-weight: 600; }
             QTableWidget {
                 background-color: #ffffff; color: #0f172a; gridline-color: #e2e8f0; border: none;
                 selection-background-color: #e0f2fe; selection-color: #0369a1;
@@ -1141,6 +1146,7 @@ class ModernWindow(QMainWindow):
         self.open_action = self._action(file, "Open…", self.open_document, QKeySequence.StandardKey.Open, "open")
         self.recent_menu = file.addMenu("Open Recent")
         self._update_recent_menu()
+        self._action(file, "Open Sample &Dataset…", self.open_sample_library, None, "new_sheet")
         self._action(file, "Import delimited text with column types…", lambda: self.open_document(True))
         file.addSeparator()
         self.save_action = self._action(file, "Save Project", self.save_document, QKeySequence.StandardKey.Save, "save")
@@ -1673,6 +1679,7 @@ class ModernWindow(QMainWindow):
         # 10. Help menu (Always final menu on desktop menubar)
         help_menu = bar.addMenu("&Help")
         self.help_action = self._action(help_menu, "Help", self.about, QKeySequence.StandardKey.HelpContents, "help")
+        self._action(help_menu, "&Interactive Quick Tour…", self.open_guided_tour, None, "workflow")
         help_menu.addSeparator()
         self._action(help_menu, "Verify &Air-Gapped & Offline Integrity…", self.verify_airgap_dialog, None, "shield")
         self._action(help_menu, "Check for &Updates…", self.check_for_updates_dialog, None, "update", True)
@@ -2802,17 +2809,38 @@ class ModernWindow(QMainWindow):
 
     def paste_cells(self):
         focused = QApplication.focusWidget()
-        if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not self.table.isAncestorOf(focused): focused.paste(); return
-        if self.column_names.hasFocus():
-            text = QApplication.clipboard().text().rstrip("\r\n")
-            if "\n" in text or "\r" in text:
-                self.statusBar().showMessage("Paste one row of column names.", 10000); return
-            start = max(0, self.column_names.currentColumn())
-            self._call(lambda: self.presenter.rename_columns(start, text.split("\t")))
+        in_table = self.table.isAncestorOf(focused) or focused is self.table
+        in_col_names = self.column_names.hasFocus() or self.column_names.isAncestorOf(focused)
+        if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not in_table and not in_col_names:
+            focused.paste()
             return
-        self._commit_editor(); row, col = self.table.currentRow(), self.table.currentColumn()
+        raw_text = (QApplication.clipboard().text() or "").replace("\r\n", "\n").replace("\r", "\n").replace("\u2028", "\n").replace("\u2029", "\n")
+        if in_col_names:
+            self._commit_editor()
+            text = raw_text.rstrip("\n")
+            if not text:
+                return
+            start = max(0, self.column_names.currentColumn())
+            if "\n" not in text:
+                self._call(lambda: self.presenter.rename_columns(start, text.split("\t")))
+                return
+            # Multi-row Excel clipboard pasted while focused in the header row:
+            # treat first row as column names and remaining rows as row-1..N data.
+            import csv as _csv, io as _io
+            parsed_rows = [r for r in _csv.reader(_io.StringIO(raw_text), delimiter="\t") if r]
+            if parsed_rows:
+                header_row = parsed_rows[0]
+                body_text = "\n".join("\t".join(r) for r in parsed_rows[1:])
+                def _paste_with_headers():
+                    self.presenter.rename_columns(start, header_row)
+                    if body_text:
+                        self.presenter.paste(0, start, body_text)
+                self._call(_paste_with_headers)
+            return
+        self._commit_editor()
+        row, col = self.table.currentRow(), self.table.currentColumn()
         if row < 0 or col < 0: row, col = 0, 0
-        self._call(lambda: self.presenter.paste(self.page * self.PAGE_SIZE + row, col, QApplication.clipboard().text()))
+        self._call(lambda: self.presenter.paste(self.page * self.PAGE_SIZE + row, col, raw_text))
 
     def clear_cells(self):
         focused = QApplication.focusWidget()
@@ -3291,10 +3319,15 @@ class ModernWindow(QMainWindow):
 
     def open_document(self, typed=False):
         if not self._confirm_leave(): return
-        path, _ = QFileDialog.getOpenFileName(self, "Open project or worksheet", "", "Projects and worksheets (*.mpx *.statcraft *.csv *.tsv *.tab *.mwx *.jmp *.jsl);;JMP Tables (*.jmp *.jsl);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open project or worksheet",
+            "",
+            "Projects and worksheets (*.xlsx *.mpx *.statcraft *.csv *.tsv *.tab *.mwx *.jmp *.jsl);;Excel Workbooks (*.xlsx);;JMP Tables (*.jmp *.jsl);;All files (*)",
+        )
         if not path: return
         column_types = None
-        if typed and Path(path).suffix.lower() in (".csv", ".tsv", ".tab"):
+        if typed and Path(path).suffix.lower() in (".csv", ".tsv", ".tab", ".xlsx"):
             text, accepted = QInputDialog.getText(self, "Column types", "Types in column order: number, text or date. Blank uses inference.")
             if not accepted: return
             if text.strip(): column_types = [value.strip().lower() for value in text.split(",")]
@@ -6140,7 +6173,15 @@ class ModernWindow(QMainWindow):
         self.result_tabs.tabBar().setVisible(False)
         if hasattr(self, "tab_corner_widget"):
             self.tab_corner_widget.setVisible(False)
-        welcome = WelcomeWatermarkWidget(self.open_document, self.new_document, self.new_worksheet, on_try_connect=self.load_connect_sample, on_overview=self.show_connect_overview)
+        welcome = WelcomeWatermarkWidget(
+            self.open_document,
+            self.new_document,
+            self.new_worksheet,
+            on_try_connect=self.load_connect_sample,
+            on_overview=self.show_connect_overview,
+            on_sample_library=self.open_sample_library,
+            on_guided_tour=self.open_guided_tour,
+        )
         self.result_tabs.addTab(welcome, "Session")
         if hasattr(self,"_workspace"):self._workspace.rebuild()
         self.result_title.setText("Session output")
@@ -7754,18 +7795,53 @@ class ModernWindow(QMainWindow):
         self.show_result(e1)
         self.statusBar().showMessage("StatCraft Connect: Tri-Engine Tour Project loaded with 3 benchmark analyses!", 8000)
 
-    def load_connect_sample(self):
+    def load_sample_dataset(self, key: str, run_starter: bool = False):
         if not self._confirm_leave():
             return
-        from .connect_hub import create_chemical_process_sample
-        ws = create_chemical_process_sample()
+        from .onboarding import build_sample_worksheet
+        ws = build_sample_worksheet(key)
+        self.presenter.new()
         self.presenter.worksheet = ws
+        self.presenter.native_project = None
+        self.presenter.project_path = None
+        self.presenter.history = []
+        self.presenter.dirty = False
+        self.page = 0
+        self.selected_entry = None
         self._prepare_blank()
         self.refresh()
-        entry = self._call(lambda: self.presenter.multiple_regression(0, [1, 2]), result=True)
-        if entry:
-            self.show_result(entry)
-            self.statusBar().showMessage("StatCraft Connect: Chemical Process sample loaded. Model bridge is active!", 8000)
+        self.setWindowTitle(f"StatCraft - {ws.name}")
+        if run_starter and key == "chemical_process":
+            entry = self._call(lambda: self.presenter.multiple_regression(0, [1, 2]), result=True)
+            if entry:
+                self.statusBar().showMessage(
+                    f"Sample loaded: {ws.name} ({ws.row_count} rows). Starter regression model fitted!",
+                    8000,
+                )
+                return
+        self.statusBar().showMessage(f"Sample loaded: {ws.name} ({ws.row_count} rows).", 6000)
+
+    def open_sample_library(self):
+        from .onboarding import SampleLibraryDialog
+        dlg = SampleLibraryDialog(self)
+        if dlg.exec() and dlg.selected_key:
+            self.load_sample_dataset(dlg.selected_key, run_starter=(dlg.selected_key == "chemical_process"))
+
+    def open_guided_tour(self):
+        from .onboarding import GuidedTourDialog
+        dlg = GuidedTourDialog(
+            self,
+            actions={
+                "load_sample": lambda: self.load_sample_dataset("chemical_process", run_starter=True),
+                "data_doctor": self.run_data_doctor_dialog,
+                "graph_builder": lambda: self.graph("builder"),
+                "command_palette": self.open_command_palette,
+            },
+        )
+        dlg.exec()
+
+    def load_connect_sample(self):
+        self.load_sample_dataset("chemical_process", run_starter=True)
 
     def connect_open_explorer(self, entry):
         from .connect_explorer import open_interactive_explorer
@@ -9476,6 +9552,8 @@ def main():
     sandbox_mode = "--sandbox" in sys.argv
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("StatCraft"); app.setOrganizationName("StatCraft")
+    from .crash_dialog import install_crash_hook
+    install_crash_hook(lambda: QApplication.activeWindow())
     from .startup import start_window, dispose_startup
     start_window(app, lambda: ModernWindow(sandbox_mode=sandbox_mode), sys.argv[1:])
     result=app.exec()

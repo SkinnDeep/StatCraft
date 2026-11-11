@@ -158,7 +158,7 @@ def _unique_worksheet_name(presenter, desired):
         suffix += 1
 
 
-def store_prepared(presenter, sheet, destination='worksheet'):
+def store_prepared(presenter, sheet, destination='worksheet', unique_name=False):
     """A new project lets native MPX inputs participate without rewriting their structure."""
     sheet.validate();_bound(sheet.row_count,len(sheet.columns))
     if destination=='project':
@@ -166,7 +166,8 @@ def store_prepared(presenter, sheet, destination='worksheet'):
         target=Presenter();target.worksheet=sheet;target.dirty=True
         return target
     if destination!='worksheet':raise ValueError('Choose a supported destination.')
-    target=presenter.add_worksheet(_unique_worksheet_name(presenter, sheet.name))
+    name = _unique_worksheet_name(presenter, sheet.name) if unique_name else sheet.name
+    target=presenter.add_worksheet(name)
     target.columns=sheet.columns;target.constants=[];target.matrices=[];target.metadata={}
     return presenter
 

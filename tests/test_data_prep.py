@@ -43,7 +43,7 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(out.columns[1].kind,'date');self.assertEqual(out.columns[1].values,[45001])
 
     def test_invalid_selection_and_mixed_types(self):
-        for fn,args in [(d.stack_columns,(self.sheet,[0,2])),(d.transpose,(self.sheet,[0,2])),(d.stack_columns,(self.sheet,[0,0])),(d.transpose,(self.sheet,[True])),(d.unstack_columns,(self.sheet,[0],0))]:
+        for fn,args in [(d.stack_columns,(self.sheet,[0,2])),(d.transpose,(self.sheet,[0,0])),(d.stack_columns,(self.sheet,[0,0])),(d.transpose,(self.sheet,[True])),(d.unstack_columns,(self.sheet,[0],0))]:
             with self.assertRaises(ValueError):fn(*args)
 
     def test_stacking_worksheets_name_union_and_source(self):

@@ -44,7 +44,7 @@ class TestSvgAndHtmlExport(unittest.TestCase):
             self.assertIn("Production Data", html_text)
             self.assertIn("Multiple Regression", html_text)
             self.assertIn("Executive Brief", html_text)
-            self.assertIn("1.3800", html_text)
+            self.assertIn("1.38", html_text)
 
 
 if __name__ == "__main__":

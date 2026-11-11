@@ -752,6 +752,36 @@ def translate_entry_to_r(entry: Dict[str, Any], worksheet: Worksheet) -> Tuple[s
         ]
         t_body = list(b_body)
 
+    elif "two_variances" in analysis or action == "two_variances":
+        s_cfg = params.get("settings", params) if isinstance(params.get("settings"), dict) else params
+        if "samples_col" in s_cfg and "subscripts_col" in s_cfg:
+            val_col = worksheet.columns[s_cfg["samples_col"]].name
+            grp_col = worksheet.columns[s_cfg["subscripts_col"]].name
+            b_body = [
+                "# Two-Variances F-Test & Levene Diagnostics",
+                f"fit <- var.test(df[[{_escape_str(val_col)}]] ~ as.factor(df[[{_escape_str(grp_col)}]]), data = df)",
+                "print(fit)",
+                f"boxplot(df[[{_escape_str(val_col)}]] ~ df[[{_escape_str(grp_col)}]], col = '#93c5fd', xlab = {_escape_str(grp_col)}, ylab = {_escape_str(val_col)}, main = 'Variances Comparison')",
+            ]
+            t_body = [
+                f"ggplot(df, aes(x = as.factor(.data[[{_escape_str(grp_col)}]]), y = .data[[{_escape_str(val_col)}]], fill = as.factor(.data[[{_escape_str(grp_col)}]]))) +",
+                "  geom_boxplot(alpha = 0.8) + theme_minimal(base_size = 12) + theme(legend.position = 'none')",
+            ]
+        else:
+            s1 = worksheet.columns[s_cfg.get("col1", 0)].name if len(worksheet.columns) > 0 else "Sample1"
+            s2 = worksheet.columns[s_cfg.get("col2", 1)].name if len(worksheet.columns) > 1 else s1
+            b_body = [
+                "# Two-Variances F-Test",
+                f"fit <- var.test(df[[{_escape_str(s1)}]], df[[{_escape_str(s2)}]])",
+                "print(fit)",
+                f"boxplot(df[[{_escape_str(s1)}]], df[[{_escape_str(s2)}]], names = c({_escape_str(s1)}, {_escape_str(s2)}), col = c('#93c5fd', '#fecdd3'), main = 'Two Variances Comparison')",
+            ]
+            t_body = [
+                f"df %>% select(all_of(c({_escape_str(s1)}, {_escape_str(s2)}))) %>%",
+                "  pivot_longer(everything(), names_to = 'Sample', values_to = 'Value') %>%",
+                "  ggplot(aes(x = Sample, y = Value, fill = Sample)) + geom_boxplot(alpha = 0.8) + theme_minimal(base_size = 12)",
+            ]
+
     # UNIVERSAL SMART FALLBACK (Matches ANY other analysis or graph)
     else:
         # Detect relevant column names

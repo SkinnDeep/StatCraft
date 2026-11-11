@@ -110,6 +110,13 @@ def resolve_variables(text, worksheet, kinds=('number',)):
     return indices
 
 
+class _AutoErrorLabel(QLabel):
+    """QLabel that automatically toggles visibility when non-empty error text is set."""
+    def setText(self, text):
+        super().setText(text)
+        self.setVisible(bool(str(text or "").strip()))
+
+
 class VariableEntry(QLineEdit):
     def __init__(self, focus_callback, parent=None):
         super().__init__(parent); self.focus_callback=focus_callback
@@ -347,7 +354,7 @@ class ProcedureDialog(QDialog):
                 control.setPlaceholderText(spec.get('placeholder','Optional' if spec.get('optional') else ''))
             self.controls[spec['key']]=control; form.addRow(spec['label'],control)
         right=QVBoxLayout(); right.addLayout(form); right.addStretch(); body.addLayout(right,2); layout.addLayout(body)
-        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
+        self.error=_AutoErrorLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Reset)
         reset_btn = buttons.button(QDialogButtonBox.StandardButton.Reset)
         if reset_btn:
@@ -357,7 +364,8 @@ class ProcedureDialog(QDialog):
             self.activate(self.selectors[0]['key']); self.controls[self.active_key].setFocus()
 
         ws_name = getattr(self.worksheet, 'name', '')
-        state_key = (ws_name, self.windowTitle())
+        col_sig = tuple((c.name, c.kind) for c in getattr(self.worksheet, 'columns', []))
+        state_key = (id(self.worksheet), ws_name, self.windowTitle(), col_sig)
         if state_key in self._LAST_DIALOG_STATE:
             saved = self._LAST_DIALOG_STATE[state_key]
             for k, val in saved.items():
@@ -504,8 +512,13 @@ class ProcedureDialog(QDialog):
                         break
             return
 
+        self._save_dialog_state()
+        self.accept()
+
+    def _save_dialog_state(self):
         ws_name = getattr(self.worksheet, 'name', '')
-        state_key = (ws_name, self.windowTitle())
+        col_sig = tuple((c.name, c.kind) for c in getattr(self.worksheet, 'columns', []))
+        state_key = (id(self.worksheet), ws_name, self.windowTitle(), col_sig)
         saved = {}
         for k, ctrl in self.controls.items():
             if isinstance(ctrl, QComboBox):
@@ -515,8 +528,6 @@ class ProcedureDialog(QDialog):
             elif isinstance(ctrl, QLineEdit):
                 saved[k] = ctrl.text()
         self._LAST_DIALOG_STATE[state_key] = saved
-
-        self.accept()
 
 
 class ScatterTypeDialog(QDialog):
@@ -653,7 +664,7 @@ class ScatterDialog(QDialog):
         labels=QPushButton('Labels…'); labels.setAutoDefault(False); labels.clicked.connect(self.edit_labels); right.addWidget(labels)
         hint=QLabel('Click a Y or X cell, then double-click an available variable or click Select.\nEach completed row creates one scatterplot. You can also type C numbers or quoted column names.')
         hint.setWordWrap(True); hint.setStyleSheet("color: #64748b; font-size: 8pt;"); right.addWidget(hint); body.addLayout(right,2); layout.addLayout(body)
-        self.error=QLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
+        self.error=_AutoErrorLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.validate); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
 

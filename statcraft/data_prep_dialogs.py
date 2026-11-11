@@ -11,8 +11,8 @@ def destinations(presenter):
     return ['New worksheet','New project'] if native is None or getattr(native,'statcraft_owned',False) else ['New project']
 
 
-def install(window, sheet, destination):
-    target=data_prep.store_prepared(window.presenter,sheet,'worksheet' if destination=='New worksheet' else 'project')
+def install(window, sheet, destination, unique_name=False):
+    target=data_prep.store_prepared(window.presenter,sheet,'worksheet' if destination=='New worksheet' else 'project', unique_name=unique_name)
     if target is window.presenter:
         if hasattr(window, 'page'):
             window.page = 0
@@ -138,7 +138,7 @@ class SplitWorksheetDialog(ProcedureDialog):
             values = self.values()
             sheets = data_prep.split_worksheet(self.worksheet, values['by_indices'], include_missing=values.get('include_missing', True))
             for s in sheets:
-                install(self.window, s, 'New worksheet')
+                install(self.window, s, 'New worksheet', unique_name=True)
             self.prepared = self.window.presenter
         except (ValueError, TypeError, IndexError) as exc:
             self.error.setText(str(exc))

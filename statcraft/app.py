@@ -292,6 +292,17 @@ class Presenter:
         elif suffix == ".mwx":
             worksheet = io.load_mwx(path)
             project_path = None
+        elif suffix == ".xlsx":
+            from .xlsx_import import load_xlsx
+            sheets = load_xlsx(path, column_types=column_types)
+            if len(sheets) == 1:
+                worksheet = sheets[0]
+            else:
+                from .mpx_create import create_project
+                worksheet = sheets[0]
+                native_project = create_project(sheets)
+                native_project.statcraft_owned = True
+            project_path = None
         elif suffix in (".jmp", ".jsl"):
             from .jmp_reader import load_jmp
             from .mpx_create import create_project
@@ -300,7 +311,7 @@ class Presenter:
             native_project.statcraft_owned = True
             project_path = None
         else:
-            raise io.UnsupportedFormatError("Open an .mpx project, .statcraft, .csv, .tsv, supported .mwx, or .jmp/.jsl file.")
+            raise io.UnsupportedFormatError("Open an .xlsx, .mpx, .statcraft, .csv, .tsv, supported .mwx, or .jmp/.jsl file.")
         # Replace the active document only after the complete import succeeds.
         self.worksheet = worksheet
         self.native_project = native_project
@@ -502,7 +513,8 @@ class Presenter:
         if type(row) is not int or type(column) is not int or row < 0 or column < 0:
             raise ValueError("Select a valid paste destination.")
         try:
-            rows = list(csv.reader(text_io.StringIO(text, newline=""), delimiter="\t", strict=True))
+            normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\u2028", "\n").replace("\u2029", "\n")
+            rows = list(csv.reader(text_io.StringIO(normalized, newline=""), delimiter="\t", strict=True))
         except csv.Error as exc:
             raise ValueError("Invalid clipboard table: " + str(exc)) from exc
         while rows and rows[-1] == []:
@@ -7490,7 +7502,10 @@ class Presenter:
 
 
 def format_entry(entry):
-    title = entry["title"] + "\n" + entry["time"] + "\n" + "─" * 76 + "\n\n"
+    title_str = str(entry.get("title") or "Analysis")
+    time_str = str(entry.get("time") or "")
+    header = title_str + ("\n" + time_str if time_str else "")
+    title = header + "\n" + "─" * 76 + "\n\n"
     result = entry["result"]
     if isinstance(result, dict) and (result.get('analysis') == 'bootstrap_uncertainty' or 'bootstrap_report' in result):
         return title + result.get('text', '')

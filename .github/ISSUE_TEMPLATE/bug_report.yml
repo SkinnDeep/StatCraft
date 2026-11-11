@@ -1,0 +1,24 @@
+name: Bug Report
+description: Report an unexpected error or bug in StatCraft Desktop
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Briefly describe what you clicked or entered when the issue occurred.
+      placeholder: Example: I opened an .xlsx file and ran One-Way ANOVA...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Anonymized Diagnostics / Traceback
+      description: Paste or keep the pre-filled StatCraft crash report (no worksheet data is included).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: StatCraft Version & OS
+      placeholder: v117.0.0 on Windows 11 / macOS / Linux

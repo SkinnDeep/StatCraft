@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, universal R code translation (Tidyverse, ggplot2, Base R), interactive 3D CAD response surfaces, and complete offline privacy.**
 
-[![Version](https://img.shields.io/badge/version-115.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-117.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v115.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v115.0.0) •
+[Download Release (v117.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v117.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -87,11 +87,18 @@ StatCraft breaks free from the rigid, static 1990s desktop paradigm with modern,
 
 ---
 
+## 🚀 What's New in v117.0.0 — First-Timer Experience, Direct Excel Import & Recovery
+
+- **Direct Excel (`.xlsx`) Import (`File > Open`)**: Open single-sheet and multi-sheet Microsoft Excel `.xlsx` workbooks natively with zero external dependencies—preserving dates, formulas/cached values, booleans, and column types.
+- **Starter Sample Library & 5-Step Interactive Quick Tour**: Launch straight into curated starter datasets (**Chemical Process Yield**, **Six Sigma Shaft Diameters**, **Semiconductor Wafer Defects**, **Accelerated Motor Reliability**) via the high-contrast Welcome screen or `File > Open Sample Dataset…`, or walk through `Help > Interactive Quick Tour…`.
+- **Crash Recovery Dialog (100% Opt-In, Zero Telemetry)**: On unexpected errors, StatCraft saves scrubbed local diagnostics without transmitting background telemetry and provides a one-click pre-filled GitHub Issue link alongside **Copy Crash Details** for offline/air-gapped environments.
+- **v116.x Quality & Predictive Analytics**: End-user reliability hardening across 40+ fixes plus Monte Carlo Simulation, Predictive ML (Random Forest / Gradient Boosting / Logistic), Pre-Flight Data Doctor, R Workbench, and Command Palette (`Ctrl+K`).
+
 ---
 
-## ⚡ 40 Make-or-Break Usability Parity Enhancements (v115.0.0)
+## ⚡ 40 Make-or-Break Usability Parity Enhancements
 
-StatCraft v115.0.0 introduces 40 targeted usability fixes and full behavioral parity with Minitab, ensuring the application responds precisely as experienced practitioners expect:
+StatCraft includes 40 targeted usability fixes and full behavioral parity with Minitab, ensuring the application responds precisely as experienced practitioners expect:
 
 ### 1. Authentic Worksheet Navigation & Cell Editing
 - **In-Editor Arrow Traversal**: Pressing Up/Down/Left/Right inside a cell editor now commits cleanly and moves to the adjacent cell without getting trapped or requiring extra mouse clicks.
@@ -235,7 +242,7 @@ StatCraft v115.0.0 introduces 40 targeted usability fixes and full behavioral pa
 - **Definitive Screening Designs (DSD)**: Main effects unconfounded with two-factor interactions.
 
 ### 8. Native File Compatibility & Data Prep
-- **MPX / MWX Compatibility**: Read, edit, and save native Minitab project and worksheet containers with column types, formatting, and formulas preserved.
+- **Excel, MPX / MWX & JMP Compatibility**: Directly open Microsoft Excel (`.xlsx`) workbooks, read/edit/save native Minitab (`.mpx` / `.mwx`) containers, and import JMP (`.jmp` / `.jsl`) datasets with column types, dates, and formulas preserved.
 - **Office Export**: Export worksheets and high-resolution reports to Microsoft Excel (`.xlsx`), Word (`.docx`), PowerPoint (`.pptx`), and PDF.
 - **Data Calculator & Transformations**: Formula evaluation, pattern generation, stacking/unstacking, transposing, sorting, and standardization.
 
@@ -285,7 +292,7 @@ StatCraft is built on the cross-platform Qt6 (PySide6) framework:
 
 | Platform | Current Status | Release Artifact |
 |---|---|---|
-| **Windows x64** | **Available (v115.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
+| **Windows x64** | **Available (v117.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
 | **macOS (Apple Silicon & Intel)** | *In Preparation* | `.dmg` installer & standalone `.app` bundle |
 | **Linux (x86_64)** | *In Preparation* | `AppImage` & `.deb` package |
 

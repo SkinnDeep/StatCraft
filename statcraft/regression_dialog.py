@@ -310,8 +310,13 @@ class FitRegressionModelDialog(ProcedureDialog):
 
             self.window.refresh()
             self.window.show_result(self.entry)
+            self.error.setVisible(False)
+            self.parameters = v
+            if hasattr(self, "_save_dialog_state"):
+                self._save_dialog_state()
         except Exception as exc:
             self.error.setText(str(exc))
+            self.error.setVisible(True)
             return
 
         self.accept()

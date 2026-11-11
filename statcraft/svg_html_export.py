@@ -159,7 +159,7 @@ def export_session_to_html(
     <div class="container">
         <header>
             <h1>StatCraft Statistical Session Report</h1>
-            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.6.0</div>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v117.0.0</div>
         </header>
         <main>
             {body_content}
@@ -187,7 +187,7 @@ def export_session_to_markdown(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: List[str] = [
         f"# StatCraft Session Report — {worksheet_name}",
-        f"*Generated locally: {now_str} · StatCraft v116.6.0*",
+        f"*Generated locally: {now_str} · StatCraft v117.0.0*",
         "",
         "## Table of Contents",
     ]

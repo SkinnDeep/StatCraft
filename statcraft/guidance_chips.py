@@ -20,8 +20,10 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
     chips: List[Dict[str, str]] = []
 
     # 1. Normality test failures
-    p_norm = result.get("normality_p") or result.get("anderson_darling_p")
-    if p_norm is not None and p_norm < 0.05:
+    p_norm = result.get("normality_p")
+    if p_norm is None:
+        p_norm = result.get("anderson_darling_p")
+    if isinstance(p_norm, (int, float)) and p_norm < 0.05:
         chips.append({
             "label": "⚡ Try Johnson Transformation",
             "action": "johnson_transformation",
@@ -34,7 +36,8 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
         })
 
     # 2. Significant ANOVA -> Tukey HSD post-hoc
-    if ("anova" in analysis or action in ("oneway_anova", "twoway_anova")) and result.get("p_value", 1.0) < 0.05:
+    anova_p = result.get("p_value")
+    if ("anova" in analysis or action in ("oneway_anova", "twoway_anova")) and isinstance(anova_p, (int, float)) and anova_p < 0.05:
         chips.append({
             "label": "🔍 Tukey Multiple Comparisons",
             "action": "tukey_comparisons",
@@ -49,7 +52,10 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
                 "action": "residual_plots",
                 "description": "Inspect outliers and high leverage observations"
             })
-        if any(c.get("vif", 1.0) > 5.0 for c in result.get("coefficients", [])):
+        if any(
+            isinstance(c.get("vif"), (int, float)) and c["vif"] > 5.0
+            for c in result.get("coefficients", [])
+        ):
             chips.append({
                 "label": "⚙️ Stepwise Variable Selection",
                 "action": "stepwise_regression",
@@ -59,7 +65,7 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
     # 4. Capability Analysis -> What-If or Centering
     if "capability" in analysis or action in ("capability_analysis", "normal_capability"):
         cpk = result.get("cpk")
-        if cpk is not None and cpk < 1.0:
+        if isinstance(cpk, (int, float)) and cpk < 1.0:
             chips.append({
                 "label": "⚡ Live What-If Tolerance Simulation",
                 "action": "what_if_tolerance",
@@ -81,7 +87,8 @@ def get_smart_guidance_chips(entry: Dict[str, Any]) -> List[Dict[str, str]]:
             "action": "discover_best_model",
             "description": "Benchmark CART, Random Forests, TreeNet, MARS, and Linear/Logistic side-by-side"
         })
-    if analysis in ("multiple_regression", "linear_regression") and (result.get("r_sq") or 1.0) < 0.70:
+    r_sq = result.get("r_sq") if result.get("r_sq") is not None else result.get("r_squared")
+    if analysis in ("multiple_regression", "linear_regression") and isinstance(r_sq, (int, float)) and r_sq < 0.70:
         chips.append({
             "label": "🌲 Try Random Forests / MARS",
             "action": "random_forest",

@@ -67,7 +67,12 @@ class TestRCodeExportBar(unittest.TestCase):
         self.assertIn("r_script", conn.to_dict())
         r_script = conn.to_dict()["r_script"]
         self.assertIn("StatCraft", r_script)
-        self.assertIn("summary(sub_df)", r_script)
+        self.assertIn("t.test", r_script)
+
+        # Unmapped custom entries still produce generic summary(sub_df) script
+        unmapped = {"title": "Custom Procedure", "result": {"analysis": "custom_summary_proc"}}
+        conn2 = create_connected_analysis_from_entry(unmapped, self.ws)
+        self.assertIn("summary(sub_df)", conn2.to_dict()["r_script"])
 
     def test_modern_window_r_translator_ui(self):
         from statcraft.modern_app import ModernWindow

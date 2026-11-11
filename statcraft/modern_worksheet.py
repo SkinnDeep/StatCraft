@@ -15,9 +15,9 @@ def _is_dark_active(widget=None) -> bool:
 
 """Worksheet key navigation, active cell editor, and Standard statistical column/row selection painting."""
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
-    QHeaderView, QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableWidget,
+    QApplication, QHeaderView, QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableWidget,
 )
 
 
@@ -148,6 +148,16 @@ class WorksheetDelegate(QStyledItemDelegate):
     def eventFilter(self, editor, event):
         if event.type() == QEvent.Type.KeyPress:
             key = event.key()
+            if event.matches(QKeySequence.StandardKey.Paste):
+                clip_text = QApplication.clipboard().text() or ""
+                if any(sep in clip_text for sep in ("\n", "\r", "\t")):
+                    win = self.parent().window() if self.parent() is not None else None
+                    if isinstance(editor, QLineEdit):
+                        editor.setText(self._initial_editor_text)
+                    self.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
+                    if win is not None and hasattr(win, "paste_cells"):
+                        win.paste_cells()
+                        return True
             if key == Qt.Key.Key_Escape and isinstance(editor, QLineEdit):
                 editor.setText(self._initial_editor_text)
                 self.closeEditor.emit(editor, QStyledItemDelegate.EndEditHint.RevertModelCache)
@@ -237,6 +247,11 @@ class WorksheetTable(QTableWidget):
 
     def event(self, event):
         if event.type() == QEvent.Type.KeyPress:
+            if event.matches(QKeySequence.StandardKey.Paste):
+                win = self.window()
+                if hasattr(win, "paste_cells"):
+                    win.paste_cells()
+                    return True
             key = event.key()
             mods = event.modifiers()
             # Ctrl+Space / Ctrl+Home / Ctrl+End / Ctrl+Up
@@ -322,6 +337,11 @@ class ColumnNamesTable(QTableWidget):
 
     def event(self, event):
         if event.type() == QEvent.Type.KeyPress:
+            if event.matches(QKeySequence.StandardKey.Paste):
+                win = self.window()
+                if hasattr(win, "paste_cells"):
+                    win.paste_cells()
+                    return True
             key = event.key()
             mods = event.modifiers()
             if not (mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)):

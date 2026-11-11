@@ -38,7 +38,13 @@ def generate_executive_summary(entry: Dict[str, Any], worksheet: Optional[Worksh
         # Significant predictors
         coeffs = result.get("coefficients", [])
         if coeffs:
-            sig_preds = [c.get("term") or c.get("name") for c in coeffs if c.get("term") != "Constant" and c.get("p_value", 1.0) < 0.05]
+            sig_preds = [
+                c.get("term") or c.get("name")
+                for c in coeffs
+                if (c.get("term") or c.get("name")) != "Constant"
+                and isinstance(c.get("p_value"), (int, float))
+                and c["p_value"] < 0.05
+            ]
             if sig_preds:
                 bullets.append(f"Key driving factor(s) with confirmed impact: {', '.join(sig_preds[:3])}.")
             else:
@@ -66,7 +72,10 @@ def generate_executive_summary(entry: Dict[str, Any], worksheet: Optional[Worksh
             else:
                 bullets.append(f"Warning: Process is NOT capable (Cpk = {cpk:.2f} < 1.00); immediate centering or variance reduction required.")
 
-        if ppm is not None:
+        if isinstance(ppm, dict):
+            overall = ppm.get("expected_overall") if isinstance(ppm.get("expected_overall"), dict) else ppm
+            ppm = overall.get("total")
+        if isinstance(ppm, (int, float)):
             bullets.append(f"Estimated defect rate is {ppm:,.0f} PPM ({ppm/10000:.3f}% out-of-specification risk).")
 
         if cp is not None and cpk is not None and (cp - cpk) > 0.25:

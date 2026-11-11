@@ -22,6 +22,7 @@ def default_fitted_line_plot_options() -> Dict[str, Any]:
         "confidence": 0.95,
         "ci": True,
         "pi": True,
+        "shade_ci": False,
         "title": "",
         "residuals_type": "regular",  # 'regular', 'standardized', 'deleted'
         "graphs": "four",  # 'four', 'fits', 'order', 'normal', 'histogram', 'none'
@@ -58,6 +59,10 @@ class FittedLinePlotOptionsDialog(QDialog):
         self.chk_pi.setChecked(self.options.get("pi", True))
         l_disp.addWidget(self.chk_pi)
 
+        self.chk_shade_ci = QCheckBox("Shade confidence interval band")
+        self.chk_shade_ci.setChecked(self.options.get("shade_ci", False))
+        l_disp.addWidget(self.chk_shade_ci)
+
         h_conf = QHBoxLayout()
         h_conf.addWidget(QLabel("Confidence level:"))
         self.spin_conf = QDoubleSpinBox()
@@ -88,6 +93,7 @@ class FittedLinePlotOptionsDialog(QDialog):
     def validate(self):
         self.options["ci"] = self.chk_ci.isChecked()
         self.options["pi"] = self.chk_pi.isChecked()
+        self.options["shade_ci"] = self.chk_shade_ci.isChecked()
         self.options["confidence"] = self.spin_conf.value() / 100.0
         self.options["title"] = self.txt_title.text().strip()
         self.accept()
@@ -306,6 +312,19 @@ class FittedLinePlotDialog(ProcedureDialog):
         l_model.addWidget(self.rdo_quad)
         l_model.addWidget(self.rdo_cub)
 
+        # Direct Interval Display Toggles (CI, PI, Shading)
+        grp_bands = QGroupBox("Interval Visuals")
+        l_bands = QHBoxLayout(grp_bands)
+        self.chk_show_ci = QCheckBox("Show Confidence Interval (CI)")
+        self.chk_show_ci.setChecked(bool(self.options.get("ci", True)))
+        self.chk_show_pi = QCheckBox("Show Prediction Interval (PI)")
+        self.chk_show_pi.setChecked(bool(self.options.get("pi", True)))
+        self.chk_shade_ci = QCheckBox("Shade CI band")
+        self.chk_shade_ci.setChecked(bool(self.options.get("shade_ci", False)))
+        l_bands.addWidget(self.chk_show_ci)
+        l_bands.addWidget(self.chk_show_pi)
+        l_bands.addWidget(self.chk_shade_ci)
+
         # Subdialog Buttons
         grid = QGridLayout()
         self.btn_options = QPushButton("Options…")
@@ -324,9 +343,15 @@ class FittedLinePlotDialog(ProcedureDialog):
         layout = self.layout()
         idx_footer = layout.count() - 2
         layout.insertWidget(idx_footer, grp_model)
-        layout.insertLayout(idx_footer + 1, grid)
+        layout.insertWidget(idx_footer + 1, grp_bands)
+        layout.insertLayout(idx_footer + 2, grid)
 
         self.restore_previous()
+
+    def _sync_interval_checks(self):
+        self.chk_show_ci.setChecked(bool(self.options.get("ci", True)))
+        self.chk_show_pi.setChecked(bool(self.options.get("pi", True)))
+        self.chk_shade_ci.setChecked(bool(self.options.get("shade_ci", False)))
 
     def restore_previous(self):
         p = self.window.presenter
@@ -339,12 +364,15 @@ class FittedLinePlotDialog(ProcedureDialog):
             params = entry.get("recipe", {}).get("parameters", {})
             resp_idx = params.get("response_index")
             pred_idx = params.get("predictor_index")
-            if resp_idx is not None and resp_idx < len(self.worksheet.columns):
-                self.fields["response_index"].set_reference(format_variable_reference(self.worksheet.columns[resp_idx]))
-            if pred_idx is not None and pred_idx < len(self.worksheet.columns):
-                self.fields["predictor_index"].set_reference(format_variable_reference(self.worksheet.columns[pred_idx]))
+            try:
+                if resp_idx is not None and 0 <= resp_idx < len(self.worksheet.columns):
+                    self.controls["response_index"].setText(format_variable_reference(resp_idx, self.worksheet))
+                if pred_idx is not None and 0 <= pred_idx < len(self.worksheet.columns):
+                    self.controls["predictor_index"].setText(format_variable_reference(pred_idx, self.worksheet))
+            except Exception:
+                continue
 
-            m_type = params.get("model_type", "linear").lower()
+            m_type = str(params.get("model_type", "linear")).lower()
             if m_type == "quadratic":
                 self.rdo_quad.setChecked(True)
             elif m_type == "cubic":
@@ -353,15 +381,22 @@ class FittedLinePlotDialog(ProcedureDialog):
                 self.rdo_lin.setChecked(True)
 
             opts = params.get("options", {})
-            if opts:
-                self.options.update(opts)
+            if isinstance(opts, dict):
+                merged = copy.deepcopy(default_fitted_line_plot_options())
+                merged.update(opts)
+                self.options = merged
+                self._sync_interval_checks()
             break
 
     def open_options(self):
+        self.options["ci"] = self.chk_show_ci.isChecked()
+        self.options["pi"] = self.chk_show_pi.isChecked()
+        self.options["shade_ci"] = self.chk_shade_ci.isChecked()
         d = FittedLinePlotOptionsDialog(self, self.options)
         try:
             if d.exec() == QDialog.DialogCode.Accepted:
                 self.options = d.options
+                self._sync_interval_checks()
         finally:
             d.setParent(None)
             d.close()
@@ -387,20 +422,30 @@ class FittedLinePlotDialog(ProcedureDialog):
             d.close()
             d.deleteLater()
 
-    def accept(self):
-        values = self.values()
+    def validate(self):
+        try:
+            values = self.values()
+        except (ValueError, TypeError, OverflowError) as exc:
+            self.error.setText(str(exc))
+            self.error.setVisible(True)
+            return
+
         resp_idx = values.get("response_index")
         pred_idx = values.get("predictor_index")
-
         if resp_idx is None or pred_idx is None:
-            self.set_error("Select both a Response (Y) and a Predictor (X).")
+            self.error.setText("Select both a Response (Y) and a Predictor (X).")
+            self.error.setVisible(True)
             return
         if resp_idx == pred_idx:
-            self.set_error("Response (Y) and Predictor (X) must be different columns.")
+            self.error.setText("Response (Y) and Predictor (X) must be different columns.")
+            self.error.setVisible(True)
             return
 
         m_type = "quadratic" if self.rdo_quad.isChecked() else "cubic" if self.rdo_cub.isChecked() else "linear"
         self.options["model_type"] = m_type
+        self.options["ci"] = self.chk_show_ci.isChecked()
+        self.options["pi"] = self.chk_show_pi.isChecked()
+        self.options["shade_ci"] = self.chk_shade_ci.isChecked()
 
         try:
             self.entry = self.window.presenter.fitted_line_plot(
@@ -410,11 +455,15 @@ class FittedLinePlotDialog(ProcedureDialog):
                 confidence=self.options.get("confidence", 0.95),
                 options=self.options,
             )
-            # Execute storage options if requested
             self._apply_storage(self.entry)
-            super().accept()
+            self.error.setVisible(False)
+            self.parameters = values
+            if hasattr(self, "_save_dialog_state"):
+                self._save_dialog_state()
+            self.accept()
         except Exception as exc:
-            self.set_error(str(exc))
+            self.error.setText(str(exc))
+            self.error.setVisible(True)
 
     def _apply_storage(self, entry: Dict[str, Any]):
         if not entry:

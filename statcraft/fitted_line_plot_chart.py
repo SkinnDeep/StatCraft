@@ -82,6 +82,7 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         self.title_text = opts.get("title") or f"Fitted Line Plot: {self.y_name} versus {self.x_name}"
         self.show_ci = bool(opts.get("ci", True))
         self.show_pi = bool(opts.get("pi", True))
+        self.shade_ci = bool(opts.get("shade_ci", False))
 
         pts = self.result.get("points", {})
         self.pts_x = [float(v) for v in pts.get("x", [])]
@@ -223,18 +224,20 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         p.setClipRect(plot_rect)
 
         if self.show_ci and self.curve_x and self.curve_ci_low and self.curve_ci_high:
-            ci_poly = []
-            for xv, yv in zip(self.curve_x, self.curve_ci_high):
-                ci_poly.append(QPointF(map_x(xv), map_y(yv)))
-            for xv, yv in reversed(list(zip(self.curve_x, self.curve_ci_low))):
-                ci_poly.append(QPointF(map_x(xv), map_y(yv)))
+            if self.shade_ci:
+                ci_poly = []
+                for xv, yv in zip(self.curve_x, self.curve_ci_high):
+                    ci_poly.append(QPointF(map_x(xv), map_y(yv)))
+                for xv, yv in reversed(list(zip(self.curve_x, self.curve_ci_low))):
+                    ci_poly.append(QPointF(map_x(xv), map_y(yv)))
 
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(2, 132, 199, 28))
-            p.drawPolygon(QPolygonF(ci_poly))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(2, 132, 199, 20))
+                p.drawPolygon(QPolygonF(ci_poly))
 
-            # Dashed CI boundary lines
-            pen_ci = QPen(QColor(CI_COLOR), 1.2, Qt.PenStyle.DashLine)
+            # Dashed CI boundary lines (always reset brush to NoBrush before open paths)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            pen_ci = QPen(QColor(CI_COLOR), 1.25, Qt.PenStyle.DashLine)
             p.setPen(pen_ci)
             path_ci_high = QPainterPath()
             path_ci_low = QPainterPath()
@@ -252,7 +255,8 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
 
         # 6. Dashed Prediction Interval Lines
         if self.show_pi and self.curve_x and self.curve_pi_low and self.curve_pi_high:
-            pen_pi = QPen(QColor(PI_COLOR), 1.2, Qt.PenStyle.DashLine)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            pen_pi = QPen(QColor(PI_COLOR), 1.25, Qt.PenStyle.DotLine)
             p.setPen(pen_pi)
             path_pi_high = QPainterPath()
             path_pi_low = QPainterPath()
@@ -270,6 +274,7 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
 
         # 7. Solid Bold Fitted Polynomial Regression Curve
         if self.curve_x and self.curve_fit:
+            p.setBrush(Qt.BrushStyle.NoBrush)
             pen_fit = QPen(QColor(FIT_COLOR), 2.0, Qt.PenStyle.SolidLine)
             p.setPen(pen_fit)
             path_fit = QPainterPath()
@@ -312,8 +317,9 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         p.restore()
 
         # 9. Top-Right Minitab Legend & Equation Card
+        legend_rows = 1 + int(self.show_ci) + int(self.show_pi)
         card_w = 195.0
-        card_h = 168.0
+        card_h = 122.0 + legend_rows * 16.0
         card_left = plot_rect.right() + 10.0
         card_top = plot_rect.top()
         card_rect = QRectF(card_left, card_top, card_w, card_h)

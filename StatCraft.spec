@@ -32,6 +32,9 @@ a = Analysis(
         'statcraft.calc_data',
         'statcraft.calc_data_dialogs',
         'statcraft.session_commands',
+        'statcraft.xlsx_import',
+        'statcraft.onboarding',
+        'statcraft.crash_dialog',
     ],
     datas=datas,
     excludes=['tkinter', '_tkinter', 'pandas', 'matplotlib', 'IPython', 'pytest']
@@ -93,8 +96,8 @@ if sys.platform == 'darwin':
             'CFBundleName': 'StatCraft',
             'CFBundleDisplayName': 'StatCraft',
             'CFBundleIdentifier': 'com.statcraft.desktop',
-            'CFBundleVersion': '116.6.0',
-            'CFBundleShortVersionString': '116.6.0',
+            'CFBundleVersion': '117.0.0',
+            'CFBundleShortVersionString': '117.0.0',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '11.0',
         }
