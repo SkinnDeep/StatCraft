@@ -454,3 +454,23 @@ def _draw_line(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None
         p.drawText(QRectF(sx(xv) - 28, plot.bottom() + 4, 56, 16), Qt.AlignmentFlag.AlignCenter, f"{xv:.3g}")
     p.setFont(QFont("Segoe UI", 9))
     p.drawText(QRectF(plot.left(), plot.bottom() + 20, plot.width(), 18), Qt.AlignmentFlag.AlignCenter, d.get("xlabel", ""))
+
+    # Multi-series legend in top-right corner
+    if len(series) > 1:
+        p.setFont(QFont("Segoe UI", 8))
+        leg_w = 132.0
+        leg_h = 12.0 + 16.0 * len(series)
+        leg_rect = QRectF(plot.right() - leg_w - 8, plot.top() + 8, leg_w, leg_h)
+        p.setBrush(QBrush(QColor(255, 255, 255, 225)))
+        p.setPen(QPen(QColor("#cbd5e1"), 1))
+        p.drawRoundedRect(leg_rect, 4, 4)
+        for li, s in enumerate(series):
+            ly = leg_rect.top() + 14.0 + li * 16.0
+            lpen = QPen(QColor(s.get("color", "#2563eb")), 2.0)
+            if s.get("dash"):
+                lpen.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(lpen)
+            p.drawLine(QPointF(leg_rect.left() + 8, ly), QPointF(leg_rect.left() + 26, ly))
+            p.setPen(QColor("#0f172a"))
+            lbl_s = p.fontMetrics().elidedText(str(s.get("label", f"Series {li+1}")), Qt.TextElideMode.ElideRight, int(leg_w - 36))
+            p.drawText(QRectF(leg_rect.left() + 30, ly - 8, leg_w - 36, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, lbl_s)

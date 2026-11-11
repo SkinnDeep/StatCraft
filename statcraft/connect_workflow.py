@@ -104,6 +104,30 @@ def create_workflow_from_entry(
         for idx, nm in enumerate(f_names):
             role_bindings[f"factor_{idx}"] = nm
 
+    for single_param, role_name in (
+        ("index", "variable"),
+        ("index1", "sample_1"),
+        ("index2", "sample_2"),
+        ("time_index", "time"),
+        ("event_index", "event"),
+        ("factor_index", "factor"),
+        ("exposure_index", "exposure"),
+    ):
+        val = params.get(single_param)
+        if isinstance(val, int) and 0 <= val < len(worksheet.columns):
+            role_bindings[role_name] = worksheet.columns[val].name
+
+    for list_param, role_prefix in (
+        ("response_indices", "resp_list"),
+        ("covariate_indices", "covariate"),
+        ("fixed_indices", "fixed"),
+        ("random_indices", "random"),
+    ):
+        if list_param in params and isinstance(params[list_param], (list, tuple)):
+            for idx, ci in enumerate(params[list_param]):
+                if isinstance(ci, int) and 0 <= ci < len(worksheet.columns):
+                    role_bindings[f"{role_prefix}_{idx}"] = worksheet.columns[ci].name
+
     step = WorkflowStep(
         step_id=f"step-1",
         action=action,
@@ -226,15 +250,37 @@ def replay_workflow(
                 if new_facts:
                     params["factor_indices"] = new_facts
 
+            for single_param, role_name in (
+                ("index", "variable"),
+                ("index1", "sample_1"),
+                ("index2", "sample_2"),
+                ("time_index", "time"),
+                ("event_index", "event"),
+                ("factor_index", "factor"),
+                ("exposure_index", "exposure"),
+            ):
+                if single_param in params and role_name in effective_mapping:
+                    params[single_param] = effective_mapping[role_name]
+
+            for list_param, role_prefix in (
+                ("response_indices", "resp_list"),
+                ("covariate_indices", "covariate"),
+                ("fixed_indices", "fixed"),
+                ("random_indices", "random"),
+            ):
+                if list_param in params and isinstance(params[list_param], (list, tuple)):
+                    remapped = [effective_mapping[f"{role_prefix}_{i}"] for i in range(len(params[list_param])) if f"{role_prefix}_{i}" in effective_mapping]
+                    if remapped:
+                        params[list_param] = remapped
+
             # Execute step through Presenter/Recipes
             recipe = {"action": step.action, "parameters": params}
             entry = run(presenter, recipe)
             replayed_entries.append(entry)
 
     finally:
-        # Restore if not active
-        if target_worksheet is not presenter.worksheet:
-            presenter.worksheet = target_worksheet
+        if not overwrite:
+            presenter.worksheet = orig_ws
 
     # Assess convergence & parameter shift against baseline
     convergence: Dict[str, Any] = {"converged": True, "shifts": []}

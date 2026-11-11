@@ -3480,9 +3480,14 @@ class ModernWindow(QMainWindow):
             self._show_welcome()
             self.statusBar().showMessage("Cleared all session output", 4000)
 
-    def export_all_graphs_dialog(self):
+    def _is_chart_entry(self, entry) -> bool:
         from .modern_charts import supported
-        graphs = [e for e in self.presenter.history if supported(e)]
+        res = entry.get("result", {}) if isinstance(entry, dict) else {}
+        act = (entry.get("recipe") or {}).get("action", "") if isinstance(entry, dict) else ""
+        return bool(supported(entry) or act == "graph_builder" or (isinstance(res, dict) and res.get("graph") == "graph_builder"))
+
+    def export_all_graphs_dialog(self):
+        graphs = [e for e in self.presenter.history if self._is_chart_entry(e)]
         if not graphs:
             QMessageBox.information(self, "Export All Graphs", "No graphs have been generated in this session yet.")
             return
@@ -3493,17 +3498,22 @@ class ModernWindow(QMainWindow):
         import re
         saved_count = 0
         dest_dir = Path(folder)
+        prev_selected = getattr(self, "selected_entry", None)
         for i, entry in enumerate(graphs):
             title = entry.get("title", f"Graph_{i+1}")
             clean_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', title).strip(' .')[:60]
             filename = dest_dir / f"{i+1:02d}_{clean_title}.png"
             self.show_result(entry)
+            QApplication.processEvents()
             frame = getattr(self, "_active_graph_frame", None)
             if frame is not None:
                 pix = frame.capture()
                 if not pix.isNull():
                     pix.save(str(filename), "PNG")
                     saved_count += 1
+        if prev_selected is not None:
+            self.show_result(prev_selected)
+            QApplication.processEvents()
         self.statusBar().showMessage(f"Successfully exported {saved_count} graph(s) to {folder}", 6000)
 
     def _find_in_text_dialog(self, text_edit):
@@ -3577,6 +3587,7 @@ class ModernWindow(QMainWindow):
 
     def _dialog(self, title, selectors, fields, callback, note=""):
         self._commit_editor()
+        self._last_dialog_action = lambda t=title, s=selectors, f=fields, cb=callback, n=note: self._dialog(t, s, f, cb, n)
         dialog = ProcedureDialog(self, title, self.presenter.worksheet, selectors, fields, note)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._call(lambda: callback(dialog.parameters), result=True)
@@ -5263,24 +5274,30 @@ class ModernWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_action is not None:
             dlg.selected_action.trigger()
 
-    def export_session_markdown_dialog(self):
-        from .svg_html_export import export_session_to_markdown
+    def _build_chart_widgets_for_history(self):
         from .modern_charts import ChartWidget, supported
-        if not self.presenter.history:
-            QMessageBox.information(self, "Export Session", "Run at least one analysis before exporting to Markdown.")
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Export Session as Markdown", "StatCraft_Session_Report.md", "Markdown (*.md)")
-        if not path:
-            return
         charts = {}
         for idx, entry in enumerate(self.presenter.history):
             if supported(entry):
                 w = ChartWidget(entry)
                 w.resize(760, 480)
                 charts[idx] = w
-        export_session_to_markdown(self.presenter.history, self.presenter.worksheet.name, path, chart_widgets=charts)
-        for w in charts.values():
-            w.close()
+        return charts
+
+    def export_session_markdown_dialog(self):
+        from .svg_html_export import export_session_to_markdown
+        if not self.presenter.history:
+            QMessageBox.information(self, "Export Session", "Run at least one analysis before exporting to Markdown.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Session as Markdown", "StatCraft_Session_Report.md", "Markdown (*.md)")
+        if not path:
+            return
+        charts = self._build_chart_widgets_for_history()
+        try:
+            export_session_to_markdown(self.presenter.history, self.presenter.worksheet.name, path, chart_widgets=charts)
+        finally:
+            for w in charts.values():
+                w.close()
         self.statusBar().showMessage(f"Exported Markdown report to {path}", 4000)
 
     def monte_carlo_dialog(self):
@@ -6231,37 +6248,40 @@ class ModernWindow(QMainWindow):
         # Automated Plain English Executive Summary
         from .executive_summary import generate_executive_summary
         brief_bullets = generate_executive_summary(entry, self.presenter.worksheet)
+        is_dark = bool(getattr(self, "_dark_mode", False))
         if brief_bullets:
             brief_card = QFrame()
             brief_card.setObjectName("executiveBriefCard")
-            brief_card.setStyleSheet("""
-                #executiveBriefCard {
-                    background: #F0FDF4;
-                    border: 1px solid #BBF7D0;
+            bg_c, bd_c = ("#052e16", "#166534") if is_dark else ("#F0FDF4", "#BBF7D0")
+            hdr_c, btn_c, txt_c = ("#4ade80", "#86efac", "#dcfce7") if is_dark else ("#166534", "#15803D", "#14532D")
+            brief_card.setStyleSheet(f"""
+                #executiveBriefCard {{
+                    background: {bg_c};
+                    border: 1px solid {bd_c};
                     border-left: 4px solid #16A34A;
                     border-radius: 6px;
                     padding: 8px 12px;
                     margin: 8px 0;
-                }
+                }}
             """)
             b_layout = QVBoxLayout(brief_card)
             b_layout.setContentsMargins(4, 4, 4, 4)
             b_layout.setSpacing(4)
             b_hdr = QHBoxLayout()
             b_title = QLabel("EXECUTIVE BRIEF")
-            b_title.setStyleSheet("font-size: 10px; font-weight: 800; color: #166534; letter-spacing: 0.5px;")
+            b_title.setStyleSheet(f"font-size: 10px; font-weight: 800; color: {hdr_c}; letter-spacing: 0.5px;")
             b_hdr.addWidget(b_title)
             b_hdr.addStretch()
             b_copy = QToolButton()
             b_copy.setText("📋 Copy Brief")
-            b_copy.setStyleSheet("font-size: 11px; padding: 2px 6px; color: #15803D;")
+            b_copy.setStyleSheet(f"font-size: 11px; padding: 2px 6px; color: {btn_c};")
             b_copy.clicked.connect(lambda checked=False, bullets=brief_bullets: self.copy_executive_brief(bullets))
             b_hdr.addWidget(b_copy)
             b_layout.addLayout(b_hdr)
             for b in brief_bullets:
                 b_lbl = QLabel(f"• {b}")
                 b_lbl.setWordWrap(True)
-                b_lbl.setStyleSheet("color: #14532D; font-size: 12px; line-height: 1.4;")
+                b_lbl.setStyleSheet(f"color: {txt_c}; font-size: 12px; line-height: 1.4;")
                 b_layout.addWidget(b_lbl)
             layout.addWidget(brief_card)
         rendered = set()
@@ -6440,7 +6460,16 @@ class ModernWindow(QMainWindow):
             ("variables_table", "Worksheet Columns"),
             ("design_table", "Design Table"),
         ]
-        if result.get('analysis') in ('factorial_plots','model_contour_plot','model_surface_plot','response_optimizer','binary_logistic','logistic_prediction','model_prediction','gage_rr','general_linear_model','response_surface','response_surface_design'):
+        from .phase6_reports import PHASE6_REPORT_ANALYSES, sections as phase6_sections
+        if result.get('analysis') in PHASE6_REPORT_ANALYSES:
+            for heading, headers, rows in phase6_sections(result):
+                layout.addWidget(label(heading, 'sectionHeading'))
+                table = self._result_table(headers, rows)
+                table.resizeColumnsToContents()
+                table.setMaximumWidth(min(1800, sum(table.columnWidth(i) for i in range(table.columnCount())) + 28))
+                layout.addWidget(table)
+            rendered.update(result); tables = []
+        elif result.get('analysis') in ('factorial_plots','model_contour_plot','model_surface_plot','response_optimizer','binary_logistic','logistic_prediction','model_prediction','gage_rr','general_linear_model','response_surface','response_surface_design'):
             if result['analysis'] in ('factorial_plots','model_contour_plot','model_surface_plot'):
                 from .model_plots_report import sections
             elif result['analysis']=='response_optimizer':
@@ -6500,7 +6529,7 @@ class ModernWindow(QMainWindow):
 
         # Smart Next Steps Guidance Chips
         from .guidance_chips import GuidanceChipsBar
-        chips_bar = GuidanceChipsBar(entry, self)
+        chips_bar = GuidanceChipsBar(entry, self, dark_mode=bool(getattr(self, "_dark_mode", False)))
         chips_bar.actionTriggered.connect(self._on_guidance_action_triggered)
         layout.addWidget(chips_bar)
 
@@ -9245,27 +9274,23 @@ class ModernWindow(QMainWindow):
             self.statusBar().showMessage("\u2713 Copied executive brief to clipboard!", 5000)
 
     def _on_guidance_action_triggered(self, action_name, entry):
-        if action_name == "johnson_transformation":
-            if hasattr(self, "johnson_transformation"): self.johnson_transformation()
-        elif action_name == "capability_nonparametric":
-            if hasattr(self, "capability_nonparametric"): self.capability_nonparametric()
-        elif action_name == "tukey_comparisons":
-            if hasattr(self, "oneway_anova"): self.oneway_anova()
-        elif action_name == "stepwise_regression":
-            if hasattr(self, "stepwise_regression"): self.stepwise_regression()
-        elif action_name == "residual_plots":
-            if hasattr(self, "multiple_regression"): self.multiple_regression()
-        elif action_name == "what_if_tolerance":
-            if hasattr(self, "capability"): self.capability()
-        elif action_name == "fishbone_diagram":
-            if hasattr(self, "cause_and_effect"): self.cause_and_effect()
-        elif action_name == "discover_best_model":
-            self.discover_best_model_dialog()
-        elif action_name == "random_forest":
-            self.random_forest_dialog()
+        dispatch = {
+            "johnson_transformation": getattr(self, "johnson_dialog", None),
+            "capability_nonparametric": getattr(self, "capability_nonparametric_dialog", None),
+            "tukey_comparisons": getattr(self, "oneway_anova_dialog", None),
+            "stepwise_regression": getattr(self, "stepwise_regression_dialog", None),
+            "residual_plots": getattr(self, "multiple_regression", None),
+            "what_if_tolerance": getattr(self, "capability", None),
+            "fishbone_diagram": getattr(self, "cause_and_effect_dialog", None),
+            "discover_best_model": getattr(self, "discover_best_model_dialog", None),
+            "random_forest": getattr(self, "random_forest_dialog", None),
+        }
+        fn = dispatch.get(action_name)
+        if callable(fn):
+            fn()
 
     def run_data_doctor_dialog(self):
-        from .data_doctor import audit_worksheet, autofix_worksheet_issues
+        from .data_doctor import audit_worksheet
         report = audit_worksheet(self.presenter.worksheet)
         if not report.has_warnings:
             QMessageBox.information(self, "Data Health Doctor", f"Worksheet '{report.worksheet_name}' is healthy!\nZero factor defects or numerical anomalies detected.")
@@ -9282,9 +9307,9 @@ class ModernWindow(QMainWindow):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
-                fixes = autofix_worksheet_issues(self.presenter.worksheet)
-                self.refresh()
-                QMessageBox.information(self, "Data Doctor Fixed", f"Applied {fixes} automated factor sanitization fixes.")
+                fixes = self._call(self.presenter.autofix_worksheet)
+                if fixes is not None:
+                    QMessageBox.information(self, "Data Doctor Fixed", f"Applied {fixes} automated factor sanitization fixes (Ctrl+Z to undo).")
         else:
             QMessageBox.warning(self, "Pre-Flight Data Doctor", msg)
 
@@ -9311,14 +9336,31 @@ class ModernWindow(QMainWindow):
         if len(self.presenter.history) < 2:
             QMessageBox.information(self, "Compare Two Analyses", "At least two analyses must be present in session history to compare.")
             return
+        idx_a, idx_b = len(self.presenter.history) - 2, len(self.presenter.history) - 1
+        if len(self.presenter.history) > 2:
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Select Runs to Compare")
+            lay = QFormLayout(dlg)
+            cb_a, cb_b = QComboBox(dlg), QComboBox(dlg)
+            for i, e in enumerate(self.presenter.history):
+                lbl = f"{i + 1}. {e.get('title', f'Run {i + 1}')}"
+                cb_a.addItem(lbl, i); cb_b.addItem(lbl, i)
+            cb_a.setCurrentIndex(idx_a); cb_b.setCurrentIndex(idx_b)
+            lay.addRow("Baseline (Run 1):", cb_a)
+            lay.addRow("Candidate (Run 2):", cb_b)
+            btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, dlg)
+            btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+            lay.addRow(btns)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            idx_a, idx_b = cb_a.currentData(), cb_b.currentData()
+
         from .run_comparator import compare_runs
-        run_a = self.presenter.history[-2]
-        run_b = self.presenter.history[-1]
-        diff = compare_runs(run_a, run_b)
+        diff = compare_runs(self.presenter.history[idx_a], self.presenter.history[idx_b])
 
         msg = f"Model Comparison:\nRun 1: {diff['title_a']}\nRun 2: {diff['title_b']}\n\n"
         msg += f"Verdict: {diff['verdict']}\n\nKey Metric Deltas:\n"
-        for d in diff["deltas"][:8]:
+        for d in diff["deltas"][:12]:
             d_str = f"{d.delta:+.4f}" if d.delta is not None else "N/A"
             status = " [IMPROVED]" if d.is_improved else (" [DEGRADED]" if d.is_improved is False else "")
             msg += f"• {d.name}: {d.run_a_value} → {d.run_b_value} (Δ = {d_str}){status}\n"
@@ -9344,7 +9386,12 @@ class ModernWindow(QMainWindow):
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws_name).strip("_")
         path, _ = QFileDialog.getSaveFileName(self, "Export Session Report as Clean HTML", f"{clean}_report.html", "HTML Files (*.html *.htm)")
         if path:
-            export_session_to_html(self.presenter.history, worksheet_name=ws_name, output_path=path)
+            charts = self._build_chart_widgets_for_history()
+            try:
+                export_session_to_html(self.presenter.history, worksheet_name=ws_name, output_path=path, chart_widgets=charts)
+            finally:
+                for w in charts.values():
+                    w.close()
             if self.statusBar():
                 self.statusBar().showMessage(f"\u2713 Saved standalone HTML report to {path}", 5000)
 

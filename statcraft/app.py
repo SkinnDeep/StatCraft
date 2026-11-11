@@ -4078,6 +4078,7 @@ class Presenter:
         self.dirty = True
         return name
 
+    @undoable
     def bootstrap_1sample(self, index, statistic="Mean", n_resamples=2000, confidence=0.95, seed=42, store_replicates=False):
         from .resampling import bootstrap_1sample as _fn
         name, vals = self._phase3_col(index, "Variable", numeric=True)
@@ -4088,6 +4089,7 @@ class Presenter:
         recipe = {"action": "bootstrap_1sample", "parameters": {"index": index, "statistic": statistic, "n_resamples": n_resamples, "confidence": confidence, "seed": seed}}
         return self._record(f"1-Sample Bootstrap ({statistic}): {name}", clean, recipe=recipe)
 
+    @undoable
     def bootstrap_2sample(self, index1, index2, statistic="Mean Difference", n_resamples=2000, confidence=0.95, seed=42, store_replicates=False):
         from .resampling import bootstrap_2sample as _fn
         n1, v1 = self._phase3_col(index1, "Sample 1", numeric=True)
@@ -4217,6 +4219,12 @@ class Presenter:
             res_name = f"{prefix}_Res" if res.get("task") == "regression" else f"{prefix}_Prob"
             res["stored_resid_column"] = self._store_generated_col(res_name, res["_residuals"], "number")
 
+    @undoable
+    def autofix_worksheet(self):
+        from .data_doctor import autofix_worksheet_issues
+        return autofix_worksheet_issues(self.worksheet)
+
+    @undoable
     def random_forest(self, response_index, predictor_indices, task="auto", n_trees=80, max_depth=8, min_samples_leaf=2, max_features="auto", seed=42, store_fits=False):
         from .predictive_ml import random_forest_fit as _fn
         preds = list(predictor_indices)
@@ -4226,6 +4234,7 @@ class Presenter:
         recipe = {"action": "random_forest", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "max_depth": int(max_depth), "min_samples_leaf": int(min_samples_leaf), "max_features": max_features, "seed": int(seed)}}
         return self._record(f"Random Forests ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
 
+    @undoable
     def treenet_gbm(self, response_index, predictor_indices, task="auto", n_trees=100, learning_rate=0.08, max_depth=3, subsample=0.8, loss="ls", validation_fraction=0.2, seed=42, store_fits=False):
         from .predictive_ml import treenet_fit as _fn
         preds = list(predictor_indices)
@@ -4235,6 +4244,7 @@ class Presenter:
         recipe = {"action": "treenet_gbm", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "n_trees": int(n_trees), "learning_rate": float(learning_rate), "max_depth": int(max_depth), "subsample": float(subsample), "loss": loss, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
         return self._record(f"TreeNet Gradient Boosting ({clean['task'].title()}): {clean['response']}", clean, recipe=recipe)
 
+    @undoable
     def mars_regression(self, response_index, predictor_indices, task="auto", max_terms=16, max_degree=2, penalty=2.0, store_fits=False):
         from .predictive_ml import mars_fit as _fn
         preds = list(predictor_indices)
@@ -4251,6 +4261,7 @@ class Presenter:
         recipe = {"action": "discover_best_model", "parameters": {"response_index": response_index, "predictor_indices": preds, "task": task, "validation_fraction": float(validation_fraction), "seed": int(seed)}}
         return self._record(f"Discover Best Model ({res['task'].title()}): {res['response']}", res, recipe=recipe)
 
+    @undoable
     def monte_carlo_simulation(self, inputs, formula, lsl=None, usl=None, n_sims=10000, seed=42, store_column=False):
         from .monte_carlo import monte_carlo_simulation as _fn, parse_input_specs
         parsed = parse_input_specs(inputs) if isinstance(inputs, str) else list(inputs)

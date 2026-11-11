@@ -95,19 +95,30 @@ class GuidanceChipsBar(QFrame):
     """Horizontal pill strip displaying actionable smart next steps."""
     actionTriggered = Signal(str, dict)
 
-    def __init__(self, entry: Dict[str, Any], parent=None):
+    def __init__(self, entry: Dict[str, Any], parent=None, dark_mode: bool = False):
         super().__init__(parent)
         self.entry = entry
         self.setObjectName("guidanceChipsBar")
-        self.setStyleSheet("""
-            #guidanceChipsBar {
-                background: #F1F5F9;
-                border: 1px solid #E2E8F0;
-                border-radius: 8px;
-                padding: 6px 12px;
-                margin-top: 10px;
-            }
-        """)
+        if dark_mode:
+            self.setStyleSheet("""
+                #guidanceChipsBar {
+                    background: #1f1f23;
+                    border: 1px solid #3f3f46;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    margin-top: 10px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                #guidanceChipsBar {
+                    background: #F1F5F9;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    margin-top: 10px;
+                }
+            """)
 
         chips = get_smart_guidance_chips(entry)
         if not chips:
@@ -119,27 +130,44 @@ class GuidanceChipsBar(QFrame):
         layout.setSpacing(8)
 
         lbl = QLabel("Suggested Next Steps:")
-        lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #475569;")
+        lbl.setStyleSheet(f"font-size: 11px; font-weight: bold; color: {'#a1a1aa' if dark_mode else '#475569'};")
         layout.addWidget(lbl)
 
         for chip in chips:
             btn = QPushButton(chip["label"])
             btn.setToolTip(chip["description"])
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: #FFFFFF;
-                    border: 1px solid #CBD5E1;
-                    border-radius: 12px;
-                    padding: 3px 10px;
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: #0369A1;
-                }
-                QPushButton:hover {
-                    background: #E0F2FE;
-                    border-color: #38BDF8;
-                }
-            """)
+            if dark_mode:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: #27272a;
+                        border: 1px solid #3f3f46;
+                        border-radius: 12px;
+                        padding: 3px 10px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #38bdf8;
+                    }
+                    QPushButton:hover {
+                        background: #0c4a6e;
+                        border-color: #38bdf8;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: #FFFFFF;
+                        border: 1px solid #CBD5E1;
+                        border-radius: 12px;
+                        padding: 3px 10px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #0369A1;
+                    }
+                    QPushButton:hover {
+                        background: #E0F2FE;
+                        border-color: #38BDF8;
+                    }
+                """)
             act = chip["action"]
             btn.clicked.connect(lambda checked=False, a=act: self.actionTriggered.emit(a, self.entry))
             layout.addWidget(btn)

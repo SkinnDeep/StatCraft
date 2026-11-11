@@ -26,6 +26,7 @@ a = Analysis(
         'statcraft.monte_carlo',
         'statcraft.phase6_charts',
         'statcraft.command_palette',
+        'statcraft.phase6_reports',
         'statcraft.graph_builder',
         'statcraft.graph_builder_dialog',
         'statcraft.calc_data',
@@ -92,8 +93,8 @@ if sys.platform == 'darwin':
             'CFBundleName': 'StatCraft',
             'CFBundleDisplayName': 'StatCraft',
             'CFBundleIdentifier': 'com.statcraft.desktop',
-            'CFBundleVersion': '116.2.0',
-            'CFBundleShortVersionString': '116.2.0',
+            'CFBundleVersion': '116.3.0',
+            'CFBundleShortVersionString': '116.3.0',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '11.0',
         }

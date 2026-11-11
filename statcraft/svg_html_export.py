@@ -60,9 +60,11 @@ def copy_widget_svg_to_clipboard(widget: QWidget) -> bool:
 def export_session_to_html(
     history: List[Dict[str, Any]],
     worksheet_name: str = "Active Worksheet",
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None,
+    chart_widgets: Optional[Dict[int, QWidget]] = None,
 ) -> str:
     """Export complete session log into a clean, zero-dependency standalone HTML5 report."""
+    from .app import format_entry
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     cards_html = []
@@ -85,28 +87,18 @@ def export_session_to_html(
             </div>
             """
 
-        # Result tables / metrics
-        metrics_html = ""
-        metrics = []
-        for k, v in result.items():
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                metrics.append((k.replace("_", " ").title(), f"{v:.4f}" if isinstance(v, float) else str(v)))
+        # Full statistical formatted output block
+        formatted_txt = html.escape(format_entry(entry).strip())
+        metrics_html = (
+            f'<pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; '
+            f'padding: 12px; font-size: 12px; line-height: 1.45; overflow-x: auto; color: #0f172a;">{formatted_txt}</pre>'
+        )
 
-        if metrics:
-            m_rows = "".join(f"<tr><td style='padding: 6px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 500;'>{html.escape(k)}</td><td style='padding: 6px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace;'>{html.escape(v)}</td></tr>" for k, v in metrics[:12])
-            metrics_html = f"""
-            <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; background: #fafafa; border-radius: 6px;">
-                <thead>
-                    <tr style="background: #f1f5f9; color: #475569; text-align: left;">
-                        <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1;">Metric</th>
-                        <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; text-align: right;">Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {m_rows}
-                </tbody>
-            </table>
-            """
+        # Inline vector SVG chart when available
+        chart_html = ""
+        if chart_widgets and (idx - 1) in chart_widgets:
+            svg_raw = export_widget_to_svg_bytes(chart_widgets[idx - 1]).decode("utf-8", errors="replace")
+            chart_html = f'<div style="margin-top: 14px; text-align: center; overflow-x: auto;">{svg_raw}</div>'
 
         cards_html.append(f"""
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
@@ -116,6 +108,7 @@ def export_session_to_html(
             </div>
             {brief_html}
             {metrics_html}
+            {chart_html}
         </div>
         """)
 
@@ -166,7 +159,7 @@ def export_session_to_html(
     <div class="container">
         <header>
             <h1>StatCraft Statistical Session Report</h1>
-            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.2.0</div>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.3.0</div>
         </header>
         <main>
             {body_content}
@@ -194,7 +187,7 @@ def export_session_to_markdown(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: List[str] = [
         f"# StatCraft Session Report — {worksheet_name}",
-        f"*Generated locally: {now_str} · StatCraft v116.2.0*",
+        f"*Generated locally: {now_str} · StatCraft v116.3.0*",
         "",
         "## Table of Contents",
     ]
