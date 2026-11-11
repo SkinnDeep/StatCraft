@@ -152,7 +152,10 @@ class PrintController:
         entry = entry if isinstance(entry, dict) else w.selected_entry
         if kind == 'Worksheet': return PrintJob.worksheet(w.presenter.worksheet, self.options)
         if entry is not None:
-            if entry is not w.selected_entry: w.show_result(entry)
+            if entry is not w.selected_entry:
+                w.show_result(entry)
+                from PySide6.QtWidgets import QApplication
+                QApplication.processEvents()
             if w._active_graph_frame is not None and kind != 'Report':
                 return PrintJob(entry.get('title', 'Graph'), image=w._active_graph_frame.capture().toImage())
             return PrintJob.report(entry)

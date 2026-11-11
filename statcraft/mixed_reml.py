@@ -130,7 +130,12 @@ def fit_mixed_reml(
         try:
             Lx = np.linalg.cholesky(XtVinvX)
         except np.linalg.LinAlgError:
-            return 1e18
+            scale = max(1.0, float(np.trace(XtVinvX)) / max(1, p))
+            XtVinvX_reg = XtVinvX + (1e-8 * scale) * np.eye(p)
+            try:
+                Lx = np.linalg.cholesky(XtVinvX_reg)
+            except np.linalg.LinAlgError:
+                return 1e18
         logdet_XtVinvX = 2.0 * float(np.sum(np.log(np.diag(Lx))))
         V_inv_y = np.linalg.solve(L.T, np.linalg.solve(L, y))
         beta = np.linalg.solve(Lx.T, np.linalg.solve(Lx, X.T @ V_inv_y))
@@ -150,9 +155,15 @@ def fit_mixed_reml(
     V = sigma_e2 * np.eye(n)
     for rv, K in zip(rand_vars, K_mats):
         V += rv * K
-    V_inv = np.linalg.inv(V)
+    try:
+        V_inv = np.linalg.inv(V)
+    except np.linalg.LinAlgError:
+        V_inv = np.linalg.pinv(V)
     XtVinvX = X.T @ V_inv @ X
-    cov_beta = np.linalg.inv(XtVinvX)
+    try:
+        cov_beta = np.linalg.inv(XtVinvX)
+    except np.linalg.LinAlgError:
+        cov_beta = np.linalg.pinv(XtVinvX)
     beta_hat = cov_beta @ (X.T @ V_inv @ y)
     se_beta = np.sqrt(np.maximum(np.diag(cov_beta), 1e-18))
 

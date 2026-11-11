@@ -184,7 +184,7 @@ def warranty_analysis(
     forecast_horizon: float = 12.0,
 ) -> Dict[str, Any]:
     """Fit Weibull warranty failure trend on binned age intervals & forecast cumulative claims."""
-    pairs = []
+    grouped: Dict[float, float] = {}
     for a, c in zip(ages, fail_counts):
         if a is None or c is None:
             continue
@@ -193,13 +193,13 @@ def warranty_analysis(
         except (ValueError, TypeError):
             continue
         if af > 0 and cf >= 0 and math.isfinite(af) and math.isfinite(cf):
-            pairs.append((af, cf))
+            grouped[af] = grouped.get(af, 0.0) + cf
+    pairs = sorted(grouped.items(), key=lambda item: item[0])
     if len(pairs) < 2:
-        raise ValueError("Warranty Analysis requires at least 2 age intervals with nonnegative counts.")
+        raise ValueError("Warranty Analysis requires at least 2 distinct positive age intervals with nonnegative counts.")
     if at_risk_total <= 0:
         raise ValueError("Total units in field (at risk) must be positive.")
 
-    pairs.sort(key=lambda item: item[0])
     cum_fails = np.cumsum([p[1] for p in pairs])
     age_arr = np.asarray([p[0] for p in pairs], dtype=float)
     total_obs_fails = float(cum_fails[-1])
@@ -238,6 +238,8 @@ def warranty_analysis(
         "observed_claim_rate_pct": 100.0 * total_obs_fails / float(at_risk_total),
         "weibull_shape": shape_beta,
         "weibull_scale": scale_eta,
+        "distinct_ages": len(pairs),
+        "age_points": [{"age": float(a), "failures": float(c)} for a, c in pairs],
         "forecasts": forecasts,
     }
 

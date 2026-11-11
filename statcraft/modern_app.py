@@ -2003,7 +2003,7 @@ class ModernWindow(QMainWindow):
             self.refresh()
             if result and value is not None: self.show_result(value)
             return value
-        except (ValueError, TypeError, IndexError, KeyError, ArithmeticError, OSError, ImportError) as exc:
+        except (ValueError, TypeError, IndexError, KeyError, ArithmeticError, RuntimeError, OSError, ImportError) as exc:
             self.refresh(); self.statusBar().showMessage(str(exc), 12000)
             QMessageBox.warning(self, "StatCraft", str(exc)); return None
 
@@ -3196,9 +3196,10 @@ class ModernWindow(QMainWindow):
                 self.command_history_view.appendPlainText(f"MTB > {line.strip()}")
         entries = self._call(lambda: self.presenter.execute_session_script(raw), result=False)
         self.refresh()
-        if entries:
-            self.show_result(entries[-1])
-        self.command_editor.clear()
+        if entries is not None:
+            if entries:
+                self.show_result(entries[-1])
+            self.command_editor.clear()
 
     def run_mtb_script_dialog(self):
         path, _ = QFileDialog.getOpenFileName(self, "Run Exec / Batch Script", "", "Minitab Exec / Command Scripts (*.mtb *.exec *.txt);;All Files (*)")

@@ -153,7 +153,7 @@ def prepare(chart: Any, r: Dict[str, Any]) -> None:
             "mode": "barh",
             "title": f"AutoML Model Leaderboard (Champion: {r.get('champion_model')})",
             "labels": [row["model"] for row in lb],
-            "values": [max(0.0, (row["val_r2"] if is_reg else row["val_accuracy"]) * 100.0) for row in lb],
+            "values": [(row["val_r2"] if is_reg else row["val_accuracy"]) * 100.0 for row in lb],
             "xlabel": "Validation R² (%)" if is_reg else "Validation Accuracy (%)",
             "unit": "%",
             "fill": "#16a34a",
@@ -312,10 +312,10 @@ def _draw_barh(chart: Any, p: QPainter, area: QRectF, d: Dict[str, Any]) -> None
 
     for i, (lbl, val) in enumerate(zip(labels, values)):
         cy = plot.top() + row_h * (i + 0.5)
-        bw = max(2.0, (val / vmax) * plot.width())
+        bw = max(2.0, (max(0.0, val) / vmax) * plot.width())
         rect = QRectF(plot.left(), cy - bar_h / 2.0, bw, bar_h)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(fill_col))
+        p.setBrush(QBrush(QColor("#dc2626") if val < 0 else fill_col))
         p.drawRoundedRect(rect, 3, 3)
 
         if hasattr(chart, "remember_hover"):

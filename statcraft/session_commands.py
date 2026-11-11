@@ -218,9 +218,7 @@ def execute_command_block(presenter, main_cmd: str, subcommands: List[str] | Tup
         col_idx = int(col_tok[1:]) - 1
         val_text = " ".join([inline_vals] + list(subcommands)).strip()
         nums = _parse_number_tokens(val_text)
-        col = presenter._assign_or_append_column(col_idx, nums, "number")
-        presenter.dirty = True
-        return presenter._record("Set Data", {"column": col.name, "rows": len(nums)})
+        return presenter.set_column_values(col_idx, nums, "number")
 
     if verb in ("HISTOGRAM", "HIST"):
         indices = resolve_variables(rest, presenter.worksheet, ("number",))

@@ -202,9 +202,14 @@ def monte_carlo_simulation(
 
     # Tornado variance contribution using Spearman rank correlation squared
     raw_sq = []
+    y_std = float(np.std(y))
     for item in input_summaries:
-        rho, _ = stats.spearmanr(env[item["name"]], y)
-        r_val = 0.0 if (rho is None or not math.isfinite(float(rho))) else float(rho)
+        draws = env[item["name"]]
+        if y_std <= 1e-12 or float(np.std(draws)) <= 1e-12:
+            r_val = 0.0
+        else:
+            rho, _ = stats.spearmanr(draws, y)
+            r_val = 0.0 if (rho is None or not math.isfinite(float(rho))) else float(rho)
         raw_sq.append((item["name"], r_val, r_val * r_val))
     total_r2 = sum(r2 for _, _, r2 in raw_sq)
     sensitivity = []

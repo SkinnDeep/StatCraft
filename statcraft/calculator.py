@@ -207,6 +207,19 @@ def evaluate_advanced(expression: str, worksheet):
             return None if s is None else s * s
         return compute_column_statistics(entry.values, key)
 
+    _zscore_stats = {}
+
+    def _zscore_params(col_name: str):
+        kind_char, entry = _resolve_ref(col_name)
+        if kind_char != 'C':
+            raise ValueError('ZSCORE/STANDARDIZE requires a worksheet column (e.g., C1).')
+        key = id(entry)
+        if key not in _zscore_stats:
+            mu = compute_column_statistics(entry.values, 'MEAN')
+            sd = compute_column_statistics(entry.values, 'StDev')
+            _zscore_stats[key] = (entry, mu, sd)
+        return _zscore_stats[key]
+
     # Pre-validate AST structure before executing rows
     def validate(node):
         if isinstance(node, ast.Constant):
@@ -245,6 +258,18 @@ def evaluate_advanced(expression: str, worksheet):
                 if len(node.args) != 1 or not isinstance(node.args[0], ast.Name):
                     raise ValueError(f'{fname}(C1) takes one column reference.')
                 _resolve_ref(node.args[0].id)
+                return
+            if fname in ('ZSCORE', 'STANDARDIZE'):
+                if len(node.args) != 1 or not isinstance(node.args[0], ast.Name):
+                    raise ValueError(f'{fname}(C1) requires one column reference.')
+                _resolve_ref(node.args[0].id)
+                return
+            if fname == 'LAG':
+                if not 1 <= len(node.args) <= 2 or not isinstance(node.args[0], ast.Name):
+                    raise ValueError('LAG(C1[, k]) requires a column reference and optional integer lag.')
+                _resolve_ref(node.args[0].id)
+                if len(node.args) == 2:
+                    validate(node.args[1])
                 return
             if fname == 'PERCENTILE':
                 if len(node.args) != 2 or not isinstance(node.args[0], ast.Name):
@@ -350,6 +375,25 @@ def evaluate_advanced(expression: str, worksheet):
                 return None
             if fname in _COL_STATS:
                 return _col_stat(node.args[0].id, fname)
+            if fname in ('ZSCORE', 'STANDARDIZE'):
+                entry, mu, sd = _zscore_params(node.args[0].id)
+                if mu is None or sd is None or abs(float(sd)) <= 1e-12:
+                    return None
+                val = entry.values[row] if row < len(entry.values) else None
+                if val is None or isinstance(val, str):
+                    return None
+                return finite_number((float(val) - float(mu)) / float(sd))
+            if fname == 'LAG':
+                kind_char, entry = _resolve_ref(node.args[0].id)
+                if kind_char != 'C':
+                    raise ValueError('LAG requires a worksheet column (e.g., C1).')
+                k_val = 1 if len(node.args) == 1 else eval_node(node.args[1], row)
+                if k_val is None:
+                    return None
+                src_row = row - int(k_val)
+                if 0 <= src_row < len(entry.values):
+                    return entry.values[src_row]
+                return None
             if fname == 'PERCENTILE':
                 q_val = eval_node(node.args[1], row)
                 if q_val is None:

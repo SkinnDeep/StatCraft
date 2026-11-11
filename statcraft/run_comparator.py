@@ -39,6 +39,12 @@ def compare_runs(entry_a: Dict[str, Any], entry_b: Dict[str, Any]) -> Dict[str, 
         "predicted_r_squared": "higher",
         "accuracy": "higher",
         "roc_auc": "higher",
+        "canonical_r2": "higher",
+        "canonical_rmse": "lower",
+        "canonical_mae": "lower",
+        "canonical_accuracy": "higher",
+        "canonical_roc_auc": "higher",
+        "canonical_log_loss": "lower",
         "concordance": "higher",
         "rty_pct": "higher",
         "sigma_level_est": "higher",
@@ -83,8 +89,23 @@ def compare_runs(entry_a: Dict[str, Any], entry_b: Dict[str, Any]) -> Dict[str, 
                         out[f"{k}.{nk}"] = float(nv)
         return out
 
+    _CANONICAL_SPECS = {
+        "canonical_r2": ("val_metrics.r2", "oob_metrics.r2", "metrics.r2", "r_squared", "r_sq", "r2"),
+        "canonical_rmse": ("val_metrics.rmse", "oob_metrics.rmse", "metrics.rmse", "rmse", "residual_stdev", "s"),
+        "canonical_mae": ("val_metrics.mae", "oob_metrics.mae", "metrics.mae", "mae"),
+        "canonical_accuracy": ("val_metrics.accuracy", "oob_metrics.accuracy", "metrics.accuracy", "accuracy"),
+        "canonical_roc_auc": ("val_metrics.roc_auc", "oob_metrics.roc_auc", "metrics.roc_auc", "roc_auc", "auc"),
+        "canonical_log_loss": ("val_metrics.log_loss", "oob_metrics.log_loss", "metrics.log_loss", "log_loss"),
+    }
+
     flat_a = _flatten_scalars(res_a)
     flat_b = _flatten_scalars(res_b)
+    for cname, candidates in _CANONICAL_SPECS.items():
+        match_a = next(((k, flat_a[k]) for k in candidates if k in flat_a), None)
+        match_b = next(((k, flat_b[k]) for k in candidates if k in flat_b), None)
+        if match_a is not None and match_b is not None and match_a[0] != match_b[0]:
+            flat_a[cname] = match_a[1]
+            flat_b[cname] = match_b[1]
     all_keys = sorted(set(flat_a).union(flat_b))
     deltas: List[MetricDelta] = []
 

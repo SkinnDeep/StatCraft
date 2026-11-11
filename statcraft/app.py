@@ -789,10 +789,16 @@ class Presenter:
         dest_clean = destination.strip()
         if dest_clean.isdigit() or (dest_clean.upper().startswith("C") and dest_clean[1:].isdigit()):
             index = int(dest_clean[1:] if dest_clean.upper().startswith("C") else dest_clean) - 1
-            if not 0 <= index < len(self.worksheet.columns):
-                raise ValueError("Choose an existing column number (e.g., 1 or C1) or enter a new column name.")
+            if index < 0:
+                raise ValueError("Choose a valid column number (e.g., 1 or C1) or enter a new column name.")
+            needed = max(len(self.worksheet.columns), index + 1)
+            if needed * max(1, self.worksheet.row_count, len(values)) > io.MAX_CELLS:
+                raise ValueError("The worksheet exceeds the cell limit.")
+            while len(self.worksheet.columns) <= index:
+                self.worksheet.columns.append(Column(f"C{len(self.worksheet.columns) + 1}", "number", []))
             self.worksheet.columns[index].kind = target_kind
             self.worksheet.columns[index].values = values
+            self.worksheet.columns[index].metadata.pop("auto_type", None)
         else:
             if not dest_clean:
                 raise ValueError("Enter a destination name.")
@@ -6236,16 +6242,26 @@ class Presenter:
                 return col
         else:
             idx = target_column_index
-        if idx == -1 or idx >= len(self.worksheet.columns):
+        if idx == -1:
             new_name = default_name or f"C{len(self.worksheet.columns) + 1}"
             col = Column(new_name, kind, values)
             self.worksheet.columns.append(col)
             return col
+        if idx >= len(self.worksheet.columns):
+            while len(self.worksheet.columns) <= idx:
+                cname = default_name if (default_name and len(self.worksheet.columns) == idx) else f"C{len(self.worksheet.columns) + 1}"
+                self.worksheet.columns.append(Column(cname, "number", []))
         col = self.worksheet.columns[idx]
         col.kind = kind
         col.values = values
         col.metadata.pop("auto_type", None)
         return col
+
+    @undoable
+    def set_column_values(self, target_column_index: int | str, values, kind: str = "number"):
+        col = self._assign_or_append_column(target_column_index, values, kind)
+        self.dirty = True
+        return self._record("Set Data", {"column": col.name, "rows": len(values)})
 
     @undoable
     def generate_random_distribution_data(self, target_column_index, distribution: str, n: int = 50, parameters=(), seed=None):
@@ -7026,6 +7042,7 @@ class Presenter:
         self.dirty = True
         return self._record("Rank — " + col.name, {"source": col.name, "destination": stored_name, "count": len(present_idx)})
 
+    @undoable
     @undoable
     def assign_formula(self, index, expression):
         if not 0 <= index < len(self.worksheet.columns):
