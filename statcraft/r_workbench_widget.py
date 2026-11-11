@@ -499,11 +499,35 @@ class RPlotGalleryWidget(QWidget):
     def save_current_plot(self) -> None:
         if 0 <= self.current_idx < len(self.plot_history):
             src = self.plot_history[self.current_idx]
-            dest, _ = QFileDialog.getSaveFileName(self, "Export R Plot", "Rplot.png", "Images (*.png *.jpg *.pdf)")
+            dest, sel_filter = QFileDialog.getSaveFileName(
+                self,
+                "Export R Plot",
+                "Rplot.png",
+                "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;PDF Document (*.pdf);;SVG Vector Graphic (*.svg)",
+            )
             if dest:
                 from PySide6.QtGui import QImage, QPainter, QPdfWriter, QPageSize
                 ext = Path(dest).suffix.lower()
-                if ext in (".jpg", ".jpeg"):
+                if ext == ".svg" or ("svg" in (sel_filter or "").lower()):
+                    if ext != ".svg":
+                        dest = str(Path(dest).with_suffix(".svg")) if ext in (".png", ".jpg", ".jpeg", ".pdf") else dest + ".svg"
+                    if Path(src).suffix.lower() == ".svg":
+                        shutil.copy2(src, dest)
+                    else:
+                        import base64 as _b64
+                        img = QImage(src)
+                        w_px = max(1, img.width()) if not img.isNull() else 800
+                        h_px = max(1, img.height()) if not img.isNull() else 600
+                        raw_png = Path(src).read_bytes()
+                        b64_png = _b64.b64encode(raw_png).decode("ascii")
+                        svg_doc = (
+                            f'<?xml version="1.0" encoding="UTF-8"?>\n'
+                            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w_px}" height="{h_px}" viewBox="0 0 {w_px} {h_px}">\n'
+                            f'  <image width="{w_px}" height="{h_px}" href="data:image/png;base64,{b64_png}"/>\n'
+                            f'</svg>\n'
+                        )
+                        Path(dest).write_text(svg_doc, encoding="utf-8")
+                elif ext in (".jpg", ".jpeg"):
                     QImage(src).save(dest, "JPEG")
                 elif ext == ".pdf":
                     img = QImage(src)

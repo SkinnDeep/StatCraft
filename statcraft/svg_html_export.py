@@ -21,24 +21,40 @@ from .executive_summary import generate_executive_summary
 
 def export_widget_to_svg_bytes(widget: QWidget) -> bytes:
     """Render any QWidget vector chart directly to SVG bytes in memory."""
+    from PySide6.QtCore import QPoint, QSize
+
+    target = getattr(widget, "chart", widget) if type(widget).__name__ == "GraphFrame" else widget
+    if not isinstance(target, QWidget):
+        target = widget
+
+    target.ensurePolished()
+    w_size = target.size()
+    if w_size.width() <= 0 or w_size.height() <= 0:
+        hint = target.sizeHint()
+        if hint.width() <= 0 or hint.height() <= 0:
+            hint = target.minimumSizeHint()
+        w_size = QSize(max(320, hint.width()), max(200, hint.height()))
+        target.resize(w_size)
+
     buf = QBuffer()
     buf.open(QBuffer.OpenModeFlag.WriteOnly)
 
     generator = QSvgGenerator()
     generator.setOutputDevice(buf)
-    w_size = widget.size()
-    if w_size.width() <= 0 or w_size.height() <= 0:
-        w_size = widget.minimumSizeHint()
     generator.setSize(w_size)
     generator.setViewBox(QRect(0, 0, max(1, w_size.width()), max(1, w_size.height())))
     generator.setTitle("StatCraft Vector Plot")
     generator.setDescription("Rendered by StatCraft Desktop")
 
-    from PySide6.QtCore import QPoint
     painter = QPainter(generator)
-    widget.render(painter, QPoint(0, 0))
-    painter.end()
-    del painter
+    try:
+        if painter.isActive():
+            target.render(painter, QPoint(0, 0))
+    finally:
+        if painter.isActive():
+            painter.end()
+        del painter
+        buf.close()
 
     return bytes(buf.data())
 

@@ -35,6 +35,7 @@ a = Analysis(
         'statcraft.xlsx_import',
         'statcraft.onboarding',
         'statcraft.crash_dialog',
+        'PySide6.QtSvg',
     ],
     datas=datas,
     excludes=['tkinter', '_tkinter', 'pandas', 'matplotlib', 'IPython', 'pytest']
@@ -42,10 +43,10 @@ a = Analysis(
 
 # On Windows, optimize Qt runtime DLLs
 if sys.platform == 'win32':
-    qt_dlls = {'qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6network.dll', 'qt6printsupport.dll'}
+    qt_dlls = {'qt6core.dll', 'qt6gui.dll', 'qt6widgets.dll', 'qt6network.dll', 'qt6printsupport.dll', 'qt6svg.dll'}
     plugins = {
         'qwindows.dll', 'qoffscreen.dll', 'qminimal.dll', 'qmodernwindowsstyle.dll',
-        'qico.dll', 'qgif.dll', 'qjpeg.dll'
+        'qico.dll', 'qgif.dll', 'qjpeg.dll', 'qsvg.dll', 'qsvgicon.dll'
     }
 
     def wanted(entry):

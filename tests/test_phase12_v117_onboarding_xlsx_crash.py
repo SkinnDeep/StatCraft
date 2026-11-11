@@ -322,6 +322,71 @@ class TestPhase12V117Features(unittest.TestCase):
         finally:
             win.close()
 
+    def test_09_svg_export_save_graph_as_spec_and_r_plot_viewer(self):
+        repo = Path(__file__).resolve().parents[1]
+        spec = (repo / "StatCraft.spec").read_text(encoding="utf-8")
+        self.assertIn("PySide6.QtSvg", spec)
+        self.assertIn("qt6svg.dll", spec)
+        self.assertIn("qsvg.dll", spec)
+
+        win = self._make_win()
+        try:
+            win.load_sample_dataset("chemical_process")
+            win.presenter.fitted_line_plot(0, 1)
+            entry = win.presenter.history[-1]
+            # Title contains ':' which must be sanitized before QFileDialog on Windows
+            self.assertIn(":", entry["title"])
+
+            with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as tmp:
+                out_svg = Path(tmp) / "myplot.svg"
+                proposed_names = []
+                QApplication.clipboard().setText("PRESERVE_CLIPBOARD")
+
+                def fake_save_dialog(parent, title, default_name, filt):
+                    proposed_names.append(default_name)
+                    # Simulate user switching filter to *.svg when default filename had .png
+                    return str(Path(tmp) / "myplot.png"), "Scalable Vector Graphic (*.svg)"
+
+                with patch("statcraft.modern_app.QFileDialog.getSaveFileName", side_effect=fake_save_dialog):
+                    win.save_graph_as(entry)
+
+                self.assertEqual(len(proposed_names), 1)
+                self.assertNotIn(":", proposed_names[0])
+                self.assertTrue(out_svg.is_file())
+                svg_text = out_svg.read_text(encoding="utf-8")
+                self.assertIn("<svg", svg_text)
+                self.assertIn("</svg>", svg_text)
+                # Saving to disk must NOT overwrite user clipboard
+                self.assertEqual(QApplication.clipboard().text(), "PRESERVE_CLIPBOARD")
+
+                # Copy Chart as SVG works directly via target entry
+                self.assertTrue(win.copy_active_chart_svg(entry))
+                self.assertIn("<svg", QApplication.clipboard().text())
+
+                # RPlotGalleryWidget supports .svg export cleanly
+                from PySide6.QtGui import QImage
+                from statcraft.r_workbench_widget import RPlotGalleryWidget
+                png_src = Path(tmp) / "r_src.png"
+                img = QImage(120, 80, QImage.Format.Format_ARGB32)
+                img.fill(0xFFFFFFFF)
+                img.save(str(png_src), "PNG")
+
+                viewer = RPlotGalleryWidget(win)
+                try:
+                    viewer.add_plot(str(png_src))
+                    r_svg = Path(tmp) / "r_plot.svg"
+                    with patch(
+                        "statcraft.r_workbench_widget.QFileDialog.getSaveFileName",
+                        return_value=(str(r_svg), "SVG Vector Graphic (*.svg)"),
+                    ):
+                        viewer.save_current_plot()
+                    self.assertTrue(r_svg.is_file())
+                    self.assertIn("<svg", r_svg.read_text(encoding="utf-8"))
+                finally:
+                    viewer.close()
+        finally:
+            win.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7321,7 +7321,7 @@ class ModernWindow(QMainWindow):
         menu.addAction(tool_icon("send_report"), "Send to Report", lambda: self.send_output_to_report(target_entry))
         if is_graph:
             menu.addAction(tool_icon("copy_graph"), "Copy Graph", lambda: self.copy_output_graph(target_entry))
-            menu.addAction("📋 Copy Chart as SVG (Lossless Vector)\tCtrl+Alt+S", self.copy_active_chart_svg)
+            menu.addAction("📋 Copy Chart as SVG (Lossless Vector)\tCtrl+Alt+S", lambda: self.copy_active_chart_svg(target_entry))
             from .similar_graph_dialog import supports_similar
             menu.addAction(tool_icon("make_similar_graph"), "Make Similar Graph...", lambda: self.make_similar_graph(target_entry)).setEnabled(supports_similar(target_entry))
             menu.addSeparator()
@@ -9071,29 +9071,54 @@ class ModernWindow(QMainWindow):
             self.show_result(self.selected_entry)
         self.statusBar().showMessage("Graph size reset to default (100%)", 4000)
 
+    def _resolve_active_chart_widget(self, entry=None):
+        if entry is not None and entry is not self.selected_entry:
+            self.show_result(entry)
+            QApplication.processEvents()
+        frame = getattr(self, "_active_graph_frame", None)
+        chart = getattr(self, "_active_chart_widget", None)
+        if chart is None and frame is not None:
+            chart = getattr(frame, "chart", None) or frame
+        return chart, frame
+
     def save_graph_as(self, entry=None):
+        import re as _re
         target = entry or self.selected_entry
         if target is None:
             return
-        path, sel_filter = QFileDialog.getSaveFileName(self, "Save Graph As", target.get("title", "Graph") + ".png", "PNG Image (*.png);;Scalable Vector Graphic (*.svg);;Text Report (*.txt)")
+        safe_title = _re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(target.get("title", "Graph"))).strip(" .")[:80] or "Graph"
+        path, sel_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save Graph As",
+            safe_title + ".png",
+            "PNG Image (*.png);;Scalable Vector Graphic (*.svg);;Text Report (*.txt)",
+        )
         if not path:
             return
-        if target is not self.selected_entry:self.show_result(target)
+        chart_widget, frame = self._resolve_active_chart_widget(target)
         self.graph_options_pane.flush()
-        chart = getattr(self, "_active_graph_frame", None)
-        if Path(path).suffix.lower() == ".svg" or "svg" in sel_filter.lower():
-            if not str(path).lower().endswith(".svg"):
-                path = str(path) + ".svg"
-            if self.copy_active_chart_svg():
-                svg_data = QApplication.clipboard().text()
-                Path(path).write_text(svg_data, encoding="utf-8")
-                self.statusBar().showMessage("Saved vector SVG to " + str(path), 6000)
+        p = Path(path)
+        wants_svg = p.suffix.lower() == ".svg" or "svg" in (sel_filter or "").lower()
+        if wants_svg:
+            if p.suffix.lower() != ".svg":
+                p = p.with_suffix(".svg") if p.suffix.lower() in (".png", ".txt") else Path(str(p) + ".svg")
+            svg_target = chart_widget or frame
+            if svg_target is None:
+                QMessageBox.warning(self, "Save SVG", "No active graph widget is available to export as SVG.")
                 return
-        if Path(path).suffix.lower() == ".png" and chart is not None:
-            chart.capture().save(path, "PNG")
+            from .svg_html_export import export_widget_to_svg_bytes
+            svg_bytes = export_widget_to_svg_bytes(svg_target)
+            if not svg_bytes.strip():
+                QMessageBox.warning(self, "Save SVG", "Failed to render vector SVG data for this chart.")
+                return
+            p.write_bytes(svg_bytes)
+            self.statusBar().showMessage("Saved vector SVG to " + str(p), 6000)
+            return
+        if p.suffix.lower() == ".png" and frame is not None:
+            frame.capture().save(str(p), "PNG")
         else:
-            Path(path).write_text(format_entry(target), encoding="utf-8")
-        self.statusBar().showMessage("Saved graph to " + str(path), 6000)
+            p.write_text(format_entry(target), encoding="utf-8")
+        self.statusBar().showMessage("Saved graph to " + str(p), 6000)
 
     def delete_output_entry(self, entry=None):
         target = entry or getattr(self, "selected_entry", None)
@@ -9510,11 +9535,12 @@ class ModernWindow(QMainWindow):
         dlg = AirGapAuditDialog(self)
         dlg.exec()
 
-    def copy_active_chart_svg(self):
-        chart = getattr(self, "_active_chart_widget", None) or getattr(self, "_active_graph_frame", None)
-        if chart is not None:
+    def copy_active_chart_svg(self, entry=None):
+        chart, frame = self._resolve_active_chart_widget(entry)
+        target_widget = chart or frame
+        if target_widget is not None:
             from .svg_html_export import copy_widget_svg_to_clipboard
-            if copy_widget_svg_to_clipboard(chart):
+            if copy_widget_svg_to_clipboard(target_widget):
                 if self.statusBar():
                     self.statusBar().showMessage("\u2713 Copied lossless scalable vector graphic (SVG) to clipboard!", 5000)
                 return True
