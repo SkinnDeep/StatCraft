@@ -2996,11 +2996,18 @@ class ModernWindow(QMainWindow):
         layout.addWidget(buttons)
         def accept_formula():
             target_idx = col_combo.currentData()
+            raw_expr = expr_edit.text().strip()
             try:
-                entry = self.presenter.assign_formula(target_idx, expr_edit.text())
+                if not raw_expr and sheet.columns[target_idx].metadata.get("formula"):
+                    self.presenter.remove_formulas([target_idx])
+                    entry = None
+                else:
+                    entry = self.presenter.assign_formula(target_idx, expr_edit.text())
             except ValueError as exc:
-                err.setText(str(exc)); return
-            dialog.accept(); self.refresh(); self.show_result(entry)
+                err.setText(str(exc)); err.setVisible(True); return
+            dialog.accept(); self.refresh()
+            if entry is not None:
+                self.show_result(entry)
         buttons.accepted.connect(accept_formula); buttons.rejected.connect(dialog.reject)
         dialog.exec()
 
@@ -3589,8 +3596,9 @@ class ModernWindow(QMainWindow):
         close_btn.clicked.connect(dialog.reject)
         dialog.exec()
 
-    def rename_column(self):
-        index = self._current_column(); old = self.presenter.worksheet.columns[index].name
+    def rename_column(self, col_index=None):
+        index = self._current_column() if col_index is None else int(col_index)
+        old = self.presenter.worksheet.columns[index].name
         name, accepted = QInputDialog.getText(self, "Rename column", "Name", text=old)
         if accepted: self._call(lambda: self.presenter.rename_column(index, name))
 
@@ -6176,25 +6184,36 @@ class ModernWindow(QMainWindow):
                 self._show_output_context_menu(table.viewport().mapToGlobal(pos))
 
         table.customContextMenuRequested.connect(_table_context_menu)
-        table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #cbd5e1;
+        dark = bool(getattr(self, "_dark_mode", False))
+        bg = "#18181b" if dark else "#ffffff"
+        alt_bg = "#27272a" if dark else "#f8fafc"
+        border = "#3f3f46" if dark else "#cbd5e1"
+        grid = "#27272a" if dark else "#f1f5f9"
+        fg = "#f4f4f5" if dark else "#0f172a"
+        hdr_bg = "#27272a" if dark else "#f8fafc"
+        hdr_fg = "#e4e4e7" if dark else "#334155"
+        sel_bg = "#1e3a8a" if dark else "#e0f2fe"
+        sel_fg = "#ffffff" if dark else "#0f172a"
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {border};
                 border-radius: 6px;
-                gridline-color: #f1f5f9;
-                background: #ffffff;
-                alternate-background-color: #f8fafc;
+                gridline-color: {grid};
+                background: {bg};
+                alternate-background-color: {alt_bg};
+                color: {fg};
                 font-size: 11px;
-            }
-            QTableWidget::item { padding: 4px 8px; }
-            QTableWidget::item:selected { background: #e0f2fe; color: #0f172a; }
-            QHeaderView::section {
-                background: #f8fafc;
-                color: #334155;
+            }}
+            QTableWidget::item {{ padding: 4px 8px; color: {fg}; }}
+            QTableWidget::item:selected {{ background: {sel_bg}; color: {sel_fg}; }}
+            QHeaderView::section {{
+                background: {hdr_bg};
+                color: {hdr_fg};
                 font-weight: 700;
                 border: none;
-                border-bottom: 1px solid #cbd5e1;
+                border-bottom: 1px solid {border};
                 padding: 5px 8px;
-            }
+            }}
         """)
         for row, values in enumerate(rows):
             for col, value in enumerate(values):
@@ -8193,7 +8212,7 @@ class ModernWindow(QMainWindow):
             QMessageBox.information(self, "Replay Workflow", "No saved workflows found in this worksheet. Create a model and choose 'Save as Reusable Workflow Recipe' in StatCraft Connect first.")
             return
 
-        from PySide6.QtWidgets import QInputDialog, QMessageBox
+        from PySide6.QtWidgets import QInputDialog
         from .connect_workflow import ConnectedWorkflow, validate_workflow_compatibility, replay_workflow
         wf_names = list(workflows.keys())
         chosen, ok = QInputDialog.getItem(self, "Replay Workflow", "Select workflow recipe to replay:", wf_names, 0, False)
@@ -8724,6 +8743,8 @@ class ModernWindow(QMainWindow):
         target = entry or getattr(self, "selected_entry", None)
         if target is None:
             return
+        if target is not getattr(self, "selected_entry", None):
+            self.show_result(target)
         tables = []
         cur_widget = self.result_tabs.currentWidget()
         if cur_widget is not None:
@@ -9333,7 +9354,7 @@ class ModernWindow(QMainWindow):
     def run_data_doctor_dialog(self):
         from .data_doctor import audit_worksheet
         report = audit_worksheet(self.presenter.worksheet)
-        if not report.has_warnings:
+        if not report.issues:
             QMessageBox.information(self, "Data Health Doctor", f"Worksheet '{report.worksheet_name}' is healthy!\nZero factor defects or numerical anomalies detected.")
             return
         msg = f"{report.summary_text}\n\n"
@@ -9420,6 +9441,8 @@ class ModernWindow(QMainWindow):
             if copy_widget_svg_to_clipboard(chart):
                 if self.statusBar():
                     self.statusBar().showMessage("\u2713 Copied lossless scalable vector graphic (SVG) to clipboard!", 5000)
+                return True
+        return False
 
     def export_session_html_dialog(self):
         from .svg_html_export import export_session_to_html

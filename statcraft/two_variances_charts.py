@@ -1,4 +1,5 @@
 """Qt Chart widgets for Two-Sample Variances (0255-2VARIANCESGRAPHS.MDF)."""
+import math
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from PySide6.QtWidgets import QWidget
@@ -89,14 +90,18 @@ class TwoVariancesSummaryPlotWidget(QWidget):
 
         low1, high1 = ci1
         low2, high2 = ci2
-        min_v = max(0.0, min(low1, low2) * 0.8)
-        max_v = max(high1, high2) * 1.15
+        finite_lows = [v for v in (low1, low2) if isinstance(v, (int, float)) and math.isfinite(v)] or [0.0]
+        finite_highs = [v for v in (high1, high2, sd1, sd2) if isinstance(v, (int, float)) and math.isfinite(v)] or [1.0]
+        min_v = max(0.0, min(finite_lows) * 0.8)
+        max_v = max(finite_highs) * 1.15
         if max_v <= min_v:
             max_v = min_v + 1.0
 
         def to_x(val):
+            if not math.isfinite(val):
+                return float(right if val > 0 else left)
             ratio = (val - min_v) / (max_v - min_v)
-            return left + ratio * (right - left)
+            return max(float(left), min(float(right), left + ratio * (right - left)))
 
         # Draw axis
         painter.setPen(QPen(QColor("#94A3B8"), 1))

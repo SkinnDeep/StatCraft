@@ -143,6 +143,21 @@ def merge_worksheets(left, right, left_key=None, right_key=None, name='Merged', 
     return _sheet(name,output)
 
 
+def _unique_worksheet_name(presenter, desired):
+    sheets = presenter.native_project.worksheets if presenter.native_project else [presenter.worksheet]
+    existing = {w.name.casefold() for w in sheets}
+    base = (desired or "Worksheet").strip()[:128].rstrip() or "Worksheet"
+    if base.casefold() not in existing:
+        return base
+    suffix = 2
+    while True:
+        tail = f" {suffix}"
+        candidate = f"{base[:128 - len(tail)].rstrip()}{tail}"
+        if candidate.casefold() not in existing:
+            return candidate
+        suffix += 1
+
+
 def store_prepared(presenter, sheet, destination='worksheet'):
     """A new project lets native MPX inputs participate without rewriting their structure."""
     sheet.validate();_bound(sheet.row_count,len(sheet.columns))
@@ -151,7 +166,7 @@ def store_prepared(presenter, sheet, destination='worksheet'):
         target=Presenter();target.worksheet=sheet;target.dirty=True
         return target
     if destination!='worksheet':raise ValueError('Choose a supported destination.')
-    target=presenter.add_worksheet(sheet.name)
+    target=presenter.add_worksheet(_unique_worksheet_name(presenter, sheet.name))
     target.columns=sheet.columns;target.constants=[];target.matrices=[];target.metadata={}
     return presenter
 
@@ -191,7 +206,7 @@ def split_worksheet(sheet, by_indices, include_missing=True):
         for c in sheet.columns:
             new_vals = [c.values[r] if r < len(c.values) else None for r in rows]
             sub_cols.append(Column(c.name, c.kind, new_vals, metadata=dict(c.metadata)))
-        sheet_title = f"{sheet.name} - {grp_name}"[:128]
+        sheet_title = f"{sheet.name} - {grp_name.strip()}".strip()[:128].rstrip()
         new_sheets.append(_sheet(sheet_title, sub_cols))
     return new_sheets
 

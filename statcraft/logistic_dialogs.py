@@ -197,5 +197,5 @@ class BinaryLogisticDialog(ProcedureDialog):
             values,indices=self.roles()
             self.entry=self.window.presenter.fit_binary_logistic(**values,terms=self.terms,options=self.options)
             self.window.refresh(); self.window.show_result(self.entry)
-        except (ValueError,TypeError,IndexError,ArithmeticError) as exc: self.error.setText(str(exc)); return
+        except (ValueError,TypeError,IndexError,ArithmeticError) as exc: self.error.setText(str(exc)); self.error.setVisible(True); return
         self.accept()

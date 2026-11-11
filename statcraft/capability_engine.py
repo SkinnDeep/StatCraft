@@ -370,7 +370,13 @@ def run_normal_capability(
     if max_size == 1:
         # Subgroup size = 1 (Individuals)
         span = max(2, moving_range_len)
-        moving_ranges = [abs(flat_clean[i] - flat_clean[i - 1]) for i in range(1, len(flat_clean))]
+        if len(flat_clean) >= span:
+            moving_ranges = [
+                max(flat_clean[i - span + 1:i + 1]) - min(flat_clean[i - span + 1:i + 1])
+                for i in range(span - 1, len(flat_clean))
+            ]
+        else:
+            moving_ranges = [abs(flat_clean[i] - flat_clean[i - 1]) for i in range(1, len(flat_clean))]
         
         if estimate_method_eq1.lower() == "mmr":
             med_mr = float(np.median(moving_ranges))

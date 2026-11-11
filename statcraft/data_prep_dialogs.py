@@ -49,7 +49,8 @@ class ReshapeDialog(ProcedureDialog):
             fn={'stack':data_prep.stack_columns,'unstack':data_prep.unstack_columns,'transpose':data_prep.transpose}[self.operation]
             sheet=fn(self.worksheet,**values)
             self.prepared=install(self.window,sheet,destination)
-        except (ValueError,TypeError,IndexError) as exc:self.error.setText(str(exc));return
+        except (ValueError,TypeError,IndexError) as exc:
+            self.error.setText(str(exc)); self.error.setVisible(True); return
         self.accept()
 
 
@@ -108,7 +109,8 @@ class CombineDialog(QDialog):
                 if a==b:raise ValueError('Choose two different worksheets.')
                 sheet=data_prep.merge_worksheets(self.sheets[a],self.sheets[b],c['left_key'].currentIndex(),c['right_key'].currentIndex(),name,('left','inner','full','position')[c['how'].currentIndex()])
             self.prepared=install(self.window,sheet,c['destination'].currentText())
-        except (ValueError,TypeError,IndexError) as exc:self.error.setText(str(exc));return
+        except (ValueError,TypeError,IndexError) as exc:
+            self.error.setText(str(exc)); self.error.setVisible(True); return
         self.accept()
 
 
@@ -136,10 +138,11 @@ class SplitWorksheetDialog(ProcedureDialog):
             values = self.values()
             sheets = data_prep.split_worksheet(self.worksheet, values['by_indices'], include_missing=values.get('include_missing', True))
             for s in sheets:
-                install(self.window, s, 'worksheet')
+                install(self.window, s, 'New worksheet')
             self.prepared = self.window.presenter
         except (ValueError, TypeError, IndexError) as exc:
             self.error.setText(str(exc))
+            self.error.setVisible(True)
             return
         self.accept()
 

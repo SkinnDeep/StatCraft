@@ -53,7 +53,7 @@ class PredictOptionsDialog(QDialog):
                            side=self.side.currentData(), intervals=self.intervals.currentData())
             self.options = settings(options)
         except (ValueError, TypeError, OverflowError) as exc:
-            self.error.setText(str(exc)); return
+            self.error.setText(str(exc)); self.error.setVisible(True); return
         self.accept()
 
 

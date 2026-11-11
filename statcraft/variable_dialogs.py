@@ -429,7 +429,8 @@ class ProcedureDialog(QDialog):
         spec=next(s for s in self.selectors if s['key']==self.active_key)
         control=self.controls[self.active_key]
         refs=[format_variable_reference(item.data(Qt.ItemDataRole.UserRole),self.worksheet) for item in selected]
-        if spec.get('multiple'):
+        is_multi = bool(spec.get('multiple') or spec.get('multi'))
+        if is_multi:
             existing=control.text().strip(); control.setText((existing+' ' if existing else '')+' '.join(refs))
             control.setFocus()
         else:
@@ -452,12 +453,18 @@ class ProcedureDialog(QDialog):
     def values(self):
         values={}
         for spec in self.selectors:
-            indices=resolve_variables(self.controls[spec['key']].text(),self.worksheet,spec.get('kinds',('number',)))
-            minimum=spec.get('minimum',1) if spec.get('multiple') else 1
-            maximum=spec.get('maximum') if spec.get('multiple') else 1
-            if len(indices)<minimum or maximum is not None and len(indices)>maximum:
+            raw_sel=self.controls[spec['key']].text()
+            is_multi = bool(spec.get('multiple') or spec.get('multi'))
+            is_optional = bool(spec.get('optional'))
+            if is_optional and not raw_sel.strip():
+                values[spec['key']] = [] if is_multi else None
+                continue
+            indices=resolve_variables(raw_sel,self.worksheet,spec.get('kinds',('number',)))
+            minimum=spec.get('minimum', spec.get('min_count', 0 if is_optional else 1)) if is_multi else (0 if is_optional else 1)
+            maximum=spec.get('maximum', spec.get('max_count')) if is_multi else 1
+            if len(indices)<minimum or (maximum is not None and len(indices)>maximum):
                 raise ValueError(spec['label']+': select '+(str(minimum) if maximum==minimum else 'at least '+str(minimum))+' columns.')
-            values[spec['key']]=indices if spec.get('multiple') else indices[0]
+            values[spec['key']]=indices if is_multi else (indices[0] if indices else None)
         for first,second in (('response_index','factor_index'),('count_index','size_index'),('first_index','second_index')):
             if first in values and second in values and values[first]==values[second]: raise ValueError('Choose separate variables for the two roles.')
         if 'response_index' in values and values['response_index'] in values.get('predictor_indices',[]):

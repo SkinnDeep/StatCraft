@@ -209,6 +209,7 @@ def columns(recipe):
         raise ValueError('Unsupported analysis recipe or parameters.')
     keys = set(parameters)
     expected = FIELDS[action]
+    validated = True
     if action in ('analyze_factorial', 'analyze_factorial_terms', 'analyze_response_surface'):
         optional = 'block_index' if action=='analyze_response_surface' else 'include_blocks'
         if keys not in (expected, expected | {optional}):
@@ -231,7 +232,9 @@ def columns(recipe):
     elif action == 'symmetry_plot':
         if not {'column_index', 'settings'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
-    elif action == 'reliability_arbitrary':
+    else:
+        validated = False
+    if action == 'reliability_arbitrary':
         cols = [parameters.get('start_index'), parameters.get('end_index'), parameters.get('frequency_index')]
         return sorted(set([c for c in cols if isinstance(c, int) and c >= 0]))
     if action == 'probability_distribution_plot':
@@ -319,7 +322,7 @@ def columns(recipe):
     if action == 'poisson_regression':
         if not expected - {'categorical_indices', 'continuous_indices', 'offset_index'} <= keys <= expected:
             raise ValueError('Unsupported Poisson Regression parameters.')
-    elif keys != expected:
+    elif not validated and keys != expected:
         raise ValueError('Unsupported analysis recipe or parameters.')
     if action in ('predict_mixture_process','mixture_process_contour','optimize_mixture_process','optimize_mixture_joint'):
         if not isinstance(parameters['model_recipe'],dict) or parameters['model_recipe'].get('action')!='analyze_mixture_process':raise ValueError('Select a fitted mixture/process model.')

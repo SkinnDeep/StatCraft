@@ -501,7 +501,22 @@ class RPlotGalleryWidget(QWidget):
             src = self.plot_history[self.current_idx]
             dest, _ = QFileDialog.getSaveFileName(self, "Export R Plot", "Rplot.png", "Images (*.png *.jpg *.pdf)")
             if dest:
-                shutil.copy2(src, dest)
+                from PySide6.QtGui import QImage, QPainter, QPdfWriter, QPageSize
+                ext = Path(dest).suffix.lower()
+                if ext in (".jpg", ".jpeg"):
+                    QImage(src).save(dest, "JPEG")
+                elif ext == ".pdf":
+                    img = QImage(src)
+                    writer = QPdfWriter(dest)
+                    writer.setPageSize(QPageSize(QPageSize.PageSizeId.Letter))
+                    painter = QPainter(writer)
+                    target = painter.viewport()
+                    if not img.isNull() and target.width() > 0 and target.height() > 0:
+                        scaled = img.scaled(target.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        painter.drawImage(0, 0, scaled)
+                    painter.end()
+                else:
+                    shutil.copy2(src, dest)
 
     def clear_all_plots(self) -> None:
         self.plot_history.clear()

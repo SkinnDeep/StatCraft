@@ -130,9 +130,9 @@ def audit_worksheet(worksheet: Worksheet) -> AuditReport:
 
         # 3. Numeric column checks
         elif col.kind == "number":
-            valid_nums = [float(v) for v in vals if v is not None and isinstance(v, (int, float)) and math.isfinite(v)]
+            valid_nums = [float(v) for v in vals if v is not None and isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)]
             if valid_nums:
-                numeric_cols.append((col_idx, col.name, valid_nums))
+                numeric_cols.append((col_idx, col.name, vals))
 
                 # Check numerical sentinels (-999, 9999)
                 sentinels_found = [v for v in valid_nums if v in SENTINEL_VALUES]
@@ -161,17 +161,25 @@ def audit_worksheet(worksheet: Worksheet) -> AuditReport:
                             details={"mean": m, "variance": var}
                         ))
 
-    # 4. Severe pairwise collinearity (|r| > 0.98) among numeric columns
+    # 4. Severe pairwise collinearity (|r| > 0.98) among numeric columns aligned by shared observation rows
     if len(numeric_cols) >= 2:
         for i in range(len(numeric_cols)):
             for j in range(i + 1, len(numeric_cols)):
                 idx1, name1, vals1 = numeric_cols[i]
                 idx2, name2, vals2 = numeric_cols[j]
-                min_len = min(len(vals1), len(vals2))
-                if min_len >= 4:
-                    v1 = vals1[:min_len]
-                    v2 = vals2[:min_len]
-                    m1, m2 = sum(v1) / min_len, sum(v2) / min_len
+                pairs = [
+                    (float(a), float(b))
+                    for a, b in zip(vals1, vals2)
+                    if a is not None and b is not None
+                    and isinstance(a, (int, float)) and isinstance(b, (int, float))
+                    and not isinstance(a, bool) and not isinstance(b, bool)
+                    and math.isfinite(a) and math.isfinite(b)
+                ]
+                if len(pairs) >= 4:
+                    v1 = [p[0] for p in pairs]
+                    v2 = [p[1] for p in pairs]
+                    n_p = len(pairs)
+                    m1, m2 = sum(v1) / n_p, sum(v2) / n_p
                     s1 = math.sqrt(sum((x - m1)**2 for x in v1))
                     s2 = math.sqrt(sum((x - m2)**2 for x in v2))
                     if s1 > 1e-9 and s2 > 1e-9:
@@ -190,7 +198,7 @@ def audit_worksheet(worksheet: Worksheet) -> AuditReport:
 
 
 def autofix_worksheet_issues(worksheet: Worksheet) -> int:
-    """Safely apply automated fixes: trim trailing/leading whitespace and sentinel strings. Returns number of fixes."""
+    """Safely apply automated fixes: trim whitespace, replace sentinel strings and numeric sentinels. Returns number of fixes."""
     fixes = 0
     for col in worksheet.columns:
         if col.kind == "text":
@@ -208,5 +216,14 @@ def autofix_worksheet_issues(worksheet: Worksheet) -> int:
                         fixes += 1
                     else:
                         new_vals.append(s_val)
+            col.values = new_vals
+        elif col.kind == "number":
+            new_vals = []
+            for v in col.values:
+                if v is not None and isinstance(v, (int, float)) and not isinstance(v, bool) and float(v) in SENTINEL_VALUES:
+                    new_vals.append(None)
+                    fixes += 1
+                else:
+                    new_vals.append(v)
             col.values = new_vals
     return fixes

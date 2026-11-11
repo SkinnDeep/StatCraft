@@ -1564,7 +1564,10 @@ def generate_r_subgroup_spc_script(connected: "ConnectedAnalysis", worksheet: "W
     """Generate clean Base R script for Subgroup SPC (Xbar-R / Xbar-S) control charts."""
     def _scalar(v, default=0.0):
         if isinstance(v, (list, tuple)):
-            return float(v[0]) if v else default
+            for item in v:
+                if item is not None:
+                    return float(item)
+            return default
         return float(v) if v is not None else default
 
     meas_col = connected.response_name
@@ -1803,7 +1806,7 @@ def generate_dataframe_definition(worksheet: "Worksheet") -> str:
             vals = [str(v) if v is not None and not (isinstance(v, float) and math.isnan(v)) else "NA" for v in col.values]
             col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
         else:
-            vals = [f'"{str(v)}"' if v is not None else "NA" for v in col.values]
+            vals = ['"{}"'.format(str(v).replace('\\', '\\\\').replace('"', '\\"')) if v is not None else "NA" for v in col.values]
             col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
     body = ",\n".join(col_defs)
     return (
@@ -1914,7 +1917,7 @@ def generate_vroom_data_import_code(worksheet: "Worksheet") -> str:
             vals = [str(v) if v is not None and not (isinstance(v, float) and math.isnan(v)) else "NA" for v in col.values]
             col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
         else:
-            vals = [f'"{str(v)}"' if v is not None else "NA" for v in col.values]
+            vals = ['"{}"'.format(str(v).replace('\\', '\\\\').replace('"', '\\"')) if v is not None else "NA" for v in col.values]
             col_defs.append(f'  "{safe_name}" = c({", ".join(vals)})')
     body = ",\n".join(col_defs)
     clean_name = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in worksheet.name).strip("_") or "data"

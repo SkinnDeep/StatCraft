@@ -414,7 +414,9 @@ class Presenter:
             try:
                 value = finite_number(float(raw))
             except ValueError:
-                value = datetime_to_serial(datetime.fromisoformat(raw.strip()))
+                from .data_prep import _parse_datetime_cell
+                dt = _parse_datetime_cell(s, "text")
+                value = datetime_to_serial(dt)
             serial_to_datetime(value)
             return value
         if kind != "number":
@@ -508,7 +510,10 @@ class Presenter:
         if not rows:
             return
         width = len(rows[0])
-        if not width or any(len(r) != width for r in rows):
+        if not width:
+            raise ValueError("Clipboard rows must have equal numbers of cells.")
+        rows = [([""] * width) if r == [] else r for r in rows]
+        if any(len(r) != width for r in rows):
             raise ValueError("Clipboard rows must have equal numbers of cells.")
 
         # Smart Header Detection: only treat row 0 as header when it is an actual non-missing text label above numbers
@@ -6357,7 +6362,9 @@ class Presenter:
         ]
         if not matched_rows:
             raise ValueError("No rows matched the specified condition.")
-        new_sheet = self.subset_worksheet(name=name or None, mode="include", row_indices=matched_rows)
+        from .data_prep import _unique_worksheet_name
+        unique_name = _unique_worksheet_name(self, name or "Subset")
+        new_sheet = self.subset_worksheet(name=unique_name, mode="include", row_indices=matched_rows)
         return self._record(
             f"Subset Worksheet — {new_sheet.name}",
             {"condition": condition_expr, "matched_rows": len(matched_rows), "worksheet": new_sheet.name},
@@ -6972,29 +6979,19 @@ class Presenter:
         if rows == 0:
             raise ValueError("Selected columns contain no observations to sort.")
 
-        def sort_key_for_row(r):
-            key_parts = []
-            has_missing = False
-            for col in by_cols:
+        # Sort stably from least-significant sort key up to primary key so missing secondary keys stay within their primary group
+        order = list(range(rows))
+        for col in reversed(by_cols):
+            present, missing = [], []
+            for r in order:
                 val = col.values[r] if r < len(col.values) else None
-                if val is None or (col.kind == "text" and val == ""):
-                    has_missing = True
-                    key_parts.append((1, ""))
+                if val is None or (col.kind == "text" and val == "") or (isinstance(val, float) and math.isnan(val)):
+                    missing.append(r)
                 else:
                     k = str(val).casefold() if col.kind == "text" else float(val)
-                    key_parts.append((0, k))
-            return (1 if has_missing else 0, tuple(key_parts), r)
-
-        present, missing = [], []
-        for r in range(rows):
-            k = sort_key_for_row(r)
-            if k[0] == 1:
-                missing.append(r)
-            else:
-                present.append((k, r))
-
-        present.sort(key=lambda item: item[0], reverse=bool(descending))
-        order = [r for _, r in present] + missing
+                    present.append((k, r))
+            present.sort(key=lambda item: item[0], reverse=bool(descending))
+            order = [r for _, r in present] + missing
         for idx in set(target_indices):
             col = self.worksheet.columns[idx]
             padded = list(col.values) + [None] * (rows - len(col.values))
@@ -7034,23 +7031,10 @@ class Presenter:
         for pos, r_val in zip(present_idx, computed):
             ranks[pos] = engine.normalize_numeric(r_val)
         dest = destination.strip()
-        if dest.upper().startswith("C") and dest[1:].isdigit():
-            dest_idx = int(dest[1:]) - 1
-        elif dest.isdigit():
-            dest_idx = int(dest) - 1
-        else:
-            dest_idx = None
-        if dest_idx is not None and 0 <= dest_idx < len(self.worksheet.columns):
-            target = self.worksheet.columns[dest_idx]
-            target.kind = "number"
-            target.values = ranks
-            target.metadata.pop("auto_type", None)
-            stored_name = target.name
-        else:
-            if not dest:
-                raise ValueError("Enter a destination column or name.")
-            self.worksheet.columns.append(Column(dest, "number", ranks))
-            stored_name = dest
+        if not dest:
+            raise ValueError("Enter a destination column or name.")
+        target_col = self._assign_or_append_column(dest, ranks, "number")
+        stored_name = target_col.name
         self.dirty = True
         return self._record("Rank — " + col.name, {"source": col.name, "destination": stored_name, "count": len(present_idx)})
 

@@ -155,7 +155,7 @@ class SimilarProcedureDialog(ProcedureDialog):
         try:
             self.parameters=self.values(); self.recipes(); self.appearance_settings()
         except (ValueError,TypeError,OverflowError) as exc:
-            self.error.setText(str(exc)); return
+            self.error.setText(str(exc)); self.error.setVisible(True); return
         self.accept()
 
 
