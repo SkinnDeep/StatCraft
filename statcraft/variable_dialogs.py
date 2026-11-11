@@ -418,6 +418,8 @@ class ProcedureDialog(QDialog):
             if column.kind in spec.get('kinds',('number',)):
                 label=format_variable_reference(i,self.worksheet)
                 item=QListWidgetItem(label); item.setToolTip(label); item.setData(Qt.ItemDataRole.UserRole,i); self.available.addItem(item)
+        if hasattr(self, 'var_filter') and self.var_filter.text().strip():
+            self._filter_available_variables(self.var_filter.text())
         self.select_button.setEnabled(False)
 
     def transfer(self):

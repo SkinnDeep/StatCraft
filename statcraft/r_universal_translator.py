@@ -30,8 +30,8 @@ def generate_dataframe_r_code(worksheet: Worksheet) -> str:
             vals = ["NA" if v is None or not math.isfinite(v) else repr(float(v)) for v in c.values]
             col_defs.append(f"  {_escape_str(c.name)} = c({', '.join(vals)})")
         elif c.kind == "date":
-            from .model import serial_to_date_string
-            vals = ["NA" if v is None else repr(serial_to_date_string(v)) for v in c.values]
+            from .model import display_date
+            vals = ["NA" if v is None else repr(display_date(v)) for v in c.values]
             col_defs.append(f"  {_escape_str(c.name)} = as.Date(c({', '.join(vals)}))")
         else:
             vals = ["NA" if v is None else repr(str(v)) for v in c.values]

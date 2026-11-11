@@ -116,6 +116,8 @@ def parse_delimited(text, delimiter=",", has_header=True, column_types=None, nam
         rows = list(csv.reader(_io.StringIO(text, newline=""), delimiter=delimiter, strict=True))
     except csv.Error as exc:
         raise FormatError("Invalid delimited text: " + str(exc)) from exc
+    while rows and rows[-1] == []:
+        rows.pop()
     if not rows:
         return Worksheet(name)
     width = len(rows[0])
@@ -153,8 +155,17 @@ def load_csv(path, delimiter=None, has_header=True, column_types=None):
     if path.stat().st_size > MAX_TOTAL_BYTES:
         raise FormatError("Delimited file exceeds the size limit.")
     delimiter = delimiter or ("\t" if path.suffix.lower() in (".tsv", ".tab") else ",")
-    return parse_delimited(path.read_text(encoding="utf-8-sig"), delimiter,
-                           has_header, column_types, path.stem)
+    raw_bytes = path.read_bytes()
+    decoded = None
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            decoded = raw_bytes.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if decoded is None:
+        raise FormatError("Could not decode CSV/TSV text with UTF-8, Windows-1252, or Latin-1.")
+    return parse_delimited(decoded, delimiter, has_header, column_types, path.stem)
 
 
 def save_csv(worksheet, path, delimiter=None):

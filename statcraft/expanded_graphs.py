@@ -113,9 +113,9 @@ def compute(method, worksheet, indices, group_index=None, bins=10, confidence=.9
     if sum(len(c.values) for c in selected)>MAX_CELLS:raise ValueError('Graph selection exceeds 10000 cells.')
     for c in selected:c.validate()
     minimum={'binned_scatter':2,'matrix_plot':2,'correlogram':2,'bubble':3,'marginal':2,
-             'parallel_coordinates':2,'contour':3,'scatter3d':3,'surface3d':3}.get(method,1)
+             'parallel_coordinates':2,'contour':3,'scatter3d':3,'surface3d':3,'wafer_plot':3}.get(method,1)
     exact={'binned_scatter':2,'bubble':3,'marginal':2,'bar_chart':1,'pie_chart':1,
-           'contour':3,'scatter3d':3,'surface3d':3}
+           'contour':3,'scatter3d':3,'surface3d':3,'wafer_plot':3}
     if method=='distribution_plot':
         if cols:raise ValueError('Distribution plots use parameters, not worksheet columns.')
     elif len(cols)<minimum or (method in exact and len(cols)!=exact[method]):

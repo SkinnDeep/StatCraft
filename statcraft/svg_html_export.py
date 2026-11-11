@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QMimeData, QRectF
+from PySide6.QtCore import QBuffer, QByteArray, QMimeData, QRect, QRectF
 from PySide6.QtGui import QPainter
 from PySide6.QtSvg import QSvgGenerator
 from PySide6.QtWidgets import QApplication, QWidget
@@ -30,7 +30,7 @@ def export_widget_to_svg_bytes(widget: QWidget) -> bytes:
     if w_size.width() <= 0 or w_size.height() <= 0:
         w_size = widget.minimumSizeHint()
     generator.setSize(w_size)
-    generator.setViewBox(widget.rect())
+    generator.setViewBox(QRect(0, 0, max(1, w_size.width()), max(1, w_size.height())))
     generator.setTitle("StatCraft Vector Plot")
     generator.setDescription("Rendered by StatCraft Desktop")
 
@@ -159,7 +159,7 @@ def export_session_to_html(
     <div class="container">
         <header>
             <h1>StatCraft Statistical Session Report</h1>
-            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.4.0</div>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v116.5.0</div>
         </header>
         <main>
             {body_content}
@@ -187,7 +187,7 @@ def export_session_to_markdown(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: List[str] = [
         f"# StatCraft Session Report — {worksheet_name}",
-        f"*Generated locally: {now_str} · StatCraft v116.4.0*",
+        f"*Generated locally: {now_str} · StatCraft v116.5.0*",
         "",
         "## Table of Contents",
     ]

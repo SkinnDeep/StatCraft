@@ -7,7 +7,7 @@ from . import calculator,engine
 
 def calculation_order(worksheet,targets=None):
     expressions={i:c.metadata['formula'] for i,c in enumerate(worksheet.columns) if c.metadata.get('formula')}
-    dependencies={i:calculator.column_references(expr) for i,expr in expressions.items()}
+    dependencies={i:calculator.column_references(expr, worksheet) for i,expr in expressions.items()}
     for index,refs in dependencies.items():
         if any(r<0 or r>=len(worksheet.columns) for r in refs):
             raise ValueError('Formula in C'+str(index+1)+' refers to a column that does not exist.')
@@ -41,7 +41,7 @@ def recalculate(worksheet,targets=None):
         column=candidate.columns[index];column.kind='number'
         try:
             column.values=[None if v is None else engine.normalize_numeric(v)
-                for v in calculator.evaluate(column.metadata['formula'],candidate)]
+                for v in calculator.evaluate_advanced(column.metadata['formula'],candidate)]
         except ValueError as exc:
             raise ValueError('Formula in C'+str(index+1)+': '+str(exc)) from exc
     for index in ordered:
@@ -70,4 +70,4 @@ def remap_references(worksheet,old_columns):
         return 'C'+str(mapping[old]+1)
     for column in worksheet.columns:
         if column.metadata.get('formula'):
-            column.metadata['formula']=re.sub(r'\bC(\d+)\b',replace,column.metadata['formula'])
+            column.metadata['formula']=re.sub(r'\bC(\d+)\b',replace,column.metadata['formula'], flags=re.IGNORECASE)

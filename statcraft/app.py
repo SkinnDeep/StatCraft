@@ -503,23 +503,27 @@ class Presenter:
             rows = list(csv.reader(text_io.StringIO(text, newline=""), delimiter="\t", strict=True))
         except csv.Error as exc:
             raise ValueError("Invalid clipboard table: " + str(exc)) from exc
+        while rows and rows[-1] == []:
+            rows.pop()
         if not rows:
             return
         width = len(rows[0])
         if not width or any(len(r) != width for r in rows):
             raise ValueError("Clipboard rows must have equal numbers of cells.")
 
-        # Smart Header Detection: If row == 0 and top row is headers, extract them
+        # Smart Header Detection: only treat row 0 as header when it is an actual non-missing text label above numbers
         headers = None
+        _MISSING_TOKENS = ("", "*", "NA", "N/A", "nan", "NaN")
         if row == 0 and len(rows) >= 2:
             header_candidates = []
             for c_idx in range(width):
                 val_0 = rows[0][c_idx].strip()
+                if val_0 in _MISSING_TOKENS:
+                    continue
                 is_num_0 = False
                 try:
-                    if val_0 not in ("", "*", "NA", "N/A", "nan", "NaN"):
-                        finite_number(float(val_0))
-                        is_num_0 = True
+                    finite_number(float(val_0))
+                    is_num_0 = True
                 except ValueError:
                     is_num_0 = False
 
@@ -527,7 +531,7 @@ class Presenter:
                 for r_idx in range(1, len(rows)):
                     val_r = rows[r_idx][c_idx].strip()
                     try:
-                        if val_r not in ("", "*", "NA", "N/A", "nan", "NaN"):
+                        if val_r not in _MISSING_TOKENS:
                             finite_number(float(val_r))
                             has_num_rest = True
                             break
@@ -799,12 +803,20 @@ class Presenter:
             self.worksheet.columns[index].kind = target_kind
             self.worksheet.columns[index].values = values
             self.worksheet.columns[index].metadata.pop("auto_type", None)
+            self.worksheet.columns[index].metadata.pop("formula", None)
         else:
             if not dest_clean:
                 raise ValueError("Enter a destination name.")
-            if (len(self.worksheet.columns) + 1) * max(1, self.worksheet.row_count) > io.MAX_CELLS:
-                raise ValueError("The worksheet exceeds the cell limit.")
-            self.worksheet.columns.append(Column(dest_clean, target_kind, values))
+            existing_idx = next((i for i, col in enumerate(self.worksheet.columns) if col.name.strip().casefold() == dest_clean.casefold()), None)
+            if existing_idx is not None:
+                self.worksheet.columns[existing_idx].kind = target_kind
+                self.worksheet.columns[existing_idx].values = values
+                self.worksheet.columns[existing_idx].metadata.pop("auto_type", None)
+                self.worksheet.columns[existing_idx].metadata.pop("formula", None)
+            else:
+                if (len(self.worksheet.columns) + 1) * max(1, self.worksheet.row_count) > io.MAX_CELLS:
+                    raise ValueError("The worksheet exceeds the cell limit.")
+                self.worksheet.columns.append(Column(dest_clean, target_kind, values))
         return self._record("Calculator", {"expression": expression, "destination": destination, "rows": len(values)})
 
     def fit_binary_logistic(self,response_index,continuous_indices,categorical_indices,event=None,trials_index=None,terms=None,options=None):
@@ -7043,13 +7055,12 @@ class Presenter:
         return self._record("Rank — " + col.name, {"source": col.name, "destination": stored_name, "count": len(present_idx)})
 
     @undoable
-    @undoable
     def assign_formula(self, index, expression):
         if not 0 <= index < len(self.worksheet.columns):
             raise ValueError("Select an existing column.")
         from .formulas import recalculate
-        from .calculator import parse_expression
-        parse_expression(expression)
+        from .calculator import _preprocess_expression, parse_expression
+        parse_expression(_preprocess_expression(expression, self.worksheet))
         col = self.worksheet.columns[index]
         col.kind = "number"
         col.metadata["formula"] = expression.strip()

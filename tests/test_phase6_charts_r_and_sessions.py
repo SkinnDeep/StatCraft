@@ -116,9 +116,9 @@ class Phase6ChartsAndEcosystemTests(unittest.TestCase):
         spec = (repo / "StatCraft.spec").read_text(encoding="utf-8")
         for mod in ("statcraft.predictive_ml", "statcraft.monte_carlo", "statcraft.phase6_charts", "statcraft.mixed_reml"):
             self.assertIn(mod, spec)
-        self.assertIn("'CFBundleVersion': '116.4.0'", spec)
-        self.assertIn("116.4.0.0", (repo / "app_version.txt").read_text(encoding="utf-8"))
-        self.assertIn("116.4.0.0", (repo / "installer_version.txt").read_text(encoding="utf-8"))
+        self.assertIn("'CFBundleVersion': '116.5.0'", spec)
+        self.assertIn("116.5.0.0", (repo / "app_version.txt").read_text(encoding="utf-8"))
+        self.assertIn("116.5.0.0", (repo / "installer_version.txt").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

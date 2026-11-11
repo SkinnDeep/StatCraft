@@ -793,7 +793,7 @@ class ModernWindow(QMainWindow):
                             self.rename_output_dialog(data["entry"])
                             return
                         elif data.get("kind") == "sheet":
-                            self.rename_sheet()
+                            self.rename_worksheet()
                             return
                 elif key == Qt.Key.Key_Delete:
                     if isinstance(data, dict) and data.get("kind") == "result" and "entry" in data:
@@ -2738,6 +2738,28 @@ class ModernWindow(QMainWindow):
         self._sync_selection_highlights()
         self.statusBar().showMessage(f"Selected all {self.presenter.worksheet.row_count} rows across all {num_cols} columns", 3000)
 
+    def _copy_selected_columns_text(self, include_headers=False):
+        cols = sorted(idx for idx in getattr(self, "_selected_columns", set()) if 0 <= idx < len(self.presenter.worksheet.columns))
+        if not cols:
+            return None
+        total_rows = max(0, self.presenter.worksheet.row_count)
+        if cols == list(range(cols[0], cols[-1] + 1)):
+            body = self.presenter.copy_block(0, max(0, total_rows - 1), cols[0], cols[-1]) if total_rows else ""
+        else:
+            lines = []
+            for r in range(total_rows):
+                row_vals = []
+                for c_idx in cols:
+                    col = self.presenter.worksheet.columns[c_idx]
+                    val = col.values[r] if r < len(col.values) else None
+                    row_vals.append("" if val is None else display_date(val) if col.kind == "date" else _display(val) if col.kind == "number" else str(val))
+                lines.append("\t".join(row_vals))
+            body = "\n".join(lines) + ("\n" if lines else "")
+        if include_headers:
+            hdr = "\t".join(self.presenter.worksheet.columns[c_idx].name for c_idx in cols) + "\n"
+            return hdr + body
+        return body
+
     def copy_with_column_names(self):
         focused = QApplication.focusWidget()
         if isinstance(focused, (QLineEdit, QPlainTextEdit)) and not self.table.isAncestorOf(focused):
@@ -2745,17 +2767,15 @@ class ModernWindow(QMainWindow):
             return
         self._commit_editor()
         def copy():
-            if getattr(self, '_selected_columns', None) and len(self._selected_columns) == len(self.presenter.worksheet.columns):
-                first = 0
-                last = max(0, self.presenter.worksheet.row_count - 1)
-                left = 0
-                right = max(0, len(self.presenter.worksheet.columns) - 1)
+            selected_text = self._copy_selected_columns_text(include_headers=True)
+            if selected_text is not None:
+                full_text = selected_text
             else:
                 first, last, left, right = self._range()
-            raw_block = self.presenter.copy_block(first, last, left, right)
-            headers = [self.presenter.worksheet.columns[c].name for c in range(left, right + 1) if c < len(self.presenter.worksheet.columns)]
-            header_line = "\t".join(headers) + "\n"
-            full_text = header_line + raw_block
+                raw_block = self.presenter.copy_block(first, last, left, right)
+                headers = [self.presenter.worksheet.columns[c].name for c in range(left, right + 1) if c < len(self.presenter.worksheet.columns)]
+                header_line = "\t".join(headers) + "\n"
+                full_text = header_line + raw_block
             QApplication.clipboard().setText(full_text)
             self.statusBar().showMessage("Copied data with column names to clipboard", 4000)
         self._call(copy)
@@ -2774,10 +2794,9 @@ class ModernWindow(QMainWindow):
                 QApplication.clipboard().setText("\t".join(self.column_names.item(0, c).text() for c in range(area.leftColumn(), area.rightColumn() + 1)))
             return
         self._commit_editor()
-        if getattr(self, '_selected_columns', None) and len(self._selected_columns) == len(self.presenter.worksheet.columns):
-            total_rows = self.presenter.worksheet.row_count
-            total_cols = len(self.presenter.worksheet.columns)
-            self._call(lambda: QApplication.clipboard().setText(self.presenter.copy_block(0, max(0, total_rows - 1), 0, max(0, total_cols - 1))))
+        selected_text = self._copy_selected_columns_text(include_headers=False)
+        if selected_text is not None:
+            self._call(lambda: QApplication.clipboard().setText(selected_text))
             return
         self._call(lambda: QApplication.clipboard().setText(self.presenter.copy_block(*self._range())))
 
@@ -3308,13 +3327,18 @@ class ModernWindow(QMainWindow):
         if valid_recents:
             for p in valid_recents:
                 filename = Path(p).name
-                act = self.recent_menu.addAction(filename, lambda path=p: self.load_path(path))
+                act = self.recent_menu.addAction(filename, lambda _checked=False, path=p: self._open_recent_path(path))
                 act.setToolTip(p)
             self.recent_menu.addSeparator()
             self.recent_menu.addAction("Clear Recent Projects", self._clear_recent_files)
         else:
             no_rec = self.recent_menu.addAction("No Recent Projects")
             no_rec.setEnabled(False)
+
+    def _open_recent_path(self, path):
+        if not self._confirm_leave():
+            return
+        self._call(lambda: self.load_path(path))
 
     def _clear_recent_files(self):
         from PySide6.QtCore import QSettings
@@ -3432,13 +3456,18 @@ class ModernWindow(QMainWindow):
         cur_c = max(0, min(self.table.currentColumn(), len(self.presenter.worksheet.columns) - 1))
         col = self.presenter.worksheet.columns[cur_c]
 
-        selected_vals = col.values[first_r:last_r + 1] if last_r < len(col.values) else []
-        non_empty = [v for v in selected_vals if v is not None and str(v).strip() != ""]
+        row_slice = [col.values[r] if r < len(col.values) else None for r in range(first_r, last_r + 1)]
+        seed_len = 0
+        for v in row_slice:
+            if v is not None and str(v).strip() != "":
+                seed_len += 1
+            else:
+                break
+        sel_len = max(1, last_r - first_r + 1)
 
-        if len(non_empty) >= 1 and len(non_empty) < len(selected_vals):
-            sample_len = len(non_empty)
-            count = len(selected_vals) - sample_len
-            self._call(lambda: self.presenter.autofill_column(cur_c, first_r, sample_len, count))
+        if 1 <= seed_len < sel_len:
+            count = sel_len - seed_len
+            self._call(lambda: self.presenter.autofill_column(cur_c, first_r, seed_len, count))
             self.statusBar().showMessage(f"Autofilled {count} rows in C{cur_c + 1}", 4000)
             return
 
@@ -3800,8 +3829,8 @@ class ModernWindow(QMainWindow):
         dlg = OneWayAnovaDialog(self)
         if dlg.exec():
             if dlg.entry is not None:
-                self.set_entry(dlg.entry)
                 self.refresh()
+                self.show_result(dlg.entry)
 
     def stacked_anova(self):
         self.oneway_anova_dialog()
@@ -5295,11 +5324,12 @@ class ModernWindow(QMainWindow):
             return
         charts = self._build_chart_widgets_for_history()
         try:
-            export_session_to_markdown(self.presenter.history, self.presenter.worksheet.name, path, chart_widgets=charts)
+            ok = self._call(lambda: (export_session_to_markdown(self.presenter.history, self.presenter.worksheet.name, path, chart_widgets=charts), True)[1])
         finally:
             for w in charts.values():
                 w.close()
-        self.statusBar().showMessage(f"Exported Markdown report to {path}", 4000)
+        if ok:
+            self.statusBar().showMessage(f"Exported Markdown report to {path}", 4000)
 
     def monte_carlo_dialog(self):
         self._dialog(
@@ -7339,7 +7369,7 @@ class ModernWindow(QMainWindow):
                     result=True,
                 )
                 if entry is not None:
-                    self._update_all()
+                    self.refresh()
 
     def stepwise_regression_dialog(self):
         from .stepwise_dialogs import StepwiseRegressionDialog
@@ -7583,7 +7613,7 @@ class ModernWindow(QMainWindow):
 
     def recode_dialog(self, target_kind: str = 'number'):
         from .recode_dialogs import RecodeDialog
-        dlg = RecodeDialog(self.worksheet, target_kind=target_kind, parent=self)
+        dlg = RecodeDialog(self.presenter.worksheet, target_kind=target_kind, parent=self)
         self._last_dialog_action = lambda: self.recode_dialog(target_kind)
         if dlg.exec():
             p = getattr(dlg, 'settings', None)
@@ -7600,7 +7630,7 @@ class ModernWindow(QMainWindow):
                     result=True,
                 )
                 if entry is not None:
-                    self._update_all()
+                    self.refresh()
 
     def analyze_surface_dialog(self):
         return self.analyze_response_surface()
@@ -7706,6 +7736,8 @@ class ModernWindow(QMainWindow):
         self.statusBar().showMessage("StatCraft Connect: Tri-Engine Tour Project loaded with 3 benchmark analyses!", 8000)
 
     def load_connect_sample(self):
+        if not self._confirm_leave():
+            return
         from .connect_hub import create_chemical_process_sample
         ws = create_chemical_process_sample()
         self.presenter.worksheet = ws
@@ -8027,7 +8059,7 @@ class ModernWindow(QMainWindow):
     def _descriptive_stats_on_selection(self, rows):
         sheet = self.subset_worksheet_from_selection(rows)
         if sheet:
-            self.display_descriptive_dialog()
+            self.describe()
 
     def subset_worksheet_from_selection(self, rows=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])
@@ -9183,9 +9215,9 @@ class ModernWindow(QMainWindow):
                 QMessageBox.critical(self, "Export Error", f"Failed to save R script:\n{err}")
 
     def export_worksheet_vroom(self):
-        from .connect_r import generate_vroom_load_code
+        from .connect_r import generate_vroom_data_import_code
         ws = self.presenter.worksheet
-        script = generate_vroom_load_code(ws)
+        script = generate_vroom_data_import_code(ws)
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in ws.name).strip("_")
         path, _ = QFileDialog.getSaveFileName(self, "Export Worksheet Vroom Loader", f"{clean}_vroom.R", "R Scripts (*.R *.r)")
         if path:
@@ -9237,24 +9269,32 @@ class ModernWindow(QMainWindow):
             self.statusBar().showMessage("\u2713 Copied Base R script to clipboard!", 5000)
 
     def view_entry_r_code(self, entry):
-        from .r_viewer import RScriptViewerDialog
         from .r_universal_translator import translate_analysis_to_r
         ws = self.presenter.worksheet if hasattr(self, "presenter") else None
         r_code = translate_analysis_to_r(entry, ws, dialect="tidyverse")
-        title = entry.title if entry and hasattr(entry, "title") else "Analysis"
-        dlg = RScriptViewerDialog(
-            r_code=r_code,
-            title=title,
-            dialect="Tidyverse / ggplot2",
-            parent=self,
-        )
+        title = entry.get("title", "Analysis") if isinstance(entry, dict) else (getattr(entry, "title", None) or "Analysis")
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"R Code — {title}")
+        dlg.resize(740, 520)
+        layout = QVBoxLayout(dlg)
+        editor = QPlainTextEdit()
+        editor.setReadOnly(True)
+        editor.setFont(QFont("Consolas", 10))
+        editor.setPlainText(r_code)
+        layout.addWidget(editor, 1)
+        btns = QDialogButtonBox()
+        copy_btn = btns.addButton("Copy R Script", QDialogButtonBox.ButtonRole.ActionRole)
+        close_btn = btns.addButton(QDialogButtonBox.StandardButton.Close)
+        copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(r_code))
+        close_btn.clicked.connect(dlg.accept)
+        layout.addWidget(btns)
         dlg.exec()
 
     def export_entry_r_file(self, entry):
         from .r_universal_translator import translate_analysis_to_r
         ws = self.presenter.worksheet if hasattr(self, "presenter") else None
         script = translate_analysis_to_r(entry, ws, dialect="tidyverse")
-        title = entry.title if entry and hasattr(entry, "title") else "Analysis"
+        title = entry.get("title", "Analysis") if isinstance(entry, dict) else (getattr(entry, "title", None) or "Analysis")
         clean = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in title).strip("_")
         path, _ = QFileDialog.getSaveFileName(self, "Export Modern Tidyverse R Script", f"{clean}_tidyverse.R", "R Scripts (*.R *.r)")
         if path:

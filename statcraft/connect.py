@@ -587,6 +587,16 @@ def check_analysis_freshness(connected: ConnectedAnalysis, worksheet: Worksheet)
     """
     ensure_worksheet_identities(worksheet)
 
+    # Generic analyses bind to the whole worksheet rather than a fixed response column.
+    if connected.response_col_id == "generic":
+        current_fp = compute_data_fingerprint(worksheet, list(range(len(worksheet.columns))))
+        if current_fp != connected.data_fingerprint:
+            return (
+                "stale",
+                "Source worksheet data has changed since this analysis ran. Rerun to update."
+            )
+        return ("current", "Model is fully synchronized with current worksheet data.")
+
     # 1. Check if response column exists by ID or name
     resp_match = get_column_by_id(worksheet, connected.response_col_id)
     if resp_match is None:

@@ -24,9 +24,19 @@ def parse_expression(expression):
     return tree
 
 
-def column_references(expression):
-    return {int(node.id[1:])-1 for node in ast.walk(parse_expression(expression))
-            if isinstance(node,ast.Name) and node.id.startswith('C') and node.id[1:].isdigit()}
+def column_references(expression, worksheet=None):
+    expr = _preprocess_expression(expression, worksheet) if worksheet is not None else expression
+    tree = parse_expression(expr)
+    refs = set()
+    col_name_map = {col.name: idx for idx, col in enumerate(worksheet.columns)} if worksheet is not None else {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            up = node.id.upper()
+            if up.startswith('C') and up[1:].isdigit():
+                refs.add(int(up[1:]) - 1)
+            elif node.id in col_name_map:
+                refs.add(col_name_map[node.id])
+    return refs
 
 
 def evaluate(expression, worksheet):
@@ -37,20 +47,21 @@ def evaluate(expression, worksheet):
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
             finite_number(node.value)
         elif isinstance(node, ast.Name):
-            if node.id[:1] not in ('C','K') or not node.id[1:].isdigit():
+            up = node.id.upper()
+            if up[:1] not in ('C', 'K') or not up[1:].isdigit():
                 raise ValueError('Use column references C1, C2, ... or stored constants K1, K2, ...')
-            index = int(node.id[1:]) - 1
-            entries=worksheet.columns if node.id.startswith('C') else worksheet.constants
+            index = int(up[1:]) - 1
+            entries = worksheet.columns if up.startswith('C') else worksheet.constants
             if not 0 <= index < len(entries) or entries[index].kind != 'number':
                 raise ValueError('Formula reference must be an existing numeric column or constant.')
             entries[index].validate()
-            if node.id.startswith('K') and len(entries[index].values)!=1:
+            if up.startswith('K') and len(entries[index].values) != 1:
                 raise ValueError('A stored constant must contain exactly one value.')
         elif isinstance(node, ast.BinOp) and type(node.op) in BINARY:
             validate(node.left); validate(node.right)
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
             validate(node.operand)
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FUNCTIONS:
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id.upper() in FUNCTIONS:
             if node.keywords or len(node.args) != 1:
                 raise ValueError('Functions take exactly one input.')
             validate(node.args[0])
@@ -61,10 +72,11 @@ def evaluate(expression, worksheet):
     def cell(node, row):
         if isinstance(node, ast.Constant): return float(node.value)
         if isinstance(node, ast.Name):
-            entries=worksheet.columns if node.id.startswith('C') else worksheet.constants
-            values=entries[int(node.id[1:])-1].values
-            position=row if node.id.startswith('C') else 0
-            return values[position] if position<len(values) else None
+            up = node.id.upper()
+            entries = worksheet.columns if up.startswith('C') else worksheet.constants
+            values = entries[int(up[1:]) - 1].values
+            position = row if up.startswith('C') else 0
+            return values[position] if position < len(values) else None
         if isinstance(node, ast.BinOp):
             left, right = cell(node.left, row), cell(node.right, row)
             if left is None or right is None: return None
@@ -75,7 +87,7 @@ def evaluate(expression, worksheet):
             value = cell(node.operand, row)
             return None if value is None else -value if isinstance(node.op, ast.USub) else value
         value = cell(node.args[0], row)
-        return None if value is None else finite_number(FUNCTIONS[node.func.id](value))
+        return None if value is None else finite_number(FUNCTIONS[node.func.id.upper()](value))
     result = []
     for row in range(worksheet.row_count):
         try: result.append(cell(tree.body, row))

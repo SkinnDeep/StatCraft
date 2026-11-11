@@ -951,7 +951,7 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 p.setFont(QFont('Segoe UI',9))
                 note=p.fontMetrics().elidedText(self.note,Qt.TextElideMode.ElideRight,max(80,self.width()-44))
                 self._text(p,QRectF(22,self.height()-29,self.width()-44,21),note)
-        except (ValueError,OverflowError,TypeError,IndexError) as exc:
+        except (ValueError,OverflowError,TypeError,IndexError,KeyError) as exc:
             self.error=str(exc)
             p.fillRect(QRectF(12,54,self.width()-24,self.height()-65),QColor('white'))
             p.setFont(QFont('Segoe UI',10));self._text(p,QRectF(30,70,self.width()-60,self.height()-100),'Plot unavailable: '+str(exc))
