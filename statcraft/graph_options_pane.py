@@ -59,28 +59,19 @@ class GraphOptionsPane(QWidget):
         self.setObjectName('graphOptionsPane')
         self.setMinimumWidth(290)
         self.setMaximumWidth(480)
-        self.setStyleSheet('''
-            QWidget { background: white; }
-            QWidget#graphOptionsPane { border-left: 1px solid #d4d4d4; }
-            QLabel { color: #202020; }
-            QLineEdit { background: white; border: 1px solid #e1e4e8; padding: 6px; min-height: 18px; }
-            QToolButton { border: none; background: transparent; padding: 3px; }
-            QPushButton#moreGraphOptions { text-align: left; color: #007eb7; border: none; background: white; text-decoration: underline; }
-        ''')
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(165)
         self.timer.timeout.connect(self.flush)
         outer = QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
-        header = QWidget(); header.setStyleSheet('background: white;')
-        top = QHBoxLayout(header); top.setContentsMargins(12, 4, 10, 4)
+        self._header_widget = QWidget()
+        top = QHBoxLayout(self._header_widget); top.setContentsMargins(12, 4, 10, 4)
         heading = QLabel('Options'); heading.setStyleSheet('font-size: 15pt;')
         top.addWidget(heading); top.addStretch()
         self.close_button = QToolButton(); self.close_button.setText('×')
-        self.close_button.setStyleSheet('font-size: 22pt; color: #333;')
         self.close_button.setToolTip('Close Options'); self.close_button.setAccessibleName('Close Options')
         self.close_button.clicked.connect(self._close)
-        top.addWidget(self.close_button); outer.addWidget(header)
+        top.addWidget(self.close_button); outer.addWidget(self._header_widget)
         line = QFrame(); line.setFrameShape(QFrame.Shape.HLine); outer.addWidget(line)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget(); body_layout = QVBoxLayout(body)
@@ -147,16 +138,49 @@ class GraphOptionsPane(QWidget):
         for key, caption in (('x_log', 'Logarithmic X scale'), ('y_log', 'Logarithmic Y scale'), ('show_mean_line', 'Show mean reference line'), ('show_data_labels', 'Show data value labels')):
             chk = QCheckBox(caption); chk.toggled.connect(self._schedule)
             self.controls[key] = chk; more.addWidget(chk)
-        caveat = QLabel('Enter both limits, or leave both blank for automatic scaling. Limits apply to Cartesian plots; other types retain their own scales.')
-        caveat.setWordWrap(True); caveat.setStyleSheet('color: #666; font-size: 9pt;'); more.addWidget(caveat)
+        self._caveat_label = QLabel('Enter both limits, or leave both blank for automatic scaling. Limits apply to Cartesian plots; other types retain their own scales.')
+        self._caveat_label.setWordWrap(True); more.addWidget(self._caveat_label)
         self.more_body.hide(); self.more_button.toggled.connect(self.more_body.setVisible)
         body_layout.addWidget(self.more_body)
         self.object_button=QPushButton('Object Properties...');self.object_button.clicked.connect(self.objectEditRequested)
         self.histogram_button=QPushButton('Histogram Scales and Fits...');self.histogram_button.clicked.connect(self.histogramEditRequested)
         body_layout.addWidget(self.object_button);body_layout.addWidget(self.histogram_button)
-        self.error = QLabel(); self.error.setWordWrap(True); self.error.setStyleSheet('color: #a32020;')
+        self.error = QLabel(); self.error.setWordWrap(True)
         self.error.setObjectName('graphOptionsError'); body_layout.addWidget(self.error)
         body_layout.addStretch(1); scroll.setWidget(body); outer.addWidget(scroll)
+        from .chart_theme import is_dark_mode
+        self.set_dark_mode(is_dark_mode(self))
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        self._dark_mode = bool(is_dark)
+        if is_dark:
+            self.setStyleSheet('''
+                QWidget { background: #18181b; color: #f4f4f5; }
+                QWidget#graphOptionsPane { border-left: 1px solid #3f3f46; }
+                QLabel { color: #f4f4f5; }
+                QLineEdit { background: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; padding: 6px; min-height: 18px; }
+                QPushButton { background: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; padding: 4px 10px; border-radius: 3px; }
+                QPushButton:hover { background: #3f3f46; }
+                QToolButton { border: none; background: transparent; padding: 3px; color: #e4e4e7; }
+                QPushButton#moreGraphOptions { text-align: left; color: #38bdf8; border: none; background: #18181b; text-decoration: underline; }
+            ''')
+            self._header_widget.setStyleSheet('background: #18181b;')
+            self.close_button.setStyleSheet('font-size: 22pt; color: #e4e4e7;')
+            self._caveat_label.setStyleSheet('color: #a1a1aa; font-size: 9pt;')
+            self.error.setStyleSheet('color: #f87171;')
+        else:
+            self.setStyleSheet('''
+                QWidget { background: white; color: #202020; }
+                QWidget#graphOptionsPane { border-left: 1px solid #d4d4d4; }
+                QLabel { color: #202020; }
+                QLineEdit { background: white; color: #202020; border: 1px solid #e1e4e8; padding: 6px; min-height: 18px; }
+                QToolButton { border: none; background: transparent; padding: 3px; color: #202020; }
+                QPushButton#moreGraphOptions { text-align: left; color: #007eb7; border: none; background: white; text-decoration: underline; }
+            ''')
+            self._header_widget.setStyleSheet('background: white;')
+            self.close_button.setStyleSheet('font-size: 22pt; color: #333;')
+            self._caveat_label.setStyleSheet('color: #666; font-size: 9pt;')
+            self.error.setStyleSheet('color: #a32020;')
 
     def _toggle_annotations(self, checked):
         self.annotations_header.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
@@ -211,7 +235,16 @@ class GraphOptionsPane(QWidget):
             from .native_graph_view import cartesian as native_cartesian
             cartesian=native_cartesian(entry)
         if result.get('graph') in ('panel_graph','graph_layout'):cartesian=False
-        static_plot=result.get('analysis') in ('multiple_capability','nested_gage_rr','gage_linearity_and_bias','attribute_agreement_analysis','reliability_distribution','capability_nonnormal','capability_nonparametric','capability_automated','mixture_multi_optimization','mixture_multi_evaluation')
+        static_plot=result.get('analysis') in (
+            'multiple_capability','nested_gage_rr','gage_linearity_and_bias','attribute_agreement_analysis',
+            'reliability_distribution','capability_nonnormal','capability_nonparametric','capability_automated',
+            'capability_sixpack_normal','capability_sixpack_nonnormal','capability_sixpack_between_within',
+            'graphical_summary','regression_residual','pca','item_analysis','cluster_observations',
+            'cluster_kmeans','cluster_variables','discriminant_analysis','simple_correspondence',
+            'factor_analysis','multiple_correspondence','process_screening','cause_and_effect',
+            'cart_tree','dist_id','johnson_transformation','attribute_gage','acceptance_sampling_attributes',
+            'mixture_multi_optimization','mixture_multi_evaluation'
+        ) or result.get('graph') in ('capability_sixpack',)
         if static_plot:cartesian=False
         mixture_exploration=result.get('analysis') in ('mixture_contour','mixture_optimization')
         if mixture_exploration:cartesian=False

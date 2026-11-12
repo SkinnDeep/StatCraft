@@ -200,13 +200,88 @@ class RegressionStorageDialog(QDialog):
         self.accept()
 
 
+class RegressionModelTermsDialog(QDialog):
+    """Subdialog for Regression Model Terms (main effects, 2-way interactions, quadratic X*X)."""
+
+    def __init__(self, parent: QDialog, cont_names: list[str], cat_names: list[str], selected_higher: set[tuple[int, int]]):
+        super().__init__(parent)
+        self.setWindowTitle("Regression: Model")
+        self.setMinimumSize(420, 320)
+        self.setSizeGripEnabled(True)
+        self.cont_count = len(cont_names)
+        self.all_names = list(cont_names) + list(cat_names)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Main effects for all selected predictors are included automatically."))
+        layout.addWidget(QLabel("Optional higher-order terms (interactions & continuous quadratics):"))
+
+        from PySide6.QtWidgets import QScrollArea, QWidget
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        vbox = QVBoxLayout(inner)
+        self.term_checks: dict[tuple[int, int], QCheckBox] = {}
+        n_total = len(self.all_names)
+        for i in range(n_total):
+            # Continuous quadratic i*i
+            if i < self.cont_count:
+                pair = (i, i)
+                chk = QCheckBox(f"{self.all_names[i]}*{self.all_names[i]}  (quadratic)")
+                chk.setChecked(pair in selected_higher)
+                self.term_checks[pair] = chk
+                vbox.addWidget(chk)
+            for j in range(i + 1, n_total):
+                pair = (i, j)
+                chk = QCheckBox(f"{self.all_names[i]}*{self.all_names[j]}  (interaction)")
+                chk.setChecked(pair in selected_higher)
+                self.term_checks[pair] = chk
+                vbox.addWidget(chk)
+        if not self.term_checks:
+            vbox.addWidget(QLabel("Add at least 1 continuous predictor (for X*X) or 2 predictors (for A*B)."))
+        vbox.addStretch(1)
+        scroll.setWidget(inner)
+        layout.addWidget(scroll, 1)
+
+        preset_row = QHBoxLayout()
+        btn_linear = QPushButton("Linear Only")
+        btn_inter = QPushButton("2-Way Interactions")
+        btn_full = QPushButton("Full 2nd Order")
+        btn_linear.clicked.connect(lambda: self._apply_preset("linear"))
+        btn_inter.clicked.connect(lambda: self._apply_preset("interactions"))
+        btn_full.clicked.connect(lambda: self._apply_preset("full"))
+        preset_row.addWidget(btn_linear)
+        preset_row.addWidget(btn_inter)
+        preset_row.addWidget(btn_full)
+        preset_row.addStretch(1)
+        layout.addLayout(preset_row)
+
+        footer = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        footer.accepted.connect(self.accept)
+        footer.rejected.connect(self.reject)
+        layout.addWidget(footer)
+
+    def _apply_preset(self, preset: str):
+        for pair, chk in self.term_checks.items():
+            is_quad = pair[0] == pair[1]
+            if preset == "linear":
+                chk.setChecked(False)
+            elif preset == "interactions":
+                chk.setChecked(not is_quad)
+            elif preset == "full":
+                chk.setChecked(True)
+
+    def selected_pairs(self) -> list[tuple[int, int]]:
+        return sorted(pair for pair, chk in self.term_checks.items() if chk.isChecked())
+
+
 class FitRegressionModelDialog(ProcedureDialog):
     """Minitab-standard Fit Regression Model procedure dialog."""
 
     def __init__(self, window):
         specs = [
             dict(key="response_index", label="Response:", kinds=("number",)),
-            dict(key="predictor_indices", label="Continuous predictors:", multiple=True, minimum=1, kinds=("number",)),
+            dict(key="predictor_indices", label="Continuous predictors:", multiple=True, optional=True, minimum=0, kinds=("number",)),
+            dict(key="categorical_indices", label="Categorical predictors:", multiple=True, optional=True, minimum=0, kinds=("number", "text")),
         ]
         super().__init__(
             window,
@@ -214,34 +289,55 @@ class FitRegressionModelDialog(ProcedureDialog):
             window.presenter.worksheet,
             specs,
             (),
-            "Fit ordinary least squares multiple linear regression with Minitab-parity diagnostics."
+            "Fit OLS regression with continuous or categorical predictors, interactions, and quadratic terms."
         )
         self.window = window
         self.options = default_regression_options()
+        self.higher_terms: list[tuple[int, int]] = []
         self.entry = None
 
         # Add subdialog buttons grid
         grid = QGridLayout()
+        self.btn_model = QPushButton("Model…")
+        self.btn_model.clicked.connect(self.open_model)
+        grid.addWidget(self.btn_model, 0, 0)
+
         self.btn_options = QPushButton("Options…")
         self.btn_options.clicked.connect(self.open_options)
-        grid.addWidget(self.btn_options, 0, 0)
+        grid.addWidget(self.btn_options, 0, 1)
 
         self.btn_graphs = QPushButton("Graphs…")
         self.btn_graphs.clicked.connect(self.open_graphs)
-        grid.addWidget(self.btn_graphs, 0, 1)
+        grid.addWidget(self.btn_graphs, 0, 2)
 
         self.btn_results = QPushButton("Results…")
         self.btn_results.clicked.connect(self.open_results)
-        grid.addWidget(self.btn_results, 0, 2)
+        grid.addWidget(self.btn_results, 0, 3)
 
         self.btn_storage = QPushButton("Storage…")
         self.btn_storage.clicked.connect(self.open_storage)
-        grid.addWidget(self.btn_storage, 0, 3)
+        grid.addWidget(self.btn_storage, 0, 4)
 
         self.layout().insertLayout(self.layout().count() - 2, grid)
         self.restore_previous()
 
+    def _save_dialog_state(self):
+        super()._save_dialog_state()
+        from .variable_dialogs import save_dialog_state
+        save_dialog_state(self.worksheet, "FitRegressionModelDialog_extras", {
+            "options": self.options,
+            "higher_terms": [list(t) for t in self.higher_terms],
+        })
+
     def restore_previous(self):
+        from .variable_dialogs import load_dialog_state
+        saved = load_dialog_state(self.worksheet, "FitRegressionModelDialog_extras")
+        if saved and isinstance(saved.get("options"), dict):
+            merged = copy.deepcopy(default_regression_options())
+            merged.update(saved["options"])
+            self.options = merged
+        if saved and isinstance(saved.get("higher_terms"), list):
+            self.higher_terms = [tuple(t) for t in saved["higher_terms"] if isinstance(t, (list, tuple)) and len(t) == 2]
         p = self.window.presenter
         worksheet_id = p.native_project.worksheet_ids[p.native_project.active_index] if getattr(p, 'native_project', None) else None
         for entry in reversed(getattr(p, 'history', [])):
@@ -252,12 +348,41 @@ class FitRegressionModelDialog(ProcedureDialog):
             v = entry["recipe"]["parameters"]
             try:
                 self.controls["response_index"].setText(format_variable_reference(v["response_index"], self.worksheet))
-                self.controls["predictor_indices"].setText(format_variable_list(v["predictor_indices"], self.worksheet))
+                self.controls["predictor_indices"].setText(format_variable_list(v.get("predictor_indices") or (), self.worksheet))
+                if v.get("categorical_indices"):
+                    self.controls["categorical_indices"].setText(format_variable_list(v["categorical_indices"], self.worksheet))
                 if "confidence" in v:
                     self.options["confidence"] = float(v["confidence"])
             except Exception:
                 continue
             break
+
+    def _current_predictor_lists(self):
+        from .variable_dialogs import resolve_variables
+        raw_cont = self.controls["predictor_indices"].text().strip()
+        raw_cat = self.controls["categorical_indices"].text().strip()
+        cont = resolve_variables(raw_cont, self.worksheet, ("number",)) if raw_cont else []
+        cat = resolve_variables(raw_cat, self.worksheet, ("number", "text")) if raw_cat else []
+        return cont, cat
+
+    def open_model(self):
+        try:
+            cont, cat = self._current_predictor_lists()
+        except ValueError as exc:
+            self.error.setText(str(exc))
+            self.error.setVisible(True)
+            return
+        if not cont and not cat:
+            self.error.setText("Select at least one continuous or categorical predictor first.")
+            self.error.setVisible(True)
+            return
+        self.error.setVisible(False)
+        cont_names = [self.worksheet.columns[i].name for i in cont]
+        cat_names = [self.worksheet.columns[i].name for i in cat]
+        dlg = RegressionModelTermsDialog(self, cont_names, cat_names, set(self.higher_terms))
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.higher_terms = dlg.selected_pairs()
+        dlg.deleteLater()
 
     def open_options(self):
         dlg = RegressionOptionsDialog(self, self.options)
@@ -287,19 +412,41 @@ class FitRegressionModelDialog(ProcedureDialog):
         try:
             v = self.values()
             resp_idx = v["response_index"]
-            pred_indices = v["predictor_indices"]
-            if resp_idx in pred_indices:
+            pred_indices = list(v.get("predictor_indices") or ())
+            cat_indices = list(v.get("categorical_indices") or ())
+            all_pred = pred_indices + cat_indices
+            if resp_idx in all_pred:
                 raise ValueError("Response variable cannot also be a predictor.")
-            if not pred_indices:
-                raise ValueError("Choose at least one predictor.")
+            if len(set(all_pred)) != len(all_pred):
+                raise ValueError("Choose distinct columns for continuous and categorical predictors.")
+            if not all_pred:
+                raise ValueError("Choose at least one continuous or categorical predictor.")
+
+            n_total = len(all_pred)
+            n_cont = len(pred_indices)
+            valid_higher = [
+                list(pair)
+                for pair in self.higher_terms
+                if 0 <= pair[0] < n_total
+                and 0 <= pair[1] < n_total
+                and (pair[0] != pair[1] or pair[0] < n_cont)
+            ]
+            model_terms = [[i] for i in range(n_total)] + valid_higher if valid_higher else None
 
             conf = self.options.get("confidence", 0.95)
-            self.entry = self.window.presenter.multiple_regression(resp_idx, pred_indices, confidence=conf)
+            self.entry = self.window.presenter.multiple_regression(
+                resp_idx,
+                pred_indices,
+                confidence=conf,
+                categorical_indices=cat_indices or None,
+                model_terms=model_terms,
+            )
 
-            # Apply graphs mode
+            # Apply graphs & results options
             graphs_mode = self.options.get("graphs", "four")
+            res_opts = copy.deepcopy(self.options.get("results", {"equation": True, "summary": True, "anova": True, "unusual": True}))
             if "result" in self.entry and isinstance(self.entry["result"], dict):
-                self.entry["result"]["options"] = {"graphs": graphs_mode}
+                self.entry["result"]["options"] = {"graphs": graphs_mode, "results": res_opts}
                 self.entry["result"]["graphs"] = graphs_mode
             self.entry["graphs"] = graphs_mode
 

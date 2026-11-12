@@ -39,6 +39,15 @@ from .subgroup_control import control_chart_settings, fit_from_worksheet
 from .variable_dialogs import format_variable_reference, resolve_variables
 
 
+_SUBGROUP_LABELS = {
+    'xbar_r': 'Xbar-R',
+    'xbar_s': 'Xbar-S',
+    'xbar': 'Xbar',
+    'r': 'R',
+    's': 'S',
+}
+
+
 def _footer(dialog: QDialog, layout: QVBoxLayout, callback) -> QDialogButtonBox:
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
     buttons.accepted.connect(callback)
@@ -52,7 +61,7 @@ class ControlChartOptionsDialog(QDialog):
 
     def __init__(self, parent: QDialog, options: dict[str, Any], chart_type: str = 'xbar_r'):
         super().__init__(parent)
-        title_prefix = "Xbar-R" if chart_type == 'xbar_r' else "Xbar-S"
+        title_prefix = _SUBGROUP_LABELS.get(chart_type, "Xbar-S")
         self.setWindowTitle(f"{title_prefix} Options")
         self.resize(480, 420)
         self.options = copy.deepcopy(options)
@@ -88,13 +97,13 @@ class ControlChartOptionsDialog(QDialog):
         layout_est = QVBoxLayout(tab_est)
         group_meth = QGroupBox("Method for estimating standard deviation")
         v_meth = QVBoxLayout(group_meth)
-        self.rad_default = QRadioButton("Average range (Rbar)" if chart_type == 'xbar_r' else "Average standard deviation (Sbar)")
+        self.rad_default = QRadioButton("Average range (Rbar)" if chart_type in ('xbar_r', 'xbar', 'r') else "Average standard deviation (Sbar)")
         self.rad_pooled = QRadioButton("Pooled standard deviation")
         self.method_group = QButtonGroup(self)
         self.method_group.addButton(self.rad_default, 0)
         self.method_group.addButton(self.rad_pooled, 1)
 
-        curr_meth = self.options.get('estimation_method', 'rbar' if chart_type == 'xbar_r' else 'sbar')
+        curr_meth = self.options.get('estimation_method', 'rbar' if chart_type in ('xbar_r', 'xbar', 'r') else 'sbar')
         if curr_meth == 'pooled_stdev':
             self.rad_pooled.setChecked(True)
         else:
@@ -247,7 +256,7 @@ class ControlChartOptionsDialog(QDialog):
                 QMessageBox.warning(self, "Invalid Input", "Historical standard deviation must be a number.")
                 return
 
-        meth = 'pooled_stdev' if self.rad_pooled.isChecked() else ('rbar' if self.chart_type == 'xbar_r' else 'sbar')
+        meth = 'pooled_stdev' if self.rad_pooled.isChecked() else ('rbar' if self.chart_type in ('xbar_r', 'xbar', 'r') else 'sbar')
         unbias = self.chk_unbiasing.isChecked()
         omit_str = self.omit_edit.text().strip()
 
@@ -310,7 +319,7 @@ class BaseSubgroupChartDialog(QDialog):
         super().__init__(parent)
         self.main_window = parent
         self.chart_type = chart_type
-        title = "Xbar-R Chart" if chart_type == 'xbar_r' else "Xbar-S Chart"
+        title = f"{_SUBGROUP_LABELS.get(chart_type, 'Xbar-S')} Chart"
         self.setWindowTitle(title)
         self.resize(560, 380)
 
@@ -365,7 +374,7 @@ class BaseSubgroupChartDialog(QDialog):
         right_layout.addWidget(self.unstacked_widget)
 
         # Child Options Button
-        btn_opts_title = f"{'Xbar-R' if chart_type == 'xbar_r' else 'Xbar-S'} Options…"
+        btn_opts_title = f"{_SUBGROUP_LABELS.get(chart_type, 'Xbar-S')} Options…"
         self.btn_options = QPushButton(btn_opts_title)
         self.btn_options.clicked.connect(self._open_options)
         right_layout.addWidget(self.btn_options)
@@ -376,6 +385,37 @@ class BaseSubgroupChartDialog(QDialog):
 
         self._populate_columns()
         self.col_list.itemDoubleClicked.connect(self._on_select)
+        self._restore_state()
+
+    def _save_state(self):
+        ws = getattr(self.main_window.presenter, 'worksheet', None)
+        if ws is None:
+            return
+        from .variable_dialogs import save_dialog_state
+        save_dialog_state(ws, f"SubgroupChartDialog:{self.chart_type}", {
+            "arrangement": self.combo_arrangement.currentIndex(),
+            "resp": self.resp_edit.text(),
+            "sub_size": self.sub_size_edit.text(),
+            "rows": self.rows_edit.text(),
+            "options": self.options,
+        })
+
+    def _restore_state(self):
+        ws = getattr(self.main_window.presenter, 'worksheet', None)
+        if ws is None:
+            return
+        from .variable_dialogs import load_dialog_state
+        saved = load_dialog_state(ws, f"SubgroupChartDialog:{self.chart_type}")
+        if not saved:
+            return
+        idx = int(saved.get("arrangement", 0))
+        self.combo_arrangement.setCurrentIndex(idx)
+        self._on_arrangement_changed(idx)
+        self.resp_edit.setText(str(saved.get("resp", "")))
+        self.sub_size_edit.setText(str(saved.get("sub_size", "")))
+        self.rows_edit.setText(str(saved.get("rows", "")))
+        if isinstance(saved.get("options"), dict):
+            self.options.update(saved["options"])
 
     def _populate_columns(self):
         ws = getattr(self.main_window.presenter, 'worksheet', None)
@@ -466,6 +506,7 @@ class BaseSubgroupChartDialog(QDialog):
                     options=self.options
                 )
 
+            self._save_state()
             self.entry = res
             self.accept()
             if hasattr(self.main_window, 'show_result'):
@@ -486,3 +527,24 @@ class XbarSChartDialog(BaseSubgroupChartDialog):
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, chart_type='xbar_s')
+
+
+class XbarChartDialog(BaseSubgroupChartDialog):
+    """Single-panel Xbar Chart dialog."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent, chart_type='xbar')
+
+
+class RChartDialog(BaseSubgroupChartDialog):
+    """Single-panel R Chart dialog."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent, chart_type='r')
+
+
+class SChartDialog(BaseSubgroupChartDialog):
+    """Single-panel S Chart dialog."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent, chart_type='s')

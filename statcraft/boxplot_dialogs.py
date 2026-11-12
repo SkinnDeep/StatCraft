@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt,QSize,QRectF
 from PySide6.QtGui import QColor,QPainter,QPen,QIcon,QPixmap
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QGridLayout,QGroupBox,QToolButton,QButtonGroup,
     QDialogButtonBox,QCheckBox,QFormLayout,QLineEdit,QLabel,QComboBox,QPushButton)
+from .dialog_theme import dialog_stylesheet, gallery_button_stylesheet, is_dark_active
 from .histogram_dialogs import HistogramDialog
 from .variable_dialogs import format_variable_reference,resolve_variables
 from .boxplot_graphs import validate_parameters,validate_display,build_boxplots
@@ -11,9 +12,9 @@ from .boxplot_graphs import validate_parameters,validate_display,build_boxplots
 MODES={'one':'One Y, Simple','one_groups':'One Y, With Groups','multiple':'Multiple Y’s, Simple','multiple_groups':'Multiple Y’s, With Groups'}
 
 
-def box_icon(mode):
-    pix=QPixmap(120,80);pix.fill(QColor('white'));p=QPainter(pix);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor('#64717c'),1));p.drawLine(12,68,112,68);p.drawLine(12,68,12,8)
+def box_icon(mode, dark=False):
+    pix=QPixmap(120,80);pix.fill(QColor('#18181b' if dark else 'white'));p=QPainter(pix);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor('#a1a1aa' if dark else '#64717c'),1));p.drawLine(12,68,112,68);p.drawLine(12,68,12,8)
     count=1 if mode=='one' else 3 if mode=='one_groups' else 2 if mode=='multiple' else 4
     for i in range(count):
         x=25+i*75/max(1,count-1) if count>1 else 60;top=20+(i%2)*8
@@ -26,15 +27,17 @@ def box_icon(mode):
 class BoxplotTypeDialog(QDialog):
     def __init__(self,parent=None):
         super().__init__(parent);self.setWindowTitle('Boxplots');self.mode='one'
+        dark = is_dark_active(parent or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         self.setSizeGripEnabled(True)
         outer=QVBoxLayout(self);self.mode_buttons={};self.buttons=QButtonGroup(self)
         for heading,keys in (('One Y',('one','one_groups')),('Multiple Y’s',('multiple','multiple_groups'))):
             group=QGroupBox(heading);row=QHBoxLayout(group)
             for key in keys:
                 button=QToolButton();button.setText('With Groups' if key.endswith('groups') else 'Simple')
-                button.setIcon(box_icon(key));button.setIconSize(QSize(120,80));button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+                button.setIcon(box_icon(key, dark=dark));button.setIconSize(QSize(120,80));button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
                 button.setCheckable(True);button.setChecked(key=='one');button.setMinimumSize(165,125)
-                button.setStyleSheet('QToolButton{border:1px solid #bfc5cb;padding:8px;background:white;}QToolButton:checked{border:2px solid #205b92;background:#eaf1f8;}')
+                button.setStyleSheet(gallery_button_stylesheet(dark))
                 button.clicked.connect(lambda checked=False,key=key:setattr(self,'mode',key));self.buttons.addButton(button);self.mode_buttons[key]=button;row.addWidget(button)
             outer.addWidget(group)
         self.actions=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)

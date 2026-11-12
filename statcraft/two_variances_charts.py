@@ -3,6 +3,7 @@ import math
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from PySide6.QtWidgets import QWidget
+from .chart_theme import chart_painter
 
 
 class TwoVariancesSummaryPlotWidget(QWidget):
@@ -15,7 +16,7 @@ class TwoVariancesSummaryPlotWidget(QWidget):
         self.setMinimumSize(600, 360)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         rect = self.rect()

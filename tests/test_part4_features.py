@@ -117,23 +117,29 @@ class TestPart4Features(unittest.TestCase):
         win = ModernWindow(sandbox_mode=True)
         win._confirm_leave = lambda: True
 
-        entry = {"title": "Test Chart", "type": "histogram"}
-        win.selected_entry = entry
-        win.copy_active_chart_svg = lambda: True
+        win.presenter.set_cell(0, 0, "1")
+        win.presenter.set_cell(1, 0, "2")
+        win.presenter.set_cell(2, 0, "3")
+        win.presenter.set_cell(0, 1, "2")
+        win.presenter.set_cell(1, 1, "4")
+        win.presenter.set_cell(2, 1, "6")
+        entry = win.presenter.scatter_plot(0, 1)
+        win.show_result(entry)
 
         with tempfile.TemporaryDirectory() as td:
             svg_path = Path(td) / "test.svg"
             old_save = QFileDialog.getSaveFileName
             QFileDialog.getSaveFileName = staticmethod(lambda *args, **kwargs: (str(svg_path), "Scalable Vector Graphic (*.svg)"))
-            # Set dummy svg on clipboard
-            QApplication.clipboard().setText("<svg>test</svg>")
             try:
                 win.save_graph_as(entry)
                 self.assertTrue(svg_path.exists())
-                self.assertEqual(svg_path.read_text(encoding="utf-8"), "<svg>test</svg>")
+                svg_text = svg_path.read_text(encoding="utf-8")
+                self.assertIn("<svg", svg_text)
+                self.assertIn("</svg>", svg_text)
             finally:
                 QFileDialog.getSaveFileName = old_save
 
+        win.presenter.dirty = False
         win.close()
 
     def test_find_output_context(self):

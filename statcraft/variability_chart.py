@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from .chart_theme import chart_painter
 
 
 class VariabilityCanvas(QWidget):
@@ -48,7 +49,7 @@ class VariabilityCanvas(QWidget):
         self._hover_pos: Optional[QPointF] = None
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 

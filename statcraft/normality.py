@@ -14,7 +14,126 @@ from .engine import normalize_numeric
 from .inference import _confidence
 
 
-def normality(values):
+_NORMALITY_METHOD_ALIASES = {
+    'anderson_darling': 'anderson_darling',
+    'anderson-darling': 'anderson_darling',
+    'anderson darling': 'anderson_darling',
+    'ad': 'anderson_darling',
+    'ryan_joiner': 'ryan_joiner',
+    'ryan-joiner': 'ryan_joiner',
+    'ryan joiner': 'ryan_joiner',
+    'ryan-joiner (similar to shapiro-wilk)': 'ryan_joiner',
+    'rj': 'ryan_joiner',
+    'kolmogorov_smirnov': 'kolmogorov_smirnov',
+    'kolmogorov-smirnov': 'kolmogorov_smirnov',
+    'kolmogorov smirnov': 'kolmogorov_smirnov',
+    'ks': 'kolmogorov_smirnov',
+}
+
+
+def _normalize_method(method):
+    key = _NORMALITY_METHOD_ALIASES.get(str(method or 'anderson_darling').strip().lower())
+    if key is None:
+        raise ValueError('Normality test must be Anderson-Darling, Ryan-Joiner, or Kolmogorov-Smirnov.')
+    return key
+
+
+def _anderson_darling_result(scaled, n):
+    test = stats.anderson(scaled, dist='norm', method='interpolate')
+    ad = float(test.statistic)
+    if not math.isfinite(ad) or ad < 0:
+        raise ValueError('The data range exceeds supported normality-test precision.')
+    adjusted = ad * (1 + .75 / n + 2.25 / (n * n))
+    if adjusted < .2:
+        p = -math.expm1(-13.436 + 101.14 * adjusted - 223.73 * adjusted**2)
+    elif adjusted < .34:
+        p = -math.expm1(-8.318 + 42.796 * adjusted - 59.938 * adjusted**2)
+    elif adjusted < .6:
+        p = math.exp(.9177 - 4.279 * adjusted - 1.38 * adjusted**2)
+    elif adjusted <= 13:
+        p = math.exp(1.2937 - 5.709 * adjusted + .0186 * adjusted**2)
+    else:
+        p = None
+    if p is not None:
+        p = max(0., min(1., p))
+    extra_warnings = []
+    if p is None:
+        extra_warnings.append('The adjusted AD statistic exceeds 13; the P approximation is outside its supported range. The result is beyond the 1% rejection boundary.')
+    return {
+        'method': 'Anderson-Darling normality test',
+        'test_key': 'anderson_darling',
+        'statistic_name': 'AD',
+        'statistic': ad,
+        'anderson_darling': ad,
+        'adjusted_statistic': adjusted,
+        'p_value': p,
+        'p_value_method': 'Stephens normal-distribution approximation, including finite-sample adjustment.',
+        'reject': adjusted > 13 or p < .05,
+        'extra_warnings': extra_warnings,
+    }
+
+
+def _ryan_joiner_result(scaled, quantiles, n):
+    rj = float(stats.pearsonr(scaled, quantiles).statistic)
+    if not math.isfinite(rj):
+        raise ValueError('The data range exceeds supported normality-test precision.')
+    # Ryan-Joiner (correlation with Blom normal scores) satisfies RJ^2 = Shapiro-Francia W';
+    # compute Royston (1993) analytical approximation for 1 - RJ^2.
+    u = math.log(n)
+    v = math.log(u)
+    mu = -1.2725 + 1.0521 * (v - u)
+    sig = 1.0308 - 0.26758 * (v + 2.0 / u)
+    z = (math.log(max(1e-15, 1.0 - rj * rj)) - mu) / sig
+    p = max(0., min(1., float(stats.norm.sf(z))))
+    return {
+        'method': 'Ryan-Joiner normality test',
+        'test_key': 'ryan_joiner',
+        'statistic_name': 'RJ',
+        'statistic': rj,
+        'ryan_joiner': rj,
+        'p_value': p,
+        'p_value_method': "Royston analytical approximation for normal-score correlation (W' = RJ^2).",
+        'reject': p < .05,
+        'extra_warnings': [],
+    }
+
+
+def _kolmogorov_smirnov_result(scaled, center, sigma, n):
+    z_scores = [(v - center) / sigma for v in scaled]
+    ks_d = float(stats.kstest(z_scores, 'norm').statistic)
+    if not math.isfinite(ks_d) or ks_d < 0:
+        raise ValueError('The data range exceeds supported normality-test precision.')
+    # Dallal & Wilkinson (1986) Lilliefors normality P-value approximation for estimated parameters.
+    d_eff = ks_d * (n / 100.0) ** 0.49 if n > 100 else ks_d
+    n_eff = 100 if n > 100 else n
+    # Dallal-Wilkinson exponent peaks at d_peak; below d_peak clamp to 1.0 so P decreases monotonically.
+    d_peak = 2.99587 / (2.0 * 7.01256 * math.sqrt(n_eff + 2.78019))
+    if d_eff <= d_peak:
+        p = 1.0
+    else:
+        p = math.exp(
+            -7.01256 * d_eff * d_eff * (n_eff + 2.78019)
+            + 2.99587 * d_eff * math.sqrt(n_eff + 2.78019)
+            - 0.122119
+            + 0.974598 / math.sqrt(n_eff)
+            + 1.67997 / n_eff
+        )
+        p = max(0., min(1., p))
+    return {
+        'method': 'Kolmogorov-Smirnov normality test',
+        'test_key': 'kolmogorov_smirnov',
+        'statistic_name': 'KS',
+        'statistic': ks_d,
+        'kolmogorov_smirnov': ks_d,
+        'p_value': p,
+        'p_value_method': 'Dallal-Wilkinson (Lilliefors) approximation for composite normal null.',
+        'reject': p < .05,
+        'extra_warnings': [],
+    }
+
+
+def normality(values, method='anderson_darling'):
+    test_key = _normalize_method(method)
     values=[normalize_numeric(v) for v in values]
     clean=sorted(v for v in values if v is not None)
     n=len(clean)
@@ -26,35 +145,32 @@ def normality(values):
     mean,stdev=center*scale,sigma*scale
     if not all(math.isfinite(v) for v in (mean,stdev)) or not stdev:
         raise ValueError('The data range exceeds supported normality-test precision.')
-    test=stats.anderson(scaled,dist='norm',method='interpolate')
-    ad=float(test.statistic)
-    if not math.isfinite(ad) or ad<0: raise ValueError('The data range exceeds supported normality-test precision.')
-    adjusted=ad*(1+.75/n+2.25/(n*n))
-    if adjusted<.2: p=-math.expm1(-13.436+101.14*adjusted-223.73*adjusted**2)
-    elif adjusted<.34: p=-math.expm1(-8.318+42.796*adjusted-59.938*adjusted**2)
-    elif adjusted<.6: p=math.exp(.9177-4.279*adjusted-1.38*adjusted**2)
-    elif adjusted<=13: p=math.exp(1.2937-5.709*adjusted+.0186*adjusted**2)
-    else: p=None
-    if p is not None: p=max(0.,min(1.,p))
     quantiles=stats.norm.ppf([(i-.375)/(n+.25) for i in range(1,n+1)]).tolist()
     reference_y=[(v-center)/sigma for v in (scaled[0],scaled[-1])]
     if not all(math.isfinite(v) for v in reference_y): raise ValueError('Normal plot range exceeds supported precision.')
+    if test_key == 'anderson_darling':
+        spec = _anderson_darling_result(scaled, n)
+    elif test_key == 'ryan_joiner':
+        spec = _ryan_joiner_result(scaled, quantiles, n)
+    else:
+        spec = _kolmogorov_smirnov_result(scaled, center, sigma, n)
     warnings=[]
     if len(set(clean))<n: warnings.append('Ties are present. The test assumes continuous data; rounding can affect its calibration.')
     if n<20: warnings.append('Small samples have limited power to detect departures from normality.')
-    if p is None: warnings.append('The adjusted AD statistic exceeds 13; the P approximation is outside its supported range. The result is beyond the 1% rejection boundary.')
-    return {'method':'Anderson-Darling normality test', 'count':n, 'missing':len(values)-n,
-            'mean':mean, 'sample_stdev':stdev, 'anderson_darling':ad,
-            'adjusted_statistic':adjusted, 'p_value':p,
-            'p_value_method':'Stephens normal-distribution approximation, including finite-sample adjustment.',
-            'alpha':.05, 'reject_at_5_percent':adjusted>13 or p<.05,
-            'interpretation':'Evidence against a normal population at 5%.' if adjusted>13 or p<.05 else 'Normality is not rejected at 5%; this does not establish that the population is normal.',
-            'graph':'normal_probability',
-            'graph_data':{'observed':clean,'normal_scores':quantiles,'reference_x':[clean[0],clean[-1]],'reference_y':reference_y},
-            'convention':'Blom positions (i - 0.375)/(N + 0.25); normal-probability scale; reference line uses sample mean and sample standard deviation. No confidence bands.',
-            'assumptions':['Independent observations from a continuous population. Mean and standard deviation are estimated from the sample.'],
-            'missing_policy':'Missing numeric observations omitted; all observed values are used in the statistic and plot.',
-            'warnings':warnings}
+    warnings.extend(spec.pop('extra_warnings'))
+    reject = spec.pop('reject')
+    out = {'count':n, 'missing':len(values)-n,
+           'mean':mean, 'sample_stdev':stdev,
+           'alpha':.05, 'reject_at_5_percent':reject,
+           'interpretation':'Evidence against a normal population at 5%.' if reject else 'Normality is not rejected at 5%; this does not establish that the population is normal.',
+           'graph':'normal_probability',
+           'graph_data':{'observed':clean,'normal_scores':quantiles,'reference_x':[clean[0],clean[-1]],'reference_y':reference_y},
+           'convention':'Blom positions (i - 0.375)/(N + 0.25); normal-probability scale; reference line uses sample mean and sample standard deviation. No confidence bands.',
+           'assumptions':['Independent observations from a continuous population. Mean and standard deviation are estimated from the sample.'],
+           'missing_policy':'Missing numeric observations omitted; all observed values are used in the statistic and plot.',
+           'warnings':warnings}
+    out.update(spec)
+    return out
 
 
 def one_variance(values, null_stdev=1., confidence=.95):

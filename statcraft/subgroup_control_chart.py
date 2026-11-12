@@ -62,8 +62,8 @@ def prepare(chart, result: dict[str, Any]) -> None:
     xbar_ucls = result.get('xbar_ucl', [])
     test_failures = result.get('test_failures', {})
 
-    disp_name = "R" if chart_type == 'xbar_r' else "S"
-    disp_label = "Sample Range" if chart_type == 'xbar_r' else "Sample StDev"
+    disp_name = "R" if chart_type in ('xbar_r', 'r', 'xbar') else "S"
+    disp_label = "Sample Range" if chart_type in ('xbar_r', 'r', 'xbar') else "Sample StDev"
     disp_center = result.get('disp_center')
     disp_lcls = result.get('disp_lcl', [])
     disp_ucls = result.get('disp_ucl', [])
@@ -74,44 +74,46 @@ def prepare(chart, result: dict[str, Any]) -> None:
     disp_uwls = result.get('disp_uwl', [])
     disp_lwls = result.get('disp_lwl', [])
 
-    # Panel 1: Xbar
-    chart.panels.append({
-        'kind': 'subgroup_control',
-        'subpanel': 'xbar',
-        'title': f'Xbar Chart of {var_name}',
-        'k_subgroups': k_sub,
-        'values': means,
-        'center': xbar_center,
-        'center_label': f'__\nX={xbar_center:.3f}',
-        'lcls': xbar_lcls,
-        'ucls': xbar_ucls,
-        'uwls': xbar_uwls,
-        'lwls': xbar_lwls,
-        'signals': test_failures,
-        'xlabel': 'Subgroup',
-        'ylabel': 'Sample Mean',
-    })
+    if chart_type in ('xbar_r', 'xbar_s', 'xbar'):
+        # Panel 1: Xbar
+        chart.panels.append({
+            'kind': 'subgroup_control',
+            'subpanel': 'xbar',
+            'title': f'Xbar Chart of {var_name}',
+            'k_subgroups': k_sub,
+            'values': means,
+            'center': xbar_center,
+            'center_label': f'__\nX={xbar_center:.3f}',
+            'lcls': xbar_lcls,
+            'ucls': xbar_ucls,
+            'uwls': xbar_uwls,
+            'lwls': xbar_lwls,
+            'signals': test_failures,
+            'xlabel': 'Subgroup',
+            'ylabel': 'Sample Mean',
+        })
 
-    # Panel 2: Dispersion (R or S)
-    chart.panels.append({
-        'kind': 'subgroup_control',
-        'subpanel': 'disp',
-        'title': f'{disp_name} Chart of {var_name}',
-        'k_subgroups': k_sub,
-        'values': disp_vals,
-        'center': disp_center,
-        'center_label': f'_\n{disp_name}={disp_center:.3f}' if disp_center is not None else '',
-        'lcls': disp_lcls,
-        'ucls': disp_ucls,
-        'uwls': disp_uwls,
-        'lwls': disp_lwls,
-        'signals': disp_signals,
-        'xlabel': 'Subgroup',
-        'ylabel': disp_label,
-    })
+    if chart_type in ('xbar_r', 'xbar_s', 'r', 's'):
+        # Panel 2: Dispersion (R or S)
+        chart.panels.append({
+            'kind': 'subgroup_control',
+            'subpanel': 'disp',
+            'title': f'{disp_name} Chart of {var_name}',
+            'k_subgroups': k_sub,
+            'values': disp_vals,
+            'center': disp_center,
+            'center_label': f'_\n{disp_name}={disp_center:.3f}' if disp_center is not None else '',
+            'lcls': disp_lcls,
+            'ucls': disp_ucls,
+            'uwls': disp_uwls,
+            'lwls': disp_lwls,
+            'signals': disp_signals,
+            'xlabel': 'Subgroup',
+            'ylabel': disp_label,
+        })
 
     chart.setMinimumWidth(740)
-    chart.setMinimumHeight(680)
+    chart.setMinimumHeight(460 if len(chart.panels) <= 1 else 680)
     chart.note = f"Tests performed: Nelson rules. Points violating tests are labeled in red."
 
 

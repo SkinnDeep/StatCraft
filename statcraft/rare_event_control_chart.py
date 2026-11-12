@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 BLUE = "#0061a8"
 INK = "#1a2b38"
@@ -70,7 +71,7 @@ class RareEventControlChartWidget(GraphInteractionMixin, QWidget):
         return QSize(820, 520)
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -208,6 +209,7 @@ class RareEventControlChartWidget(GraphInteractionMixin, QWidget):
         path_series.moveTo(map_x(0), map_y(values[0]))
         for i in range(1, k_obs):
             path_series.lineTo(map_x(i), map_y(values[i]))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QPen(QColor(BLUE), 1.5))
         painter.drawPath(path_series)
 

@@ -68,10 +68,10 @@ class Phase5ExecutiveSummaryAndReleaseTests(unittest.TestCase):
             self.assertNotIn("Analysis evaluated", bullets[0])
 
     def test_presenter_replay_ui_and_v116_major_release_consistency(self):
-        self.assertEqual(statcraft.__version__, "117.0.0")
-        self.assertEqual(updater.STATCRAFT_VERSION, "117.0.0")
+        self.assertEqual(statcraft.__version__, "118.0.0")
+        self.assertEqual(updater.STATCRAFT_VERSION, "118.0.0")
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
-        self.assertIn('version = "117.0.0"', pyproject.read_text(encoding="utf-8"))
+        self.assertIn('version = "118.0.0"', pyproject.read_text(encoding="utf-8"))
 
         p = Presenter()
         entry = p.monte_carlo_simulation("X1: Normal(10, 0.4); X2: Uniform(4.5, 5.5)", "X1 + 2 * X2", lsl=18.0, usl=22.0, n_sims=3000, seed=5)

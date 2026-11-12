@@ -20,6 +20,7 @@ from .optimizer import (
     individual_desirability, _merge_predictors,
 )
 from .variable_dialogs import format_variable_reference
+from .chart_theme import chart_painter
 
 
 def _footer(dialog, layout, callback):
@@ -50,7 +51,7 @@ class DesirabilityPreviewWidget(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(4, 4, -4, -4)
         p.fillRect(rect, QColor('#ffffff'))

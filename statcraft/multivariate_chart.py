@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 BLUE = "#0061a8"
 BLUE_FILL = "#1f77b4"
@@ -72,7 +73,7 @@ class MultivariateChartWidget(GraphInteractionMixin, QWidget):
         return QSize(780, 480)
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -180,6 +181,7 @@ class MultivariateChartWidget(GraphInteractionMixin, QWidget):
             else:
                 path.lineTo(pt)
 
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QPen(QColor(BLUE), 2))
         painter.drawPath(path)
 
@@ -454,6 +456,7 @@ class MultivariateChartWidget(GraphInteractionMixin, QWidget):
             path.moveTo(line_pts[0])
             for pt in line_pts[1:]:
                 path.lineTo(pt)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(RED), 2))
             painter.drawPath(path)
 

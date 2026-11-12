@@ -92,3 +92,46 @@ def describe(values: Iterable[float | None]) -> dict:
         "standard_error": standard_error,
         "warnings": warnings,
     }
+
+
+def extra_descriptive_stats(values: Iterable[float | None]) -> dict:
+    """Compute optional descriptive measures beyond the core describe() contract."""
+    from collections import Counter
+    from scipy import stats as _scipy_stats
+
+    total_rows = 0
+    clean = []
+    for value in values:
+        total_rows += 1
+        norm = normalize_numeric(value)
+        if norm is not None:
+            clean.append(norm)
+    if not clean:
+        return {}
+    n = len(clean)
+    ordered = sorted(clean)
+    lo, hi = ordered[0], ordered[-1]
+    q1 = _clamped_rank_quantile(ordered, 0.25)
+    q3 = _clamped_rank_quantile(ordered, 0.75)
+    mean = math.fsum(x / n for x in clean)
+    stdev = None
+    if n > 1:
+        dev = [x - mean for x in clean]
+        scale = max(abs(x) for x in dev)
+        stdev = 0.0 if scale == 0 else scale * math.sqrt(math.fsum((x / scale) ** 2 for x in dev) / (n - 1))
+    coef_var = (100.0 * stdev / abs(mean)) if (stdev is not None and mean != 0) else None
+    trimmed = float(_scipy_stats.trim_mean(clean, 0.05)) if n >= 1 else None
+    skew = float(_scipy_stats.skew(clean, bias=False)) if n >= 3 and stdev and stdev > 0 else None
+    kurt = float(_scipy_stats.kurtosis(clean, bias=False)) if n >= 4 and stdev and stdev > 0 else None
+    counts = Counter(clean)
+    top_val, top_cnt = counts.most_common(1)[0]
+    return {
+        "n_total": total_rows,
+        "range": hi - lo,
+        "iqr": q3 - q1,
+        "coef_var": coef_var,
+        "trimmed_mean": trimmed,
+        "skewness": skew,
+        "kurtosis": kurt,
+        "mode": top_val if top_cnt > 1 else None,
+    }

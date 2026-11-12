@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from .attribute_control_engine import parse_subgroup_omission
+from .dialog_theme import is_dark_active, subtle_label_style
 from .model import Worksheet
 from .variable_dialogs import format_variable_reference, resolve_variables
 
@@ -69,7 +70,7 @@ class RareEventOptionsDialog(QDialog):
 
         lbl_desc = QLabel("To specify a value for the proportion, enter it here. StatCraft uses this value instead of estimating it from the data.")
         lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("color: #444; margin-bottom: 8px;")
+        lbl_desc.setStyleSheet(subtle_label_style(is_dark_active(self.parent() or self), font_size="9pt", extra="margin-bottom: 8px;"))
         layout_param.addWidget(lbl_desc)
 
         self.edit_p = QLineEdit()

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .dialog_theme import dialog_stylesheet, is_dark_active, subtle_label_style
 from .variability_chart import VariabilityPlatformWidget
 from .variability_engine import calculate_variability_analysis
 
@@ -31,6 +32,8 @@ class VariabilityChartDialog(QDialog):
     def __init__(self, main_window, parent: Optional[QWidget] = None):
         super().__init__(parent or main_window)
         self.main_window = main_window
+        dark = is_dark_active(parent or main_window or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         self.setWindowTitle("Variability / Attribute Gauge Chart")
         self.resize(520, 520)
 
@@ -46,12 +49,15 @@ class VariabilityChartDialog(QDialog):
             "Construct a multi-factor hierarchical variability plot and ANOVA Gage R&R analysis.\n"
             "Select a measurement response and one or more grouping factors (e.g. Part, Operator)."
         )
-        desc.setStyleSheet("color: #475569; font-size: 11px;")
+        desc.setStyleSheet(subtle_label_style(dark, font_size="11px"))
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
         form_frame = QFrame()
-        form_frame.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;")
+        if dark:
+            form_frame.setStyleSheet("QFrame { background: #1f1f23; border: 1px solid #27272a; border-radius: 6px; padding: 12px; }")
+        else:
+            form_frame.setStyleSheet("QFrame { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }")
         form = QFormLayout(form_frame)
         form.setSpacing(10)
 

@@ -10,6 +10,7 @@ from .model import display_date
 from .spatial_view import DEFAULT_VIEW, view_state, project_point, depth_order
 from .graph_hover import point_info,histogram_info,number,summary_info,surface_cell_info
 from .graph_interaction import GraphInteractionMixin,style_pen,style_color,draw_marker
+from .chart_theme import chart_painter
 
 
 COLORS = ('#326b9b', '#b64d45', '#438064', '#9273a6', '#bc8835', '#478b96', '#8b6549', '#7a8491')
@@ -686,7 +687,7 @@ class ExpandedChartWidget(GraphInteractionMixin,QWidget):
         self.reset_hover_regions()
         self.hit_regions=[]
         self.brush_regions=[]
-        q = QPainter(self)
+        q = chart_painter(self)
         q.setRenderHint(QPainter.RenderHint.Antialiasing)
         q.fillRect(self.rect(), QColor('white'))
         q.setFont(QFont('Segoe UI', 12, QFont.Weight.DemiBold))

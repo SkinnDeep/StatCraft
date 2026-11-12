@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF, QSize
 from PySide6.QtGui import QPainter, QColor, QFont, QPen, QBrush
 from PySide6.QtWidgets import QWidget, QSizePolicy
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter, resolve_axis_label, apply_axis_limits, grid_enabled, draw_ref_lines
 
 
 def _fmt(val, dec=4):
@@ -28,7 +29,7 @@ class RunChartWidget(GraphInteractionMixin, QWidget):
         return QSize(820, 560)
 
     def paintEvent(self, event):
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor('#ffffff'))
 
@@ -66,16 +67,25 @@ class RunChartWidget(GraphInteractionMixin, QWidget):
             span = 1.0
         y_min = min_val - span * 0.12
         y_max = max_val + span * 0.12
+        x_lo, x_hi = apply_axis_limits(self, "x", 0.0, float(n - 1))
+        y_min, y_max = apply_axis_limits(self, "y", y_min, y_max)
 
         def to_x(idx):
-            return rect.left() + (idx / (n - 1)) * rect.width()
+            return rect.left() + ((idx - x_lo) / max(1e-9, x_hi - x_lo)) * rect.width()
 
         def to_y(val):
             return rect.bottom() - ((val - y_min) / (y_max - y_min)) * rect.height()
 
+        if grid_enabled(self):
+            p.setPen(QPen(QColor('#e2e8f0'), 0.8, Qt.PenStyle.DashLine))
+            for f in (0.25, 0.5, 0.75):
+                gy = rect.top() + f * rect.height()
+                p.drawLine(int(round(rect.left())), int(round(gy)), int(round(rect.right())), int(round(gy)))
+
         # Axes borders
         p.setPen(QPen(QColor('#cbd5e1'), 1.0))
         p.drawRect(rect)
+        draw_ref_lines(p, self, rect, to_x, to_y, (x_lo, x_hi), (y_min, y_max))
 
         # Center line (Median)
         med_val = self.result.get('median', 0.0)
@@ -119,9 +129,11 @@ class RunChartWidget(GraphInteractionMixin, QWidget):
             p.drawLine(sx, rect.bottom(), sx, rect.bottom() + 4)
             p.drawText(QRectF(sx - 15, rect.bottom() + 6, 30, 14), Qt.AlignmentFlag.AlignCenter, str(i + 1))
 
-        p.setFont(QFont('Segoe UI', 8, QFont.Weight.DemiBold))
-        p.setPen(QColor('#334155'))
-        p.drawText(QRectF(rect.left(), rect.bottom() + 20, rect.width(), 16), Qt.AlignmentFlag.AlignCenter, "Observation")
+        x_lbl = resolve_axis_label(self, "x", "Observation")
+        if x_lbl:
+            p.setFont(QFont('Segoe UI', 8, QFont.Weight.DemiBold))
+            p.setPen(QColor('#334155'))
+            p.drawText(QRectF(rect.left(), rect.bottom() + 20, rect.width(), 16), Qt.AlignmentFlag.AlignCenter, x_lbl)
 
     def _draw_runs_footer(self, p: QPainter, rect: QRectF):
         # Background card

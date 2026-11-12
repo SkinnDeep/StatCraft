@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor,QFont,QPainter,QPen,QPainterPath
 from PySide6.QtWidgets import QWidget,QSizePolicy
 from .graph_interaction import GraphInteractionMixin,draw_marker,style_pen
 from .attribute_capability_report import _fmt
+from .chart_theme import chart_painter
 
 
 class AttributeCapabilityChartWidget(GraphInteractionMixin,QWidget):
@@ -21,7 +22,7 @@ class AttributeCapabilityChartWidget(GraphInteractionMixin,QWidget):
     def sizeHint(self):return QSize(940,640)
 
     def paintEvent(self,event):
-        p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p=chart_painter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(),QColor('white'));self.hit_regions=[];self.brush_regions=[]
         result=self.result;binomial=result.get('method')=='binomial'
         title=result.get('title') or result.get('method','').title()+' Capability Analysis'

@@ -1,5 +1,5 @@
 """Interactive output scaling; source widget/export coordinates stay at 100%."""
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QWidget
 
 
@@ -52,6 +52,17 @@ class OutputZoomView(QGraphicsView):
                     if (hasattr(child, '_has_3d_panel') and child._has_3d_panel()) or (hasattr(child, '_interactive_3d') and child._interactive_3d):
                         target_chart = child
                         break
+            if target_chart is None and not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                scene_pt = self.mapToScene(event.position().toPoint())
+                for child in ([self.content] + list(self.content.findChildren(QWidget))):
+                    if hasattr(child, '_has_2d_zoomable_panel') and child._has_2d_zoomable_panel():
+                        local_pt = QPointF(child.mapFrom(self.content, scene_pt.toPoint()))
+                        if hasattr(child, '_zoom2d_panel_at') and child._zoom2d_panel_at(local_pt) is not None:
+                            steps = event.angleDelta().y() / 120.0
+                            if steps and child._apply_2d_wheel_zoom(local_pt, steps):
+                                event.accept()
+                                return
+                            break
             if target_chart is not None:
                 target_chart.wheelEvent(event)
                 if event.isAccepted():

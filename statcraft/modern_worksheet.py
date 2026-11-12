@@ -14,7 +14,7 @@ def _is_dark_active(widget=None) -> bool:
     return False
 
 """Worksheet key navigation, active cell editor, and Standard statistical column/row selection painting."""
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QApplication, QHeaderView, QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableWidget,
@@ -237,6 +237,8 @@ class WorksheetDelegate(QStyledItemDelegate):
 
 
 class WorksheetTable(QTableWidget):
+    fillHandleDragged = Signal(int, int, int, int, int, int, int, int)
+
     def __init__(self, navigate, parent=None):
         super().__init__(parent)
         self.navigate = navigate
@@ -267,8 +269,17 @@ class WorksheetTable(QTableWidget):
                 if key == Qt.Key.Key_End:
                     self.navigate('bottom_right')
                     return True
-                if key == Qt.Key.Key_Up and self.currentRow() == 0:
-                    self.navigate('column_name')
+                if key == Qt.Key.Key_Up:
+                    self.navigate('ctrl_up')
+                    return True
+                if key == Qt.Key.Key_Down:
+                    self.navigate('ctrl_down')
+                    return True
+                if key == Qt.Key.Key_Left:
+                    self.navigate('ctrl_left')
+                    return True
+                if key == Qt.Key.Key_Right:
+                    self.navigate('ctrl_right')
                     return True
             elif (mods & Qt.KeyboardModifier.ShiftModifier) and not (mods & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ControlModifier)):
                 if key == Qt.Key.Key_Space:
@@ -323,6 +334,117 @@ class WorksheetTable(QTableWidget):
                 event.accept()
                 return
         super().wheelEvent(event)
+
+
+    def fill_handle_anchor_range(self):
+        ranges = self.selectedRanges()
+        if ranges:
+            top = min(r.topRow() for r in ranges)
+            bottom = max(r.bottomRow() for r in ranges)
+            left = min(r.leftColumn() for r in ranges)
+            right = max(r.rightColumn() for r in ranges)
+            return (top, bottom, left, right)
+        cr, cc = self.currentRow(), self.currentColumn()
+        if cr >= 0 and cc >= 0:
+            return (cr, cr, cc, cc)
+        return None
+
+    def fill_handle_rect(self):
+        if self.model() is None:
+            return QRect()
+        rng = self.fill_handle_anchor_range()
+        if not rng:
+            return QRect()
+        _, bottom, _, right = rng
+        vr = self.visualRect(self.model().index(bottom, right))
+        if not vr.isValid() or vr.isEmpty():
+            return QRect()
+        return QRect(vr.right() - 5, vr.bottom() - 5, 7, 7)
+
+    def _fill_handle_hit_rect(self):
+        r = self.fill_handle_rect()
+        if r.isNull():
+            return QRect()
+        return r.adjusted(-4, -4, 4, 4)
+
+    def _compute_fill_target_range(self, src, idx):
+        st, sb, sl, sr = src
+        if not idx.isValid():
+            return src
+        r, c = idx.row(), idx.column()
+        v_dist = (r - sb) if r > sb else ((st - r) if r < st else 0)
+        h_dist = (c - sr) if c > sr else ((sl - c) if c < sl else 0)
+        if v_dist >= h_dist and v_dist > 0:
+            return (min(st, r), max(sb, r), sl, sr)
+        if h_dist > v_dist and h_dist > 0:
+            return (st, sb, min(sl, c), max(sr, c))
+        return src
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            hit = self._fill_handle_hit_rect()
+            if not hit.isNull() and hit.contains(pos):
+                src = self.fill_handle_anchor_range()
+                if src is not None:
+                    self._dragging_fill_handle = True
+                    self._fill_src_range = src
+                    self._fill_dst_range = src
+                    self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+                    self.viewport().update()
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        if getattr(self, "_dragging_fill_handle", False) and self._fill_src_range is not None:
+            idx = self.indexAt(pos)
+            self._fill_dst_range = self._compute_fill_target_range(self._fill_src_range, idx)
+            self.viewport().update()
+            event.accept()
+            return
+        hit = self._fill_handle_hit_rect()
+        if not hit.isNull() and hit.contains(pos):
+            self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+        else:
+            self.viewport().unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if getattr(self, "_dragging_fill_handle", False):
+            src = getattr(self, "_fill_src_range", None)
+            dst = getattr(self, "_fill_dst_range", None)
+            self._dragging_fill_handle = False
+            self._fill_src_range = None
+            self._fill_dst_range = None
+            self.viewport().unsetCursor()
+            self.viewport().update()
+            if src is not None and dst is not None and dst != src:
+                self.fillHandleDragged.emit(*src, *dst)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self.viewport())
+        handle = self.fill_handle_rect()
+        if not handle.isNull() and not getattr(self, "_dragging_fill_handle", False):
+            painter.setPen(QPen(QColor("#ffffff"), 1))
+            painter.setBrush(QColor("#0284c7"))
+            painter.drawRect(handle)
+        if getattr(self, "_dragging_fill_handle", False) and getattr(self, "_fill_dst_range", None) and self.model() is not None:
+            dt, db, dl, dr = self._fill_dst_range
+            tl = self.visualRect(self.model().index(dt, dl))
+            br = self.visualRect(self.model().index(db, dr))
+            if tl.isValid() and br.isValid():
+                box = tl.united(br).adjusted(1, 1, -1, -1)
+                pen = QPen(QColor("#0284c7"), 2, Qt.PenStyle.DashLine)
+                painter.setPen(pen)
+                painter.setBrush(QColor(2, 132, 199, 25))
+                painter.drawRect(box)
+        painter.end()
 
 
 class ColumnNamesTable(QTableWidget):

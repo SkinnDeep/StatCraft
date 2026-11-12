@@ -1,8 +1,10 @@
 """Graph annotations around a live chart; numerical result data stays unchanged."""
 import copy
-from PySide6.QtCore import Qt,Signal
+from PySide6.QtCore import Qt, QPoint, QSize, Signal
+from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QSizePolicy,QToolButton
 from .graph_presentation import graph_presentation,validate_presentation,parse_ref_lines
+from .chart_theme import is_dark_mode, get_chart_theme
 
 
 class AnnotationLabel(QLabel):
@@ -78,7 +80,29 @@ class GraphFrame(QWidget):
         else:
             self.selection_strip.hide()
 
+    def _apply_theme_styles(self):
+        dark = is_dark_mode(self)
+        theme = get_chart_theme(self)
+        if dark:
+            self.selection_strip.setStyleSheet(
+                '#graphSelectionStrip { background-color: #1f1f23; border: 1px solid #166534; border-radius: 4px; padding: 2px 6px; margin: 2px 0px; }'
+                'QLabel { color: #86efac; font-weight: bold; font-size: 8.5pt; background: transparent; }'
+                'QToolButton { background-color: #27272a; border: 1px solid #22c55e; border-radius: 3px; padding: 2px 6px; color: #dcfce7; font-size: 8pt; font-weight: 500; }'
+                'QToolButton:hover { background-color: #14532d; border-color: #4ade80; }'
+            )
+        else:
+            self.selection_strip.setStyleSheet(
+                '#graphSelectionStrip { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 2px 6px; margin: 2px 0px; }'
+                'QLabel { color: #166534; font-weight: bold; font-size: 8.5pt; }'
+                'QToolButton { background-color: #ffffff; border: 1px solid #86efac; border-radius: 3px; padding: 2px 6px; color: #166534; font-size: 8pt; font-weight: 500; }'
+                'QToolButton:hover { background-color: #dcfce7; border-color: #4ade80; }'
+            )
+        self.title_label.setStyleSheet(f'color: {theme.ink}; background: transparent; font-weight: 600;')
+        self.subtitle_label.setStyleSheet(f'color: {theme.muted}; background: transparent;')
+        self.footnote_label.setStyleSheet(f'color: {theme.muted}; background: transparent;')
+
     def apply_appearance(self):
+        self._apply_theme_styles()
         if self.entry.get('result',{}).get('analysis')=='native_saved_output':
             self.base_panels=copy.deepcopy(self.chart.panels)
         if hasattr(self.chart,'refresh_composition'):
@@ -119,17 +143,37 @@ class GraphFrame(QWidget):
         self.setMinimumWidth(self.chart.minimumWidth())
         self.chart.update();self.updateGeometry()
 
-    def capture(self):
+    def capture(self, scale: float = 2.0):
         visible=[widget for widget in self.export_hidden if not widget.isHidden()]
         selected=getattr(self.chart,'selected_object',None)
         brushed=getattr(self.chart,'brushed_rows',set())
         exporting=getattr(self.chart,'_exporting',False)
+        scale_val = max(1.0, float(scale or 1.0))
         try:
             self.chart._exporting=True
             self.chart.selected_object=None
             self.chart.brushed_rows=set()
             for widget in visible:widget.hide()
-            return self.grab()
+            self.ensurePolished()
+            if self.layout() is not None:
+                self.layout().activate()
+            size = self.size()
+            if size.width() <= 0 or size.height() <= 0:
+                hint = self.sizeHint()
+                size = QSize(max(320, hint.width()), max(200, hint.height()))
+                self.resize(size)
+            pix = QPixmap(max(1, int(round(size.width() * scale_val))), max(1, int(round(size.height() * scale_val))))
+            pix.fill(self.palette().window().color())
+            pix.setDevicePixelRatio(scale_val)
+            painter = QPainter(pix)
+            try:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                self.render(painter, QPoint(0, 0))
+            finally:
+                painter.end()
+            return pix
         finally:
             self.chart._exporting=exporting
             self.chart.selected_object=selected;self.chart.update()

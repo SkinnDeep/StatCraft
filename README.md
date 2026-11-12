@@ -7,13 +7,13 @@
 ### Modern, High-Performance Statistical Analysis & Quality Engineering Software
 **A powerful desktop alternative to Minitab with native MPX file compatibility, universal R code translation (Tidyverse, ggplot2, Base R), interactive 3D CAD response surfaces, and complete offline privacy.**
 
-[![Version](https://img.shields.io/badge/version-117.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
+[![Version](https://img.shields.io/badge/version-118.0.0-blue.svg)](https://github.com/SkinnDeep/StatCraft/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/SkinnDeep/StatCraft)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt6-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[Download Release (v117.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v117.0.0) •
+[Download Release (v118.0.0)](https://github.com/SkinnDeep/StatCraft/releases/tag/v118.0.0) •
 [Documentation](#capabilities--features) •
 [Installation Guide](#installation--setup) •
 [Roadmap](#cross-platform-roadmap)
@@ -84,6 +84,16 @@ StatCraft breaks free from the rigid, static 1990s desktop paradigm with modern,
 8. **Smart "Next Best Step" Guidance Chips**: Context-aware workflow recommendations (e.g., automatically suggesting a Johnson Transformation when normality fails, or Tukey HSD when ANOVA is significant) with 1-click dialog pre-population.
 9. **Live Formula Column Preview**: An intuitive formula bar (`= C1 * 1.05`, `= log(Yield)`) with instant 5-row calculated previews before committing changes.
 10. **100% Air-Gapped Zero-Install Portability**: Runs standalone with zero telemetry, zero licensing daemons, and zero network pings—fully compliant with classified defense networks, cleanrooms, and air-gapped industrial SCADA environments.
+
+---
+
+## 🚀 What's New in v118.0.0 — Minitab UX Parity, Interactive 2D Charts, HiDPI Vector Export & Drag-Fill
+
+- **Full Dark/Light Dialog Parity**: Unified palette styling (`dialog_theme.py`) across `ScatterDialog`, `ScatterTypeDialog`, `GraphBuilderDialog`, `GraphObjectDialog`, `CheckForUpdatesDialog`, two-sample/paired t, and rare-event control chart dialogs.
+- **Ctrl+E Replay, Pre-Selection & Clear Validation**: Automatic pre-population from selected worksheet columns, `Reset` / `F3` state reset & persistence across `ScatterDialog` and `GraphBuilderDialog`, `Ctrl+E` mode memory, and unified type-aware validation messages.
+- **HiDPI Capture, Full-Frame Vector SVG Export & Rich Table Clipboard**: 2x DPR graph capture, complete `GraphFrame` SVG export (title, subtitle, chart, footnote), and dual HTML+TSV clipboard formatting for Excel/Word/PowerPoint.
+- **Worksheet Ergonomics & Drag-Fill Handle**: Multi-page status-bar summary (`N`, `Mean`, `StDev`, `Min`, `Max`, plus `Count` for non-numeric selections), Excel/Minitab `Ctrl+Arrow` block jumping, `Ctrl+1` column formatting + column context actions, undo/redo selection retention, and bottom-right mouse drag-fill handles for numeric sequences and text patterns.
+- **Interactive Output Pane & 2D Charts**: Live Navigator filter bar, `Ctrl+F` / `F3` search across Output Report headings, labels, and tables, per-table `Decimal Places` precision quick-toggle, compact `tab_corner_widget` chrome, clickable legend series visibility toggle, and interactive 2D wheel zoom / pan with **Reset Zoom**.
 
 ---
 
@@ -292,7 +302,7 @@ StatCraft is built on the cross-platform Qt6 (PySide6) framework:
 
 | Platform | Current Status | Release Artifact |
 |---|---|---|
-| **Windows x64** | **Available (v117.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
+| **Windows x64** | **Available (v118.0.0)** | `StatCraft-Setup.exe`, `StatCraft.exe` |
 | **macOS (Apple Silicon & Intel)** | *In Preparation* | `.dmg` installer & standalone `.app` bundle |
 | **Linux (x86_64)** | *In Preparation* | `AppImage` & `.deb` package |
 

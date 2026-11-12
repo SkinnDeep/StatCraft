@@ -7,6 +7,7 @@ import numpy as np
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from PySide6.QtWidgets import QWidget
+from .chart_theme import chart_painter
 
 
 class AcceptanceControlChartWidget(QWidget):
@@ -24,7 +25,7 @@ class AcceptanceControlChartWidget(QWidget):
         self.setMinimumSize(780, 520)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         rect = self.rect()

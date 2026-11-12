@@ -79,8 +79,8 @@ def control_chart_settings(options: dict[str, Any] | None = None) -> dict[str, A
     """Validate and normalize settings for subgroup control charts."""
     opts = copy.deepcopy(options or {})
     chart_type = str(opts.get('chart_type', 'xbar_r')).lower()
-    if chart_type not in ('xbar_r', 'xbar_s'):
-        raise ValueError("Chart type must be 'xbar_r' or 'xbar_s'.")
+    if chart_type not in ('xbar_r', 'xbar_s', 'xbar', 'r', 's'):
+        raise ValueError("Chart type must be 'xbar_r', 'xbar_s', 'xbar', 'r', or 's'.")
 
     k_raw = opts.get('k_sigma', 3.0)
     if isinstance(k_raw, str):
@@ -128,7 +128,7 @@ def control_chart_settings(options: dict[str, Any] | None = None) -> dict[str, A
 
     method = str(opts.get('estimation_method', 'default')).lower()
     if method == 'default':
-        method = 'rbar' if chart_type == 'xbar_r' else 'sbar'
+        method = 'rbar' if chart_type in ('xbar_r', 'xbar', 'r') else 'sbar'
     if method not in ('rbar', 'sbar', 'pooled_stdev'):
         raise ValueError("Estimation method must be 'rbar', 'sbar', or 'pooled_stdev'.")
 
@@ -437,7 +437,7 @@ def fit_subgroups(subgroups: list[list[float | None]],
                 sigma_hat = sp / c4_val if c4_val > 0 else sp
             else:
                 sigma_hat = 0.0
-        elif chart_type == 'xbar_r':
+        elif chart_type in ('xbar_r', 'xbar', 'r'):
             # Rbar method
             r_vals = [ranges[i] for i in disp_indices if ranges[i] is not None]
             rbar = float(np.mean(r_vals)) if r_vals else 0.0
@@ -453,7 +453,7 @@ def fit_subgroups(subgroups: list[list[float | None]],
             sigma_hat = sbar / c4_val if c4_val > 0 else 0.0
 
     # Dispersion center line
-    if chart_type == 'xbar_r':
+    if chart_type in ('xbar_r', 'xbar', 'r'):
         if opts['historical_sigma'] is not None:
             avg_n = int(round(np.mean([subgroup_sizes[i] for i in range(k_subgroups) if subgroup_sizes[i] >= 2]))) if any(n >= 2 for n in subgroup_sizes) else 2
             disp_center = d2(avg_n) * sigma_hat
@@ -489,7 +489,7 @@ def fit_subgroups(subgroups: list[list[float | None]],
             xbar_ucl_list.append(None)
 
         if n >= 2 and sigma_hat >= 0:
-            if chart_type == 'xbar_r':
+            if chart_type in ('xbar_r', 'xbar', 'r'):
                 d2_val = d2(n)
                 d3_val = d3(n)
                 r_cl = d2_val * sigma_hat if opts['historical_sigma'] is not None else disp_center
@@ -555,7 +555,7 @@ def fit_subgroups(subgroups: list[list[float | None]],
 
     # Test 1 on dispersion chart (R or S)
     disp_signals: list[int] = []
-    disp_vals = ranges if chart_type == 'xbar_r' else stdevs
+    disp_vals = ranges if chart_type in ('xbar_r', 'xbar', 'r') else stdevs
     for i in range(k_subgroups):
         v = disp_vals[i]
         lcl = disp_lcl_list[i]
@@ -581,7 +581,7 @@ def fit_subgroups(subgroups: list[list[float | None]],
         'means': means,
         'ranges': ranges,
         'stdevs': stdevs,
-        'disp_values': ranges if chart_type == 'xbar_r' else stdevs,
+        'disp_values': ranges if chart_type in ('xbar_r', 'xbar', 'r') else stdevs,
         'xbar_center': xbar_center,
         'xbar_lcl': xbar_lcl_list,
         'xbar_ucl': xbar_ucl_list,

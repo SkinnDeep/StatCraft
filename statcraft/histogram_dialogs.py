@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSpinBox,
     QToolButton, QVBoxLayout)
 
+from .dialog_theme import dialog_stylesheet, gallery_button_stylesheet, is_dark_active
 from .histogram_options import validate_histogram_settings
 from .variable_dialogs import VariableEntry, format_variable_reference, resolve_variables
 
@@ -20,14 +21,14 @@ MODES = {'simple': 'Simple', 'fit': 'With Fit', 'groups': 'With Groups',
          'fit_groups': 'With Fit and Groups'}
 
 
-def histogram_icon(mode):
+def histogram_icon(mode, dark=False):
     """Draw an original gallery preview without vendor image assets."""
     pixmap = QPixmap(240, 160)
     pixmap.setDevicePixelRatio(2)
-    pixmap.fill(QColor('white'))
+    pixmap.fill(QColor('#18181b' if dark else 'white'))
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QPen(QColor('#64717c'), 1))
+    painter.setPen(QPen(QColor('#a1a1aa' if dark else '#64717c'), 1))
     painter.drawLine(12, 69, 112, 69)
     painter.drawLine(12, 69, 12, 8)
     for group in range(2 if mode in ('groups', 'fit_groups') else 1):
@@ -50,6 +51,8 @@ def histogram_icon(mode):
 class HistogramTypeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        dark = is_dark_active(parent or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         self.setSizeGripEnabled(True)
         self.setWindowTitle('Histograms')
         self.mode = 'simple'
@@ -60,14 +63,13 @@ class HistogramTypeDialog(QDialog):
         for index, (mode, title) in enumerate(MODES.items()):
             button = QToolButton()
             button.setText(title)
-            button.setIcon(histogram_icon(mode))
+            button.setIcon(histogram_icon(mode, dark=dark))
             button.setIconSize(QSize(120, 80))
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             button.setMinimumSize(168, 132)
             button.setCheckable(True)
             button.setChecked(index == 0)
-            button.setStyleSheet('QToolButton {border:1px solid #bfc5cb; padding:8px; background:white;} '
-                'QToolButton:checked {border:2px solid #205b92; background:#eaf1f8;}')
+            button.setStyleSheet(gallery_button_stylesheet(dark))
             button.clicked.connect(lambda checked=False, key=mode: setattr(self, 'mode', key))
             self.buttons.addButton(button)
             self.mode_buttons[mode] = button

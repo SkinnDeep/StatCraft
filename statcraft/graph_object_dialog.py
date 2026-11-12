@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QComboBox, QLineEdit, QPushButton, QColorDialog, QDoubleSpinBox,
     QCheckBox, QDialogButtonBox, QWidget, QGroupBox)
 
+from .dialog_theme import is_dark_active, dialog_stylesheet, error_label_style
 from .graph_styles import validate_styles, style_for, FIELDS, NUMBER_RANGES
 
 
@@ -25,6 +26,8 @@ class GraphObjectDialog(QDialog):
         self.setSizeGripEnabled(True)
         self.setWindowTitle('Edit Graph Object')
         self.setMinimumWidth(370)
+        dark = is_dark_active(parent or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         self._draft = validate_styles(styles)
         self._objects = []
         seen = set()
@@ -59,7 +62,7 @@ class GraphObjectDialog(QDialog):
         outer.addWidget(self._body)
         self.error = QLabel()
         self.error.setWordWrap(True)
-        self.error.setStyleSheet('color: #a00000;')
+        self.error.setStyleSheet(error_label_style(dark))
         self.error.hide()
         outer.addWidget(self.error)
         self.reset_button = QPushButton('Reset Selected')

@@ -18,6 +18,7 @@ from scipy import stats
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from PySide6.QtWidgets import QWidget
+from .chart_theme import chart_painter
 
 
 class CapabilitySixpackWidget(QWidget):
@@ -35,7 +36,7 @@ class CapabilitySixpackWidget(QWidget):
         self.setMinimumSize(950, 650)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         
@@ -349,6 +350,7 @@ class CapabilitySixpackWidget(QWidget):
             painter.drawRect(QRectF(bx1, by, max(1.0, bx2 - bx1), plot_rect.bottom() - by))
 
         # Fitted curves
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         x_grid = np.linspace(x_min, x_max, 100)
         if sd_within > 0:
             path_w = QPainterPath()
@@ -359,6 +361,7 @@ class CapabilitySixpackWidget(QWidget):
             painter.drawPath(path_w)
 
         if sd_overall > 0:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             path_o = QPainterPath()
             path_o.moveTo(to_screen_x(x_grid[0]), to_screen_y(curve_y_val(x_grid[0], sd_overall)))
             for xv in x_grid[1:]:

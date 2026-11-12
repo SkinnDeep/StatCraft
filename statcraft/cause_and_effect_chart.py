@@ -24,6 +24,7 @@ from PySide6.QtGui import (
     QPolygonF,
 )
 from PySide6.QtWidgets import QToolTip, QWidget
+from .chart_theme import chart_painter
 
 
 class CauseAndEffectChartWidget(QWidget):
@@ -40,7 +41,7 @@ class CauseAndEffectChartWidget(QWidget):
         self.setMinimumSize(700, 460)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 

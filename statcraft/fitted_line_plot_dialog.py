@@ -353,7 +353,36 @@ class FittedLinePlotDialog(ProcedureDialog):
         self.chk_show_pi.setChecked(bool(self.options.get("pi", True)))
         self.chk_shade_ci.setChecked(bool(self.options.get("shade_ci", False)))
 
+    def _save_dialog_state(self):
+        super()._save_dialog_state()
+        from .variable_dialogs import save_dialog_state
+        m_type = "quadratic" if self.rdo_quad.isChecked() else "cubic" if self.rdo_cub.isChecked() else "linear"
+        self.options["ci"] = self.chk_show_ci.isChecked()
+        self.options["pi"] = self.chk_show_pi.isChecked()
+        self.options["shade_ci"] = self.chk_shade_ci.isChecked()
+        save_dialog_state(self.worksheet, "FittedLinePlotDialog_extras", {
+            "model_type": m_type,
+            "options": self.options,
+        })
+
     def restore_previous(self):
+        from .variable_dialogs import load_dialog_state
+        saved = load_dialog_state(self.worksheet, "FittedLinePlotDialog_extras")
+        if saved:
+            m_type = str(saved.get("model_type", "linear")).lower()
+            if m_type == "quadratic":
+                self.rdo_quad.setChecked(True)
+            elif m_type == "cubic":
+                self.rdo_cub.setChecked(True)
+            else:
+                self.rdo_lin.setChecked(True)
+            opts = saved.get("options")
+            if isinstance(opts, dict):
+                merged = copy.deepcopy(default_fitted_line_plot_options())
+                merged.update(opts)
+                self.options = merged
+                self._sync_interval_checks()
+            return
         p = self.window.presenter
         worksheet_id = p.native_project.worksheet_ids[p.native_project.active_index] if getattr(p, 'native_project', None) else None
         for entry in reversed(getattr(p, 'history', [])):
@@ -497,7 +526,16 @@ class FittedLinePlotDialog(ProcedureDialog):
                         aligned_vals[r_idx] = float(val)
 
                 ws.columns.append(Column(base_name, "number", aligned_vals))
-                ws.row_count = max(ws.row_count, len(aligned_vals))
+
+        if st.get("coefficients") and res.get("coefficients"):
+            base_name = "COEF1"
+            counter = 1
+            while any(c.name == base_name for c in ws.columns):
+                counter += 1
+                base_name = f"COEF{counter}"
+            coef_vals = [float(row["coef"]) for row in res["coefficients"] if row.get("coef") is not None]
+            if coef_vals:
+                ws.columns.append(Column(base_name, "number", coef_vals))
 
         if any(st.values()):
             self.window.refresh()

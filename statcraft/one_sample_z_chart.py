@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from PySide6.QtWidgets import QWidget
 import numpy as np
+from .chart_theme import chart_painter
 
 
 class OneSampleZPlotWidget(QWidget):
@@ -18,7 +19,7 @@ class OneSampleZPlotWidget(QWidget):
         self.setMinimumSize(560, 380)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         draw_one_sample_z_panel(painter, self.rect(), self.result, self.entry.get("title"))
         painter.end()

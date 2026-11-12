@@ -19,6 +19,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 BLUE = "#0061a8"
 TEAL = "#008080"
@@ -72,7 +73,7 @@ class TimeWeightedControlChartWidget(GraphInteractionMixin, QWidget):
         return QSize(820, 520)
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -245,6 +246,7 @@ class TimeWeightedControlChartWidget(GraphInteractionMixin, QWidget):
             path_cp.moveTo(map_x(0), map_y(c_plus[0]))
             for i in range(1, k_subgroups):
                 path_cp.lineTo(map_x(i), map_y(c_plus[i]))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(BLUE), 1.5))
             painter.drawPath(path_cp)
 
@@ -254,6 +256,7 @@ class TimeWeightedControlChartWidget(GraphInteractionMixin, QWidget):
             path_cm.moveTo(map_x(0), map_y(c_minus_p[0]))
             for i in range(1, k_subgroups):
                 path_cm.lineTo(map_x(i), map_y(c_minus_p[i]))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(TEAL), 1.5))
             painter.drawPath(path_cm)
 

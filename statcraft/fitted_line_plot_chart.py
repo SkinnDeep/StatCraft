@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter, resolve_axis_label, apply_axis_limits, grid_enabled, draw_ref_lines
 
 INK = "#0f172a"
 MUTED = "#64748b"
@@ -104,7 +105,7 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         return QSize(840, 520)
 
     def paintEvent(self, event) -> None:
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
@@ -154,6 +155,8 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         y_span = max_y - min_y
         min_x -= 0.04 * x_span; max_x += 0.04 * x_span
         min_y -= 0.04 * y_span; max_y += 0.04 * y_span
+        min_x, max_x = apply_axis_limits(self, "x", min_x, max_x)
+        min_y, max_y = apply_axis_limits(self, "y", min_y, max_y)
 
         def map_x(val: float) -> float:
             return plot_rect.left() + (val - min_x) / (max_x - min_x) * plot_rect.width()
@@ -165,16 +168,17 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
         x_ticks = _nice_ticks(min_x, max_x, 6)
         y_ticks = _nice_ticks(min_y, max_y, 6)
 
-        p.setPen(QPen(QColor(GRID), 1.0))
-        for xt in x_ticks:
-            px = map_x(xt)
-            if plot_rect.left() <= px <= plot_rect.right():
-                p.drawLine(QPointF(px, plot_rect.top()), QPointF(px, plot_rect.bottom()))
+        if grid_enabled(self):
+            p.setPen(QPen(QColor(GRID), 1.0))
+            for xt in x_ticks:
+                px = map_x(xt)
+                if plot_rect.left() <= px <= plot_rect.right():
+                    p.drawLine(QPointF(px, plot_rect.top()), QPointF(px, plot_rect.bottom()))
 
-        for yt in y_ticks:
-            py = map_y(yt)
-            if plot_rect.top() <= py <= plot_rect.bottom():
-                p.drawLine(QPointF(plot_rect.left(), py), QPointF(plot_rect.right(), py))
+            for yt in y_ticks:
+                py = map_y(yt)
+                if plot_rect.top() <= py <= plot_rect.bottom():
+                    p.drawLine(QPointF(plot_rect.left(), py), QPointF(plot_rect.right(), py))
 
         # Plot Bounding Box
         p.setPen(QPen(QColor(BORDER), 1.0))
@@ -205,23 +209,28 @@ class FittedLinePlotChartWidget(GraphInteractionMixin, QWidget):
                 )
 
         # Axis Titles
+        x_label_text = resolve_axis_label(self, "x", self.x_name)
+        y_label_text = resolve_axis_label(self, "y", self.y_name)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
         p.setPen(QColor(INK))
-        p.drawText(
-            QRectF(plot_rect.left(), plot_rect.bottom() + 25, plot_rect.width(), 20),
-            Qt.AlignmentFlag.AlignCenter,
-            self.x_name,
-        )
+        if x_label_text:
+            p.drawText(
+                QRectF(plot_rect.left(), plot_rect.bottom() + 25, plot_rect.width(), 20),
+                Qt.AlignmentFlag.AlignCenter,
+                x_label_text,
+            )
 
-        p.save()
-        p.translate(14, plot_rect.center().y())
-        p.rotate(-90)
-        p.drawText(QRectF(-120, -10, 240, 20), Qt.AlignmentFlag.AlignCenter, self.y_name)
-        p.restore()
+        if y_label_text:
+            p.save()
+            p.translate(14, plot_rect.center().y())
+            p.rotate(-90)
+            p.drawText(QRectF(-120, -10, 240, 20), Qt.AlignmentFlag.AlignCenter, y_label_text)
+            p.restore()
 
         # 5. Shaded Confidence Interval Ribbon & Dashed CI Lines
         p.save()
         p.setClipRect(plot_rect)
+        draw_ref_lines(p, self, plot_rect, map_x, map_y, (min_x, max_x), (min_y, max_y))
 
         if self.show_ci and self.curve_x and self.curve_ci_low and self.curve_ci_high:
             if self.shade_ci:

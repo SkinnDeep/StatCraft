@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter, resolve_axis_label, apply_axis_limits, grid_enabled, draw_ref_lines
 
 BLUE = "#0061a8"
 INK = "#1a2b38"
@@ -116,7 +117,7 @@ class IMRChartWidget(GraphInteractionMixin, QWidget):
         })
 
     def paintEvent(self, event) -> None:
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -166,8 +167,8 @@ class IMRChartWidget(GraphInteractionMixin, QWidget):
         if ucl is not None:
             all_y.append(ucl)
 
-        xb = (0.5, n_pts + 0.5)
-        yb = _bounds(all_y, pad_frac=0.18)
+        xb = apply_axis_limits(self, "x", 0.5, n_pts + 0.5)
+        yb = apply_axis_limits(self, "y", *_bounds(all_y, pad_frac=0.18))
 
         # Plot rectangle with margins
         plot_l = area.left() + 65
@@ -185,6 +186,11 @@ class IMRChartWidget(GraphInteractionMixin, QWidget):
             return plot_b - ((val - yb[0]) / (yb[1] - yb[0])) * plot_h
 
         # Background grid and border
+        if grid_enabled(self):
+            p.setPen(QPen(QColor(GRID), 1.0))
+            for frac in (0.25, 0.5, 0.75):
+                gy = plot_t + frac * plot_h
+                p.drawLine(QPointF(plot_l, gy), QPointF(plot_r, gy))
         p.setPen(QPen(QColor(BORDER), 1.0))
         p.drawRect(plot_rect)
 
@@ -192,22 +198,27 @@ class IMRChartWidget(GraphInteractionMixin, QWidget):
         p.setFont(QFont("Segoe UI", 8))
         p.setPen(QColor(MUTED))
         # Y axis label
-        p.save()
-        p.translate(plot_l - 45, plot_t + plot_h / 2.0)
-        p.rotate(-90)
-        p.drawText(QRectF(-80, -10, 160, 20), Qt.AlignmentFlag.AlignCenter, d.get("ylabel", ""))
-        p.restore()
+        y_label_text = resolve_axis_label(self, "y", d.get("ylabel", ""))
+        if y_label_text:
+            p.save()
+            p.translate(plot_l - 45, plot_t + plot_h / 2.0)
+            p.rotate(-90)
+            p.drawText(QRectF(-80, -10, 160, 20), Qt.AlignmentFlag.AlignCenter, y_label_text)
+            p.restore()
 
         # X axis label
-        p.drawText(
-            QRectF(plot_l, plot_b + 8, plot_w, 18),
-            Qt.AlignmentFlag.AlignCenter,
-            d.get("xlabel", "Observation"),
-        )
+        x_label_text = resolve_axis_label(self, "x", d.get("xlabel", "Observation"))
+        if x_label_text:
+            p.drawText(
+                QRectF(plot_l, plot_b + 8, plot_w, 18),
+                Qt.AlignmentFlag.AlignCenter,
+                x_label_text,
+            )
 
         # Clip inside plot rectangle for data lines
         p.save()
         p.setClipRect(plot_rect.adjusted(-1, -1, 1, 1))
+        draw_ref_lines(p, self, plot_rect, to_x, to_y, xb, yb)
 
         # 1. Draw Center Line (green dashed)
         if center is not None and yb[0] <= center <= yb[1]:

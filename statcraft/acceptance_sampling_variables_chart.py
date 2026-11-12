@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from .snapshot_chart import SnapshotChartWidget
+from .chart_theme import chart_painter
 
 BLUE = "#0061a8"
 BLUE_FILL = "#1f77b4"
@@ -55,7 +56,7 @@ class _Canvas(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         self.owner._render_canvas(painter, self.rect(), self.hover_x)

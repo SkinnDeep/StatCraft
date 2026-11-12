@@ -182,3 +182,156 @@ def multiple_regression(predictors, response, confidence=.95, predictor_names=No
                 confidence=confidence,
                 status="exact_fit" if exact else "estimated", warnings=warnings,
                 assumptions="Continuous predictors and a linear mean relationship; independent, normally distributed errors of constant variance for coefficient and model inference. Rows missing any selected value are omitted together.")
+
+
+def _encode_categorical_predictor(col, raw_values):
+    """Reference-code a categorical column (first ordered level as baseline)."""
+    from .value_order import ordered_values
+
+    levels = ordered_values(col, raw_values)
+    if not 2 <= len(levels) <= 32:
+        raise ValueError(f"Categorical predictor '{col.name}' needs 2–32 observed levels after missing-row omission.")
+    basis = [[1.0 if v == lvl else 0.0 for v in raw_values] for lvl in levels[1:]]
+    labels = [f"{col.name} ({lvl})" for lvl in levels[1:]]
+    info = {
+        "name": col.name,
+        "levels": [str(l) for l in levels],
+        "reference": str(levels[0]),
+    }
+    return basis, labels, info
+
+
+def fit_general_regression(
+    worksheet,
+    response_index,
+    continuous_indices=(),
+    categorical_indices=(),
+    terms=None,
+    confidence=0.95,
+):
+    """Fit OLS regression with continuous, categorical, interaction, and quadratic terms."""
+    cont = list(continuous_indices or ())
+    cat = list(categorical_indices or ())
+    all_pred_idx = cont + cat
+    if not all_pred_idx:
+        raise ValueError("Choose at least one continuous or categorical predictor.")
+    if len(set(all_pred_idx)) != len(all_pred_idx) or response_index in all_pred_idx:
+        raise ValueError("Choose distinct predictors and a separate response.")
+    if any(type(i) is not int or not 0 <= i < len(worksheet.columns) for i in [response_index] + all_pred_idx):
+        raise ValueError("Choose valid response and predictor columns.")
+
+    resp_col = worksheet.columns[response_index]
+    cont_cols = [worksheet.columns[i] for i in cont]
+    cat_cols = [worksheet.columns[i] for i in cat]
+    if resp_col.kind != "number" or any(c.kind != "number" for c in cont_cols):
+        raise ValueError("Response and continuous predictors must be numeric columns.")
+    if any(c.kind not in ("number", "text") for c in cat_cols):
+        raise ValueError("Categorical predictors must be numeric or text columns.")
+
+    length = max([len(c.values) for c in [resp_col] + cont_cols + cat_cols] or [0])
+    complete_rows = []
+    y_vals = []
+    cont_rows = [[] for _ in cont_cols]
+    cat_rows = [[] for _ in cat_cols]
+
+    cont_numeric = [c.numeric_values(True) for c in cont_cols]
+    resp_numeric = resp_col.numeric_values(True)
+
+    for r in range(length):
+        yv = resp_numeric[r] if r < len(resp_numeric) else None
+        if yv is None:
+            continue
+        cvals = [cn[r] if r < len(cn) else None for cn in cont_numeric]
+        if any(v is None for v in cvals):
+            continue
+        kvals = []
+        missing_cat = False
+        for cc in cat_cols:
+            raw = cc.values[r] if r < len(cc.values) else None
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                missing_cat = True
+                break
+            kvals.append(raw)
+        if missing_cat:
+            continue
+        complete_rows.append(r)
+        y_vals.append(yv)
+        for j, val in enumerate(cvals):
+            cont_rows[j].append(val)
+        for j, val in enumerate(kvals):
+            cat_rows[j].append(val)
+
+    total_predictors = len(all_pred_idx)
+    if terms is None:
+        term_list = [[i] for i in range(total_predictors)]
+    else:
+        term_list = []
+        seen = set()
+        for raw_term in terms:
+            t = sorted(int(i) for i in raw_term)
+            if not 1 <= len(t) <= 3 or any(i < 0 or i >= total_predictors for i in t):
+                raise ValueError("Invalid model term specification.")
+            if len(t) == 2 and t[0] == t[1] and t[0] >= len(cont):
+                raise ValueError("Quadratic terms are only valid for continuous predictors.")
+            if len(t) == 3 and len(set(t)) < 3:
+                raise ValueError("Higher-order powers beyond quadratic are not supported.")
+            key = tuple(t)
+            if key not in seen:
+                seen.add(key)
+                term_list.append(t)
+        if not term_list:
+            raise ValueError("Include at least one model term.")
+
+    basis_blocks = []
+    basis_labels = []
+    for j, cc in enumerate(cont_cols):
+        basis_blocks.append([cont_rows[j]])
+        basis_labels.append([cc.name])
+    cat_coding = []
+    for j, cc in enumerate(cat_cols):
+        b, lbls, info = _encode_categorical_predictor(cc, cat_rows[j])
+        basis_blocks.append(b)
+        basis_labels.append(lbls)
+        cat_coding.append(info)
+
+    import itertools
+    design_cols = []
+    design_names = []
+    n_complete = len(complete_rows)
+    for t in term_list:
+        for combo in itertools.product(*(range(len(basis_blocks[idx])) for idx in t)):
+            if len(t) == 2 and t[0] == t[1]:
+                # Continuous quadratic term X*X -> vector square
+                v = basis_blocks[t[0]][0]
+                design_cols.append([x * x for x in v])
+                design_names.append(f"{basis_labels[t[0]][0]}*{basis_labels[t[0]][0]}")
+            else:
+                col_vec = [1.0] * n_complete
+                lbl_parts = []
+                for idx, b_idx in zip(t, combo):
+                    vec = basis_blocks[idx][b_idx]
+                    col_vec = [a * b for a, b in zip(col_vec, vec)]
+                    lbl_parts.append(basis_labels[idx][b_idx])
+                design_cols.append(col_vec)
+                design_names.append("*".join(lbl_parts))
+    if len(design_cols) > 120:
+        raise ValueError("Expanded model exceeds 120 terms.")
+
+    res = multiple_regression(
+        design_cols,
+        y_vals,
+        confidence=confidence,
+        predictor_names=design_names,
+        response_name=resp_col.name,
+    )
+    res["row_indices"] = [complete_rows[i] for i in res["row_indices"]]
+    res["missing"] = length - res["count"]
+    for uo in res.get("unusual_observations", []):
+        orig_pos = uo["obs"] - 1
+        if 0 <= orig_pos < len(complete_rows):
+            uo["obs"] = complete_rows[orig_pos] + 1
+    if cat_coding:
+        res["categorical_predictors"] = cat_coding
+    res["model_terms"] = [list(t) for t in term_list]
+    res["predictor_names"] = design_names
+    return res

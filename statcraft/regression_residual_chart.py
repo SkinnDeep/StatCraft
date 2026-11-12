@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF, QSize, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPainterPath
 from PySide6.QtWidgets import QWidget, QSizePolicy
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 
 class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
@@ -33,11 +34,27 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
         self.setFont(QFont("Segoe UI", 9))
 
         self.residuals = [float(v) for v in self.result.get("residuals", []) if v is not None]
-        self.fitted = [float(v) for v in self.result.get("fitted", []) if v is not None]
-        self.std_resids = [float(v) for v in self.result.get("standardized_residuals", []) if v is not None]
+        raw_fitted = self.result.get("fitted")
+        if not raw_fitted:
+            raw_fitted = self.result.get("fits", [])
+        self.fitted = [float(v) for v in raw_fitted if v is not None]
+        self.std_resids = [float(v) for v in (self.result.get("standardized_residuals") or self.result.get("std_residuals") or []) if v is not None]
         if not self.std_resids and self.residuals:
-            s = float(self.result.get("residual_stdev", 1.0)) or 1.0
+            s = float(self.result.get("residual_stdev") or self.result.get("s") or 1.0) or 1.0
             self.std_resids = [r / s for r in self.residuals]
+
+        opts = self.result.get("options") if isinstance(self.result.get("options"), dict) else {}
+        rtype = opts.get("residuals_type")
+        self._resid_is_standardized = (rtype != "regular" and rtype != "deleted")
+        self.resid_label = "Standardized Residual"
+        if rtype == "deleted":
+            del_resids = [float(v) for v in self.result.get("del_residuals", []) if v is not None]
+            if del_resids:
+                self.std_resids = del_resids
+                self.resid_label = "Deleted Residual"
+        elif rtype == "regular" and self.residuals:
+            self.std_resids = list(self.residuals)
+            self.resid_label = "Residual"
 
         self.n = len(self.residuals)
         self._init_graph_interaction()
@@ -51,12 +68,12 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
 
     def paintEvent(self, event):
         if self.n < 3:
-            p = QPainter(self)
+            p = chart_painter(self)
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Insufficient observations for residual diagnostics.")
             p.end()
             return
 
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Detect theme background
@@ -157,10 +174,13 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
         if plot_rect.top() <= zero_y <= plot_rect.bottom():
             p.drawLine(QPointF(plot_rect.left(), zero_y), QPointF(plot_rect.right(), zero_y))
 
-        # Reference line (theoretical standard normal)
+        # Reference line (fitted normal quantiles from sample mean/stdev)
+        mu_r = float(np.mean(sorted_res))
+        sd_r = float(np.std(sorted_res, ddof=1)) if n > 1 else 1.0
+        sd_r = sd_r if sd_r > 1e-12 else 1.0
         p.setPen(QPen(QColor("#dc2626"), 1.2))
-        pt1 = to_screen(x_min, x_min)
-        pt2 = to_screen(x_max, x_max)
+        pt1 = to_screen(x_min, (x_min - mu_r) / sd_r)
+        pt2 = to_screen(x_max, (x_max - mu_r) / sd_r)
         p.drawLine(pt1, pt2)
 
         # Points
@@ -175,7 +195,7 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
         p.setFont(QFont("Segoe UI", 7))
         p.setPen(text_c)
         p.drawText(QRectF(plot_rect.left(), rect.bottom() - 16, plot_rect.width(), 14),
-                   Qt.AlignmentFlag.AlignCenter, "Standardized Residual")
+                   Qt.AlignmentFlag.AlignCenter, getattr(self, "resid_label", "Standardized Residual"))
 
     def _draw_versus_fits(self, p: QPainter, rect: QRectF, bg, border, text_c, grid_c):
         p.setPen(QPen(border, 1.0))
@@ -290,6 +310,7 @@ class RegressionResidualChartWidget(GraphInteractionMixin, QWidget):
             freq_equiv = pdf_val * len(res_arr) * bin_width
             curve_pts.append(to_screen(x_val, freq_equiv))
 
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(QColor("#dc2626"), 1.4))
         path = QPainterPath()
         if curve_pts:

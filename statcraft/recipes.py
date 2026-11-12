@@ -53,16 +53,16 @@ FIELDS = {
     'analyze_factorial_terms': {'response_index','factor_indices','max_order','confidence','plot_residuals','show_factor_coding','selected_terms'},
     'analyze_factorial': {'response_index','factor_indices','max_order','confidence','plot_residuals','show_factor_coding'},
     'scatter_plot': {'x_index','y_index','mode','group_index','order','title','x_label','y_label'},
-    'normality': {'index'},
+    'normality': {'index', 'method'},
     'one_variance': {'index','null_stdev','confidence'},
     'covariance': {'indices', 'missing'},
     'stem_and_leaf': {'index'},
     'correlation': {'indices', 'method', 'missing', 'confidence'},
     'one_proportion': {'index', 'null_proportion', 'confidence', 'alternative'},
     'two_proportions': {'first_index', 'second_index', 'confidence'},
-    'describe_columns': {'indices'}, 'describe_column': {'index'},
+    'describe_columns': {'indices', 'by_indices', 'statistics', 'graphs'}, 'describe_column': {'index'},
     'inference': {'method', 'indices', 'mu', 'confidence'},
-    'multiple_regression': {'response_index', 'predictor_indices', 'confidence'},
+    'multiple_regression': {'response_index', 'predictor_indices', 'confidence', 'categorical_indices', 'model_terms'},
     'best_subsets': {'response_index', 'free_indices', 'forced_indices', 'models_per_subset', 'min_free', 'max_free'},
     'stepwise_regression': {'response_index', 'predictor_indices', 'method', 'alpha_to_enter', 'alpha_to_remove'},
     'poisson_regression': {'response_index', 'continuous_indices', 'categorical_indices', 'offset_index', 'confidence'},
@@ -231,6 +231,15 @@ def columns(recipe):
             raise ValueError('Unsupported analysis recipe or parameters.')
     elif action == 'symmetry_plot':
         if not {'column_index', 'settings'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'normality':
+        if not {'index'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'describe_columns':
+        if not {'indices'} <= keys <= expected:
+            raise ValueError('Unsupported analysis recipe or parameters.')
+    elif action == 'multiple_regression':
+        if not {'response_index', 'predictor_indices', 'confidence'} <= keys <= expected:
             raise ValueError('Unsupported analysis recipe or parameters.')
     else:
         validated = False
@@ -754,8 +763,17 @@ def columns(recipe):
         settings(parameters['options']);validate_terms(parameters['terms'],len(parameters['factor_indices'])+len(parameters['covariate_indices']))
     indices = []
     for key, value in parameters.items():
-        if key in ('group_indices','response_indices','indices', 'predictor_indices','factor_indices','covariate_indices','continuous_indices','categorical_indices'):
-            if not isinstance(value, list) or not value and key!='group_indices' and not (action=='fit_binary_logistic' and key in ('continuous_indices','categorical_indices')) and not (action=='general_linear_model' and key in ('factor_indices','covariate_indices')) and not (action=='expanded_graph' and parameters.get('method')=='distribution_plot'):
+        if key in ('group_indices','by_indices','response_indices','indices', 'predictor_indices','factor_indices','covariate_indices','continuous_indices','categorical_indices'):
+            if value is None and key in ('by_indices', 'categorical_indices'):
+                continue
+            allow_empty = (
+                key == 'group_indices'
+                or (action == 'fit_binary_logistic' and key in ('continuous_indices', 'categorical_indices'))
+                or (action == 'general_linear_model' and key in ('factor_indices', 'covariate_indices'))
+                or (action == 'expanded_graph' and parameters.get('method') == 'distribution_plot')
+                or (action == 'multiple_regression' and key in ('predictor_indices', 'categorical_indices') and (parameters.get('predictor_indices') or parameters.get('categorical_indices')))
+            )
+            if not isinstance(value, list) or (not value and not allow_empty):
                 raise ValueError('Recipe must select at least one column.')
             indices.extend(value)
         elif key=='block_index' and value is None and action=='analyze_response_surface':

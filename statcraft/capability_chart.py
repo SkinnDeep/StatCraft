@@ -8,6 +8,7 @@ from scipy.stats import norm
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QDoubleSpinBox, QPushButton, QSlider
+from .chart_theme import chart_painter
 
 
 def _ci_text(bounds):
@@ -67,7 +68,7 @@ class CapabilityPlotWidget(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         rect = self.rect()

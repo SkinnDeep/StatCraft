@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from .chart_theme import chart_painter
 
 
 class SymmetryPlotCanvas(QWidget):
@@ -61,7 +62,7 @@ class SymmetryPlotCanvas(QWidget):
             self.update()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = float(self.width())
         h = float(self.height())

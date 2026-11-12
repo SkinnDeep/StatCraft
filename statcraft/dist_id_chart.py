@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 import numpy as np
 import scipy.stats as stats
+from .chart_theme import chart_painter
 
 
 PERCENTILE_TICKS = [1.0, 5.0, 10.0, 20.0, 50.0, 80.0, 90.0, 95.0, 99.0]
@@ -81,7 +82,7 @@ class SingleDistProbabilityCanvas(QWidget):
         self.n = len(self.s_data)
 
     def paintEvent(self, _event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 

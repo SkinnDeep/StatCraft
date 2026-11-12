@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, Q
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 BLUE = "#0061a8"
 BLUE_ACTIVE = "#1f77b4"
@@ -50,7 +51,7 @@ class DSDParetoEffectsWidget(GraphInteractionMixin, QWidget):
         return QSize(750, h)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QComboBox, QCheckBox, QListWidget,
     QStackedWidget, QWidget, QMessageBox, QGroupBox
 )
+from .dialog_theme import is_dark_active, subtle_label_style
 from .model import Worksheet
 from .two_sample_t_engine import two_sample_t_settings
 
@@ -26,7 +27,7 @@ class TwoSampleTOptionsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         diff_label = QLabel("Difference = (sample 1 mean) - (sample 2 mean)")
-        diff_label.setStyleSheet("color: #444; font-weight: bold;")
+        diff_label.setStyleSheet(subtle_label_style(is_dark_active(parent or self), bold=True, font_size="9pt"))
         layout.addWidget(diff_label)
 
         grid = QGridLayout()

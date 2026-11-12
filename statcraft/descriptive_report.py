@@ -2,35 +2,76 @@
 from __future__ import annotations
 
 
+_DEFAULT_STAT_KEYS = (
+    "count", "missing", "mean", "standard_error", "sample_stdev",
+    "minimum", "q1", "median", "q3", "maximum",
+)
+
+_STAT_LABELS = {
+    "count": ("N", 6),
+    "missing": ("N*", 6),
+    "n_total": ("Total", 7),
+    "mean": ("Mean", 12),
+    "standard_error": ("SE Mean", 11),
+    "sample_stdev": ("StDev", 12),
+    "sample_variance": ("Variance", 12),
+    "coef_var": ("CoefVar", 11),
+    "trimmed_mean": ("TrMean", 12),
+    "sum": ("Sum", 12),
+    "minimum": ("Minimum", 12),
+    "q1": ("Q1", 10),
+    "median": ("Median", 11),
+    "q3": ("Q3", 10),
+    "maximum": ("Maximum", 12),
+    "range": ("Range", 12),
+    "iqr": ("IQR", 10),
+    "skewness": ("Skewness", 11),
+    "kurtosis": ("Kurtosis", 11),
+    "mode": ("Mode", 11),
+}
+
+_INT_KEYS = {"count", "missing", "n_total"}
+
+
 def format_descriptive_stats_report(result: dict) -> str:
     columns = result.get('columns', [])
     if not columns:
         return ""
 
+    has_groups = any(col.get('by_level') is not None for col in columns)
+    selected = result.get('selected_statistics')
+    stat_keys = [k for k in (selected or _DEFAULT_STAT_KEYS) if k in _STAT_LABELS]
+    if not stat_keys:
+        stat_keys = list(_DEFAULT_STAT_KEYS)
+
     lines = []
     lines.append("Descriptive Statistics")
     lines.append("")
 
-    # Standard StatCraft table header
-    # Variable        N   N*     Mean  SE Mean    StDev   Minimum        Q1     Median        Q3     Maximum
-    header = "Variable".ljust(16) + "N".rjust(6) + "N*".rjust(6) + "Mean".rjust(12) + "SE Mean".rjust(11) + "StDev".rjust(12) + "Minimum".rjust(12) + "Q1".rjust(10) + "Median".rjust(11) + "Q3".rjust(10) + "Maximum".rjust(12)
+    header = "Variable".ljust(16)
+    if has_groups:
+        by_hdr = str(columns[0].get('by_variable') or 'Group')[:14]
+        header += by_hdr.ljust(16)
+    for k in stat_keys:
+        lbl, width = _STAT_LABELS[k]
+        header += lbl.rjust(width)
     lines.append(header)
 
     for col in columns:
-        name = str(col.get('name', 'C'))[:14].ljust(16)
-        n = str(col.get('count', 0)).rjust(6)
-        n_star = str(col.get('missing', 0)).rjust(6)
-
-        mean = f"{col['mean']:.4f}".rjust(12) if col.get('mean') is not None else "*".rjust(12)
-        se_mean = f"{col['standard_error']:.4f}".rjust(11) if col.get('standard_error') is not None else "*".rjust(11)
-        stdev = f"{col['sample_stdev']:.4f}".rjust(12) if col.get('sample_stdev') is not None else "*".rjust(12)
-        c_min = f"{col['minimum']:.4f}".rjust(12) if col.get('minimum') is not None else "*".rjust(12)
-        q1 = f"{col['q1']:.4f}".rjust(10) if col.get('q1') is not None else "*".rjust(10)
-        median = f"{col['median']:.4f}".rjust(11) if col.get('median') is not None else "*".rjust(11)
-        q3 = f"{col['q3']:.4f}".rjust(10) if col.get('q3') is not None else "*".rjust(10)
-        c_max = f"{col['maximum']:.4f}".rjust(12) if col.get('maximum') is not None else "*".rjust(12)
-
-        lines.append(name + n + n_star + mean + se_mean + stdev + c_min + q1 + median + q3 + c_max)
+        row_str = str(col.get('name', 'C'))[:14].ljust(16)
+        if has_groups:
+            row_str += str(col.get('by_level', ''))[:14].ljust(16)
+        for k in stat_keys:
+            _, width = _STAT_LABELS[k]
+            val = col.get(k)
+            if val is None:
+                cell = "*"
+            elif k in _INT_KEYS:
+                cell = str(int(val))
+            else:
+                cell = f"{val:.4f}"
+            row_str += cell.rjust(width)
+        lines.append(row_str)
 
     has_warnings = False
     for col in columns:

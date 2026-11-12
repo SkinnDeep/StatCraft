@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget
 
 from .snapshot_chart import SnapshotChartWidget
 from .graph_hover import summary_info
+from .chart_theme import chart_painter, resolve_axis_label, apply_axis_limits, grid_enabled, draw_ref_lines
 
 BLUE = "#0061a8"
 BLUE_FILL = "#1f77b4"
@@ -66,7 +67,7 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
 
     def paintEvent(self, event) -> None:
         self.reset_hover_regions()
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -161,24 +162,28 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
             span = 1.0
         y_min_disp = y_min - 0.1 * span
         y_max_disp = y_max + 0.1 * span
+        x_lo, x_hi = apply_axis_limits(self, "x", 1.0, float(max(2, total_periods)))
+        y_min_disp, y_max_disp = apply_axis_limits(self, "y", y_min_disp, y_max_disp)
         disp_span = y_max_disp - y_min_disp
 
         # Coordinate transforms
         def x_coord(period: float) -> float:
-            if total_periods <= 1:
+            if x_hi <= x_lo:
                 return plot_rect.left()
-            return plot_rect.left() + (period - 1.0) / (total_periods - 1.0) * plot_rect.width()
+            return plot_rect.left() + (period - x_lo) / (x_hi - x_lo) * plot_rect.width()
 
         def y_coord(val: float) -> float:
             return plot_rect.bottom() - (val - y_min_disp) / disp_span * plot_rect.height()
 
         # Draw Grid & Frame
-        painter.setPen(QPen(QColor(GRID), 1, Qt.PenStyle.DashLine))
+        show_grid = grid_enabled(self)
         y_ticks = 5
         for i in range(y_ticks + 1):
             t_val = y_min_disp + i * (disp_span / y_ticks)
             py = y_coord(t_val)
-            painter.drawLine(QPointF(plot_rect.left(), py), QPointF(plot_rect.right(), py))
+            if show_grid:
+                painter.setPen(QPen(QColor(GRID), 1, Qt.PenStyle.DashLine))
+                painter.drawLine(QPointF(plot_rect.left(), py), QPointF(plot_rect.right(), py))
             # Y label
             painter.setPen(QColor(MUTED))
             painter.setFont(QFont("Segoe UI", 8))
@@ -187,10 +192,24 @@ class TimeSeriesChartWidget(SnapshotChartWidget):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 f"{t_val:.2f}",
             )
-            painter.setPen(QPen(QColor(GRID), 1, Qt.PenStyle.DashLine))
 
         painter.setPen(QPen(QColor(BORDER), 1))
         painter.drawRect(plot_rect)
+        draw_ref_lines(painter, self, plot_rect, x_coord, y_coord, (x_lo, x_hi), (y_min_disp, y_max_disp))
+        x_title = resolve_axis_label(self, "x", "")
+        if x_title:
+            painter.setPen(QColor(INK))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+            painter.drawText(QRectF(plot_rect.left(), plot_rect.bottom() + 26, plot_rect.width(), 16), Qt.AlignmentFlag.AlignCenter, x_title)
+        y_title = resolve_axis_label(self, "y", "")
+        if y_title:
+            painter.save()
+            painter.setPen(QColor(INK))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+            painter.translate(14, plot_rect.center().y())
+            painter.rotate(-90)
+            painter.drawText(QRectF(-100, -10, 200, 18), Qt.AlignmentFlag.AlignCenter, y_title)
+            painter.restore()
 
         # X-axis ticks (periods)
         step_x = max(1, total_periods // 10)

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
+from .chart_theme import chart_painter
 
 
 class NestedGageRRChartWidget(SnapshotChartWidget):
@@ -21,7 +22,7 @@ class NestedGageRRChartWidget(SnapshotChartWidget):
         self.setWindowTitle("Gage R&R (Nested) Report")
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor("#FFFFFF"))
 
@@ -225,7 +226,7 @@ class GageLinearityChartWidget(SnapshotChartWidget):
         self.setWindowTitle("Gage Linearity and Bias Report")
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor("#FFFFFF"))
 
@@ -371,7 +372,7 @@ class AttributeAgreementChartWidget(SnapshotChartWidget):
         self.setWindowTitle("Attribute Agreement Analysis Report")
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor("#FFFFFF"))
 

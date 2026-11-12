@@ -28,6 +28,7 @@ from .prediction_profiler import (
     compute_prediction_profiles, compute_composite_desirability,
     optimize_profiler_settings
 )
+from .chart_theme import chart_painter
 
 
 class ProfilerCellWidget(QWidget):
@@ -74,7 +75,7 @@ class ProfilerCellWidget(QWidget):
         return QRectF(32, 12, max(10, self.width() - 44), max(10, self.height() - 32))
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         rect = self._plot_rect()

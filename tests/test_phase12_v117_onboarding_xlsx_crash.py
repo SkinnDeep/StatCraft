@@ -25,6 +25,12 @@ class TestPhase12V117Features(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication(sys.argv)
 
+    def tearDown(self):
+        cb = QApplication.clipboard()
+        if cb is not None:
+            cb.clear()
+            self.app.processEvents()
+
     def _make_win(self):
         win = ModernWindow(sandbox_mode=True)
         win._confirm_leave = lambda: True
@@ -199,31 +205,36 @@ class TestPhase12V117Features(unittest.TestCase):
         finally:
             sys.excepthook = prev_hook
 
-    def test_06_readme_and_version_synced_to_v117_0_0(self):
+    def test_06_readme_and_version_synced_to_v118_0_0(self):
         from statcraft import __version__, updater
         repo = Path(__file__).resolve().parents[1]
         readme = (repo / "README.md").read_text(encoding="utf-8")
-        self.assertEqual(__version__, "117.0.0")
-        self.assertEqual(updater.STATCRAFT_VERSION, "117.0.0")
-        self.assertIn("v117.0.0", readme)
+        self.assertEqual(__version__, "118.0.0")
+        self.assertEqual(updater.STATCRAFT_VERSION, "118.0.0")
+        self.assertIn("v118.0.0", readme)
         self.assertNotIn("v115.0.0", readme)
-        self.assertIn("117.0.0", (repo / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertIn("118.0.0", (repo / "pyproject.toml").read_text(encoding="utf-8"))
 
     def test_07_excel_ctrl_v_paste_from_inline_editors_splits_rows_and_columns(self):
         from PySide6.QtCore import Qt
         from PySide6.QtTest import QTest
         from PySide6.QtWidgets import QLineEdit
 
-        QApplication.clipboard().setText("Yield\tTemp\r\n80.5\t120\r\n82.1\t130\r\n")
+        clip_payload = "Yield\tTemp\r\n80.5\t120\r\n82.1\t130\r\n"
 
         # 1. Double-clicked inline editor in WorksheetTable must paste multi-row grid cleanly
         win1 = self._make_win()
         try:
             win1.show()
+            win1.activateWindow()
+            self.app.processEvents()
+            QApplication.clipboard().setText(clip_payload)
             win1.table.setCurrentCell(0, 0)
             win1.table.editItem(win1.table.item(0, 0))
+            self.app.processEvents()
             ed = win1.table.findChild(QLineEdit)
             self.assertIsNotNone(ed)
+            ed.setFocus()
             QTest.keyClick(ed, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
             self.app.processEvents()
             self.assertEqual(win1.presenter.worksheet.row_count, 2)
@@ -232,16 +243,24 @@ class TestPhase12V117Features(unittest.TestCase):
             self.assertEqual(win1.presenter.worksheet.columns[0].values[:2], [80.5, 82.1])
             self.assertEqual(win1.presenter.worksheet.columns[1].values[:2], [120.0, 130.0])
         finally:
+            win1.presenter.dirty = False
             win1.close()
+            win1.deleteLater()
+            self.app.processEvents()
 
         # 2. Inline editor in ColumnNamesTable must split multi-row Excel clipboard into headers + rows
         win2 = self._make_win()
         try:
             win2.show()
+            win2.activateWindow()
+            self.app.processEvents()
+            QApplication.clipboard().setText(clip_payload)
             win2.column_names.setCurrentCell(0, 0)
             win2.column_names.editItem(win2.column_names.item(0, 0))
+            self.app.processEvents()
             ed2 = win2.column_names.findChild(QLineEdit)
             self.assertIsNotNone(ed2)
+            ed2.setFocus()
             QTest.keyClick(ed2, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
             self.app.processEvents()
             self.assertEqual(win2.presenter.worksheet.row_count, 2)
@@ -249,7 +268,10 @@ class TestPhase12V117Features(unittest.TestCase):
             self.assertEqual(win2.presenter.worksheet.columns[1].name, "Temp")
             self.assertEqual(win2.presenter.worksheet.columns[0].values[:2], [80.5, 82.1])
         finally:
+            win2.presenter.dirty = False
             win2.close()
+            win2.deleteLater()
+            self.app.processEvents()
 
     def test_08_repeated_fitted_line_plot_and_regression_and_clean_band_render(self):
         from statcraft.fitted_line_plot_dialog import FittedLinePlotDialog

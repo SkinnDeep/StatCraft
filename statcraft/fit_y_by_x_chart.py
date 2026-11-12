@@ -10,6 +10,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QToolTip, QWidget, QHBoxLayout, QCheckBox
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 INK = "#1a2b38"
 MUTED = "#5b6b77"
@@ -62,7 +63,7 @@ class FitYByXChartWidget(GraphInteractionMixin, QWidget):
         return QSize(880, 600)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()

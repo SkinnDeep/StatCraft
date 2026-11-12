@@ -17,6 +17,7 @@ from .spatial_view import DEFAULT_VIEW, project_point, view_state, camera_point
 from .native_graph_view import resolve_view, graph_index
 from .graph_styles import style_for
 from .graph_interaction import style_pen,style_color,draw_marker
+from .chart_theme import chart_painter
 
 
 PALETTE = ('#d4e7ef', '#acd5df', '#7cbac4', '#4aa1a3', '#36937d', '#69aa63', '#a1c450', '#d4d94a', '#e8be43')
@@ -479,7 +480,7 @@ class NativeOutputChart(SnapshotChartWidget):
         self.hit_regions=[];self._panel_index=0
         camera=self.current_view()['camera']
         if camera!=self._loaded_camera_view:self._loaded_camera_view=copy.deepcopy(camera);self.surface_camera=copy.deepcopy(camera)
-        painter = QPainter(self)
+        painter = chart_painter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.fillRect(self.rect(), QColor('white'))

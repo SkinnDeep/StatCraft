@@ -110,7 +110,46 @@ class Presenter:
     def can_redo(self):
         return bool(self._redo_stack)
 
+    def _capture_project_state(self):
+        return {
+            "native_project": copy.deepcopy(self.native_project),
+            "worksheet": copy.deepcopy(self.worksheet),
+            "history": copy.deepcopy(self.history),
+            "results_dirty": self._results_dirty,
+        }
+
+    def _apply_project_state(self, snapshot):
+        self.native_project = copy.deepcopy(snapshot["native_project"])
+        if self.native_project is not None and self.native_project.worksheets:
+            idx = max(0, min(self.native_project.active_index, len(self.native_project.worksheets) - 1))
+            self.native_project.active_index = idx
+            self.worksheet = self.native_project.worksheets[idx]
+        else:
+            self.worksheet = copy.deepcopy(snapshot["worksheet"])
+        self.history[:] = copy.deepcopy(snapshot["history"])
+        self._results_dirty = snapshot["results_dirty"]
+
+    def _push_project_undo(self, action, before_state, before_revision):
+        self._next_revision += 1
+        self._revision = self._next_revision
+        self._undo_stack.append({
+            "project_state": True,
+            "action": action,
+            "before": before_state,
+            "after": self._capture_project_state(),
+            "before_revision": before_revision,
+            "after_revision": self._revision,
+        })
+        self._undo_stack = self._undo_stack[-20:]
+        self._redo_stack.clear()
+        self.dirty = self._revision != self._saved_revision
+
     def _restore_edit(self, command, key):
+        if command.get('project_state'):
+            self._apply_project_state(command[key])
+            self._revision = command[key + "_revision"]
+            self.dirty = self._revision != self._saved_revision
+            return
         if 'entry' in command:
             value=copy.deepcopy(command[key]);entry=command['entry'];field=command['field']
             if value is None:entry.pop(field,None)
@@ -176,12 +215,15 @@ class Presenter:
         if self.native_project is None:
             return
         sheets = self.native_project.worksheets
-        if not (0 <= from_idx < len(sheets) and 0 <= to_idx < len(sheets)):
+        if not (0 <= from_idx < len(sheets) and 0 <= to_idx < len(sheets)) or from_idx == to_idx:
             return
+        before_state = self._capture_project_state()
+        before_rev = self._revision
         item = sheets.pop(from_idx)
         sheets.insert(to_idx, item)
         self.native_project.active_index = to_idx
         self.worksheet = sheets[to_idx]
+        self._push_project_undo("reorder_worksheets", before_state, before_rev)
         self.dirty = True
 
     def select_worksheet(self, index):
@@ -215,7 +257,7 @@ class Presenter:
         self.project_path=None
         return project
 
-    def add_worksheet(self,name=None):
+    def add_worksheet(self,name=None,_reset_undo=True):
         if name is None:
             names={s.name.casefold() for s in self.native_project.worksheets} if self.native_project else {self.worksheet.name.casefold()}
             number=1
@@ -229,7 +271,9 @@ class Presenter:
         while '/sheets/'+str(suffix)+'/sheet' in project.worksheet_uris:suffix+=1
         project.worksheets.append(worksheet);project.worksheet_ids.append(identifier);project.worksheet_uris.append('/sheets/'+str(suffix)+'/sheet')
         project.active_index=len(project.worksheets)-1;self.worksheet=worksheet
-        self.dirty=True;self._results_dirty=True;self._reset_edits()
+        self.dirty=True;self._results_dirty=True
+        if _reset_undo:
+            self._reset_edits()
         return worksheet
 
     def rename_worksheet(self,name):
@@ -310,6 +354,11 @@ class Presenter:
             native_project = create_project([worksheet])
             native_project.statcraft_owned = True
             project_path = None
+        elif suffix in (".mtw", ".mpj"):
+            raise io.UnsupportedFormatError(
+                f"Legacy binary {suffix} files are not directly supported. "
+                "Export from Minitab as .mwx, .mpx, .xlsx, or .csv and open that file in StatCraft."
+            )
         else:
             raise io.UnsupportedFormatError("Open an .xlsx, .mpx, .statcraft, .csv, .tsv, supported .mwx, or .jmp/.jsl file.")
         # Replace the active document only after the complete import succeeds.
@@ -415,12 +464,58 @@ class Presenter:
         return io.save_csv(self.worksheet, path)
 
     @staticmethod
+    def _parse_formatted_number(raw):
+        import re as _re
+        s = raw.strip()
+        if not s:
+            raise ValueError("Empty numeric value.")
+        try:
+            return finite_number(float(s))
+        except ValueError:
+            pass
+        is_pct = s.endswith("%")
+        body = s[:-1].strip() if is_pct else s
+        if body.startswith("($") and body.endswith(")") and len(body) > 3:
+            body = "-" + body[2:-1].strip()
+        if body.startswith("$"):
+            body = body[1:].strip()
+        elif body.startswith("+$"):
+            body = body[2:].strip()
+        elif body.startswith("-$"):
+            body = "-" + body[2:].strip()
+        # Allow strict currency/thousands-grouped numbers or plain percent numbers
+        has_valid_commas = bool(_re.match(r'^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$', body))
+        if (s != raw.strip() or "$" in s or "," in s or is_pct) and has_valid_commas:
+            val = finite_number(float(body.replace(",", "")))
+            return val / 100.0 if is_pct else val
+        raise ValueError(f"Invalid numeric value: {raw!r}")
+
+    @staticmethod
+    def _try_parse_date_serial(raw):
+        s = raw.strip()
+        if not s or not any(sep in s for sep in ("-", "/")):
+            return None
+        from .data_prep import _parse_datetime_cell
+        try:
+            dt = _parse_datetime_cell(s, "text")
+            value = datetime_to_serial(dt)
+            serial_to_datetime(value)
+            return value
+        except Exception:
+            return None
+
+    @staticmethod
     def parse_cell(raw, kind):
         if kind == "text":
             return raw
         s = raw.strip()
         if s in ("", "*") or s.lower() in ("na", "n/a", "nan", "none", ".", "-"):
             return None
+        if s.startswith("=") and len(s) > 1:
+            raise ValueError(
+                "StatCraft uses column formulas rather than per-cell '=' formulas. "
+                "Use Data → Formula or Calc → Calculator to evaluate expressions across a column."
+            )
         if kind == "date":
             try:
                 value = finite_number(float(raw))
@@ -432,7 +527,7 @@ class Presenter:
             return value
         if kind != "number":
             raise ValueError("Unsupported column type.")
-        value = finite_number(float(raw))
+        value = Presenter._parse_formatted_number(raw)
         return engine.normalize_numeric(value)
 
     @undoable
@@ -474,11 +569,31 @@ class Presenter:
         self.worksheet.columns.append(column)
         self.dirty = True
 
+    def _disambiguate_column_name(self, target_index, desired_name, used_names=None):
+        clean = desired_name.strip()
+        if used_names is None:
+            used_names = {
+                c.name.strip().casefold()
+                for idx, c in enumerate(self.worksheet.columns)
+                if idx != target_index and c.name.strip()
+            }
+        if clean.casefold() not in used_names:
+            return clean
+        suffix = 2
+        candidate = f"{clean} ({suffix})"
+        while candidate.casefold() in used_names:
+            suffix += 1
+            candidate = f"{clean} ({suffix})"
+        msg = f"Column name '{clean}' already exists; renamed to '{candidate}' to keep references unambiguous."
+        if msg not in self.notices:
+            self.notices.append(msg)
+        return candidate
+
     @undoable
     def rename_column(self, index, name):
         if not name.strip():
             raise ValueError("Enter a column name.")
-        self.worksheet.columns[index].name = name.strip()
+        self.worksheet.columns[index].name = self._disambiguate_column_name(index, name)
         self.dirty = True
 
     @undoable
@@ -486,8 +601,17 @@ class Presenter:
         if type(start) is not int or start<0 or not names or start+len(names)>len(self.worksheet.columns):
             raise ValueError("Paste names into existing columns only.")
         if any(not isinstance(name,str) for name in names): raise ValueError("Column names must be text.")
-        for index,name in enumerate(names,start):
-            self.worksheet.columns[index].name=name.strip() or "C"+str(index+1)
+        target_range = set(range(start, start + len(names)))
+        used = {
+            c.name.strip().casefold()
+            for idx, c in enumerate(self.worksheet.columns)
+            if idx not in target_range and c.name.strip()
+        }
+        for index, name in enumerate(names, start):
+            clean = name.strip() or ("C" + str(index + 1))
+            final_name = self._disambiguate_column_name(index, clean, used)
+            self.worksheet.columns[index].name = final_name
+            used.add(final_name.casefold())
         self.dirty=True
 
     @undoable
@@ -507,8 +631,24 @@ class Presenter:
             col.values.extend([None] * (rows - len(col.values)))
         self.dirty = True
 
+    @staticmethod
+    def _infer_paste_kind(raw_values):
+        _MISSING = ("", "*", "na", "n/a", "nan", "none", ".", "-")
+        non_missing = [str(v).strip() for v in raw_values if str(v).strip().lower() not in _MISSING]
+        if not non_missing:
+            return "number"
+        try:
+            for val in non_missing:
+                Presenter._parse_formatted_number(val)
+            return "number"
+        except ValueError:
+            pass
+        if all(Presenter._try_parse_date_serial(val) is not None for val in non_missing):
+            return "date"
+        return "text"
+
     @undoable
-    def paste(self, row, column, text):
+    def paste(self, row, column, text, pad_ragged=False):
         """Paste a rectangular tab-separated block transactionally, preserving types."""
         if type(row) is not int or type(column) is not int or row < 0 or column < 0:
             raise ValueError("Select a valid paste destination.")
@@ -521,14 +661,20 @@ class Presenter:
             rows.pop()
         if not rows:
             return
-        width = len(rows[0])
-        if not width:
-            raise ValueError("Clipboard rows must have equal numbers of cells.")
-        rows = [([""] * width) if r == [] else r for r in rows]
-        if any(len(r) != width for r in rows):
-            raise ValueError("Clipboard rows must have equal numbers of cells.")
+        if pad_ragged:
+            width = max(len(r) for r in rows)
+            if not width:
+                raise ValueError("Clipboard rows must have equal numbers of cells.")
+            rows = [r + [""] * (width - len(r)) for r in rows]
+        else:
+            width = len(rows[0])
+            if not width:
+                raise ValueError("Clipboard rows must have equal numbers of cells.")
+            rows = [([""] * width) if r == [] else r for r in rows]
+            if any(len(r) != width for r in rows):
+                raise ValueError("Clipboard rows must have equal numbers of cells.")
 
-        # Smart Header Detection: only treat row 0 as header when it is an actual non-missing text label above numbers
+        # Smart Header Detection: treat row 0 as header when it is a non-missing text label above numbers or dates
         headers = None
         _MISSING_TOKENS = ("", "*", "NA", "N/A", "nan", "NaN")
         if row == 0 and len(rows) >= 2:
@@ -537,24 +683,26 @@ class Presenter:
                 val_0 = rows[0][c_idx].strip()
                 if val_0 in _MISSING_TOKENS:
                     continue
-                is_num_0 = False
                 try:
-                    finite_number(float(val_0))
-                    is_num_0 = True
+                    self._parse_formatted_number(val_0)
+                    is_data_0 = True
                 except ValueError:
-                    is_num_0 = False
+                    is_data_0 = self._try_parse_date_serial(val_0) is not None
 
-                has_num_rest = False
+                has_data_rest = False
                 for r_idx in range(1, len(rows)):
                     val_r = rows[r_idx][c_idx].strip()
+                    if val_r in _MISSING_TOKENS:
+                        continue
                     try:
-                        if val_r not in _MISSING_TOKENS:
-                            finite_number(float(val_r))
-                            has_num_rest = True
-                            break
+                        self._parse_formatted_number(val_r)
+                        has_data_rest = True
+                        break
                     except ValueError:
-                        pass
-                if not is_num_0 and has_num_rest:
+                        if self._try_parse_date_serial(val_r) is not None:
+                            has_data_rest = True
+                            break
+                if not is_data_0 and has_data_rest:
                     header_candidates.append(c_idx)
 
             if header_candidates:
@@ -573,13 +721,7 @@ class Presenter:
         while len(columns) < count:
             index = len(columns)
             raw = [r[index - column] for r in rows] if index >= column else []
-            try:
-                for value in raw:
-                    if value.strip() not in ("", "*", "NA", "N/A", "nan", "NaN"):
-                        finite_number(float(value))
-                kind = "number"
-            except ValueError:
-                kind = "text"
+            kind = self._infer_paste_kind(raw)
             col_name = headers[index - column] if (headers and index >= column and headers[index - column]) else ("C" + str(index + 1))
             columns.append(Column(col_name, kind))
         for position in range(width):
@@ -587,13 +729,7 @@ class Presenter:
             if headers is not None and headers[position]:
                 col.name = headers[position]
             if all(v is None for v in col.values):
-                try:
-                    for cells in rows:
-                        if cells[position].strip() not in ("", "*", "NA", "N/A", "nan", "NaN"):
-                            finite_number(float(cells[position]))
-                    col.kind = "number"
-                except ValueError:
-                    col.kind = "text"
+                col.kind = self._infer_paste_kind([cells[position] for cells in rows])
         for offset, cells in enumerate(rows):
             for position, raw in enumerate(cells):
                 col = columns[column + position]
@@ -799,8 +935,9 @@ class Presenter:
         return validate_brushed_rows(entry,self.result_worksheet(entry),rows)
 
     @undoable
-    def calculate(self, expression, destination):
+    def calculate(self, expression, destination, assign_formula=False):
         from . import calculator
+        from .formulas import recalculate
         values = calculator.evaluate_advanced(expression, self.worksheet)
         has_text = any(isinstance(v, str) for v in values)
         target_kind = "text" if has_text else "number"
@@ -808,6 +945,7 @@ class Presenter:
             values = [None if v is None else str(v) for v in values]
 
         dest_clean = destination.strip()
+        target_idx = None
         if dest_clean.isdigit() or (dest_clean.upper().startswith("C") and dest_clean[1:].isdigit()):
             index = int(dest_clean[1:] if dest_clean.upper().startswith("C") else dest_clean) - 1
             if index < 0:
@@ -817,24 +955,33 @@ class Presenter:
                 raise ValueError("The worksheet exceeds the cell limit.")
             while len(self.worksheet.columns) <= index:
                 self.worksheet.columns.append(Column(f"C{len(self.worksheet.columns) + 1}", "number", []))
-            self.worksheet.columns[index].kind = target_kind
-            self.worksheet.columns[index].values = values
-            self.worksheet.columns[index].metadata.pop("auto_type", None)
-            self.worksheet.columns[index].metadata.pop("formula", None)
+            target_idx = index
         else:
             if not dest_clean:
                 raise ValueError("Enter a destination name.")
             existing_idx = next((i for i, col in enumerate(self.worksheet.columns) if col.name.strip().casefold() == dest_clean.casefold()), None)
             if existing_idx is not None:
-                self.worksheet.columns[existing_idx].kind = target_kind
-                self.worksheet.columns[existing_idx].values = values
-                self.worksheet.columns[existing_idx].metadata.pop("auto_type", None)
-                self.worksheet.columns[existing_idx].metadata.pop("formula", None)
+                target_idx = existing_idx
             else:
                 if (len(self.worksheet.columns) + 1) * max(1, self.worksheet.row_count) > io.MAX_CELLS:
                     raise ValueError("The worksheet exceeds the cell limit.")
                 self.worksheet.columns.append(Column(dest_clean, target_kind, values))
-        return self._record("Calculator", {"expression": expression, "destination": destination, "rows": len(values)})
+                target_idx = len(self.worksheet.columns) - 1
+
+        target_col = self.worksheet.columns[target_idx]
+        target_col.kind = target_kind
+        target_col.values = values
+        target_col.metadata.pop("auto_type", None)
+        if assign_formula:
+            target_col.metadata["formula"] = expression.strip()
+            recalculate(self.worksheet, targets={target_idx})
+        else:
+            target_col.metadata.pop("formula", None)
+        self.dirty = True
+        return self._record(
+            "Calculator",
+            {"expression": expression, "destination": destination, "rows": len(values), "assign_formula": bool(assign_formula)},
+        )
 
     def fit_binary_logistic(self,response_index,continuous_indices,categorical_indices,event=None,trials_index=None,terms=None,options=None):
         from .logistic import fit
@@ -908,7 +1055,14 @@ class Presenter:
             subgroup_size=subgroup_size,
             options=result['options'],
         )
-        chart_name = "Xbar-R Chart" if chart_type == 'xbar_r' else "Xbar-S Chart"
+        title_map = {
+            'xbar_r': 'Xbar-R Chart',
+            'xbar_s': 'Xbar-S Chart',
+            'xbar': 'Xbar Chart',
+            'r': 'R Chart',
+            's': 'S Chart',
+        }
+        chart_name = title_map.get(chart_type, "Xbar-S Chart")
         title = f"{chart_name}: {result['variable_name']}"
         return self._record(title, result, recipe={'action': 'subgroup_control_chart', 'parameters': parameters})
 
@@ -1086,25 +1240,55 @@ class Presenter:
         parameters=dict(response_index=response_index,factor_indices=list(factor_indices),covariate_indices=list(covariate_indices),terms=result['terms'],options=result['options'])
         return self._record('General Linear Model: '+result['response_name'],result,recipe={'action':'general_linear_model','parameters':parameters})
 
-    def multiple_regression(self, response_index, predictor_indices, confidence=.95):
-        from .regression import multiple_regression
-        if not predictor_indices or len(set(predictor_indices)) != len(predictor_indices) or response_index in predictor_indices:
+    def multiple_regression(self, response_index, predictor_indices=(), confidence=.95, categorical_indices=None, model_terms=None):
+        from .regression import multiple_regression, fit_general_regression
+        predictor_indices = list(predictor_indices or ())
+        cat_indices = list(categorical_indices or ())
+        if not predictor_indices and not cat_indices:
+            raise ValueError("Choose at least one continuous or categorical predictor.")
+        all_pred = predictor_indices + cat_indices
+        if len(set(all_pred)) != len(all_pred) or response_index in all_pred:
             raise ValueError("Choose distinct predictors and a separate response.")
         response = self.worksheet.columns[response_index]
-        predictors = [self.worksheet.columns[i] for i in predictor_indices]
-        columns = predictors + [response]
-        if any(c.kind != "number" for c in columns):
-            raise ValueError("Regression requires numeric response and predictor columns.")
-        size = max(len(c.values) for c in columns)
-        aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in columns]
-        result = multiple_regression(aligned[:-1], aligned[-1], confidence, [c.name for c in predictors], response_name=response.name)
-        from .connect import create_connected_regression
-        connected = create_connected_regression(self.worksheet, response_index, predictor_indices, result, confidence)
-        entry = self._record("Multiple Regression — " + response.name,
-                            {"response_name": response.name, "variables": [c.name for c in predictors], "analysis": "multiple_regression", **result},
-                            recipe={"action":"multiple_regression", "parameters":{"response_index":response_index, "predictor_indices":list(predictor_indices), "confidence":confidence}})
-        entry["connected_analysis"] = connected.to_dict()
-        return entry
+        if not cat_indices and not model_terms:
+            predictors = [self.worksheet.columns[i] for i in predictor_indices]
+            columns = predictors + [response]
+            if any(c.kind != "number" for c in columns):
+                raise ValueError("Regression requires numeric response and predictor columns.")
+            size = max(len(c.values) for c in columns)
+            aligned = [c.numeric_values(True) + [None] * (size - len(c.values)) for c in columns]
+            result = multiple_regression(aligned[:-1], aligned[-1], confidence, [c.name for c in predictors], response_name=response.name)
+            from .connect import create_connected_regression
+            connected = create_connected_regression(self.worksheet, response_index, predictor_indices, result, confidence)
+            entry = self._record("Multiple Regression — " + response.name,
+                                {"response_name": response.name, "variables": [c.name for c in predictors], "analysis": "multiple_regression", **result},
+                                recipe={"action": "multiple_regression", "parameters": {"response_index": response_index, "predictor_indices": predictor_indices, "confidence": confidence}})
+            entry["connected_analysis"] = connected.to_dict()
+            return entry
+
+        result = fit_general_regression(
+            self.worksheet,
+            response_index,
+            continuous_indices=predictor_indices,
+            categorical_indices=cat_indices,
+            terms=model_terms,
+            confidence=confidence,
+        )
+        all_names = [self.worksheet.columns[i].name for i in all_pred]
+        recipe_params = {
+            "response_index": response_index,
+            "predictor_indices": predictor_indices,
+            "confidence": confidence,
+        }
+        if cat_indices:
+            recipe_params["categorical_indices"] = cat_indices
+        if model_terms is not None:
+            recipe_params["model_terms"] = [list(t) for t in model_terms]
+        return self._record(
+            "Multiple Regression — " + response.name,
+            {"response_name": response.name, "variables": all_names, "analysis": "multiple_regression", **result},
+            recipe={"action": "multiple_regression", "parameters": recipe_params},
+        )
 
     def best_subsets(
         self,
@@ -2004,6 +2188,7 @@ class Presenter:
         return self._record(res["title"], res, recipe=recipe)
 
 
+    @undoable
     def recode(
         self,
         source_indices: list,
@@ -2201,6 +2386,7 @@ class Presenter:
         entry["connected_analysis"] = connected.to_dict()
         return entry
 
+    @undoable
     def johnson_transformation(
         self,
         column_index: int,
@@ -2848,6 +3034,7 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    @undoable
     def trend_analysis(self, settings=None):
         settings = self._bound_settings("trend_analysis", settings)
         import copy
@@ -2888,6 +3075,7 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    @undoable
     def decomposition(self, settings=None):
         settings = self._bound_settings("decomposition", settings)
         import copy
@@ -2929,6 +3117,7 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    @undoable
     def moving_average(self, settings=None):
         settings = self._bound_settings("moving_average", settings)
         import copy
@@ -3244,6 +3433,7 @@ class Presenter:
         }
         return self._record(title, res, recipe=recipe)
 
+    @undoable
     def differences(self, settings=None):
         settings = self._bound_settings("differences", settings)
         import copy
@@ -3276,6 +3466,7 @@ class Presenter:
         }
         return self._record(res["title"], res, recipe=recipe)
 
+    @undoable
     def lag(self, settings=None):
         settings = self._bound_settings("lag", settings)
         import copy
@@ -5253,16 +5444,142 @@ class Presenter:
             recipe={"action": "between_within_sixpack" if settings.get("analysis_mode") == "between_within" else "normal_sixpack", "parameters": {"settings": settings_rec}}
         )
 
-    def describe_columns(self, indices):
-        from .analyses import describe
+    def _descriptive_panels(self, col_name, clean_vals, graphs, group_label=None):
+        import statistics
+        panels = []
+        title_suffix = f" ({group_label})" if group_label is not None else ""
+        if graphs.get("histogram") or graphs.get("histogram_normal"):
+            edges, counts = histogram_data(clean_vals)
+            curves = []
+            if graphs.get("histogram_normal") and len(clean_vals) > 1:
+                mu = statistics.fmean(clean_vals)
+                sd = statistics.stdev(clean_vals)
+                if sd > 0:
+                    lo, hi = edges[0], edges[-1]
+                    span = hi - lo
+                    width = edges[1] - edges[0]
+                    xs = [lo + span * i / 120 for i in range(121)]
+                    ys = [
+                        math.exp(-0.5 * ((xv - mu) / sd) ** 2) / (math.sqrt(2 * math.pi) * sd) * len(clean_vals) * width
+                        for xv in xs
+                    ]
+                    curves.append(("Normal", xs, ys, "#b97a36"))
+            panels.append({
+                "kind": "histogram",
+                "title": f"Histogram of {col_name}{title_suffix}",
+                "xlabel": col_name,
+                "ylabel": "Frequency",
+                "edges": edges,
+                "counts": counts,
+                "curves": curves,
+                "specs": [],
+            })
+        if graphs.get("individual_value"):
+            panels.append({
+                "kind": "scatter",
+                "title": f"Individual Value Plot of {col_name}{title_suffix}",
+                "xlabel": "Observation",
+                "ylabel": col_name,
+                "x": list(range(1, len(clean_vals) + 1)),
+                "y": list(clean_vals),
+            })
+        if graphs.get("boxplot"):
+            box = boxplot_data(clean_vals)
+            panels.append({
+                "kind": "boxplot",
+                "title": f"Boxplot of {col_name}{title_suffix}",
+                "xlabel": col_name,
+                "ylabel": "",
+                "box": {k: box[k] for k in ("low", "q1", "median", "q3", "high")},
+                "outliers": box.get("outliers", []),
+            })
+        return panels
+
+    def describe_columns(self, indices, by_indices=None, statistics=None, graphs=None):
+        from .analyses import describe, extra_descriptive_stats
         if not indices:
             raise ValueError("Select at least one numeric column.")
+        cols = self._selected_numeric(list(indices))
+        by_cols = []
+        if by_indices:
+            for bi in by_indices:
+                if type(bi) is not int or bi < 0 or bi >= len(self.worksheet.columns):
+                    raise ValueError("Choose valid grouping columns.")
+                by_cols.append(self.worksheet.columns[bi])
+        want_extra = bool(statistics and set(statistics) & {
+            "n_total", "range", "iqr", "coef_var", "trimmed_mean", "skewness", "kurtosis", "mode"
+        })
+        graphs_cfg = dict(graphs) if isinstance(graphs, dict) else {}
         summaries = []
-        for index in indices:
-            col = self.worksheet.columns[index]
-            summaries.append({"name": col.name, **describe(col.numeric_values(True))})
-        return self._record("Descriptive Statistics", {"columns": summaries},
-                            recipe={"action":"describe_columns", "parameters":{"indices":list(indices)}})
+        panels = []
+        if not by_cols:
+            for col in cols:
+                vals = col.numeric_values(True)
+                entry = {"name": col.name, **describe(vals)}
+                if want_extra:
+                    entry.update(extra_descriptive_stats(vals))
+                summaries.append(entry)
+                if any(graphs_cfg.values()):
+                    clean = [v for v in vals if v is not None]
+                    panels.extend(self._descriptive_panels(col.name, clean, graphs_cfg))
+        else:
+            max_rows = max(
+                len(c.values) for c in cols + by_cols
+            ) if cols or by_cols else 0
+            by_label = " / ".join(bc.name for bc in by_cols)
+            for col in cols:
+                num_vals = col.numeric_values(True)
+                groups = {}
+                for r in range(max_rows):
+                    key_parts = []
+                    missing_key = False
+                    for bc in by_cols:
+                        raw = bc.values[r] if r < len(bc.values) else None
+                        if raw is None or (isinstance(raw, str) and not raw.strip()):
+                            missing_key = True
+                            break
+                        key_parts.append(str(raw).strip() if isinstance(raw, str) else str(raw))
+                    if missing_key:
+                        continue
+                    gkey = tuple(key_parts)
+                    val = num_vals[r] if r < len(num_vals) else None
+                    groups.setdefault(gkey, []).append(val)
+                for gkey in sorted(groups.keys(), key=lambda t: tuple(str(x).lower() for x in t)):
+                    gvals = groups[gkey]
+                    if not any(v is not None for v in gvals):
+                        continue
+                    glabel = " / ".join(gkey)
+                    entry = {
+                        "name": col.name,
+                        "by_variable": by_label,
+                        "by_level": glabel,
+                        **describe(gvals),
+                    }
+                    if want_extra:
+                        entry.update(extra_descriptive_stats(gvals))
+                    summaries.append(entry)
+                    if any(graphs_cfg.values()):
+                        clean = [v for v in gvals if v is not None]
+                        panels.extend(self._descriptive_panels(col.name, clean, graphs_cfg, glabel))
+            if not summaries:
+                raise ValueError("No complete groups with nonmissing numeric observations.")
+        payload = {"columns": summaries}
+        if statistics:
+            payload["selected_statistics"] = list(statistics)
+        if by_indices:
+            payload["by_variables"] = [bc.name for bc in by_cols]
+        if panels:
+            payload["graph"] = "descriptive_graphs"
+            payload["descriptive_graphs"] = panels
+        rec_params = {"indices": list(indices)}
+        if by_indices:
+            rec_params["by_indices"] = list(by_indices)
+        if statistics:
+            rec_params["statistics"] = list(statistics)
+        if any(graphs_cfg.values()):
+            rec_params["graphs"] = graphs_cfg
+        return self._record("Descriptive Statistics", payload,
+                            recipe={"action": "describe_columns", "parameters": rec_params})
 
     def _selected_numeric(self, indices):
         if not indices or len(set(indices)) != len(indices) or any(type(i) is not int or i < 0 or i >= len(self.worksheet.columns) for i in indices):
@@ -5491,8 +5808,12 @@ class Presenter:
 
     def create_definitive_screening_design(self, factors, replicates=1, extra_centers=0, randomize=True, seed=1, name="Definitive Screening Design"):
         from .dsd import create_definitive_screening_design
+        before_state = self._capture_project_state()
+        before_rev = self._revision
+        saved_undo = list(self._undo_stack)
         worksheet = create_definitive_screening_design(factors, replicates=replicates, extra_centers=extra_centers, randomize=randomize, seed=seed, name=name)
         self.new()
+        self._undo_stack = saved_undo
         self.worksheet = worksheet
         self.dirty = True
         result = {
@@ -5505,7 +5826,9 @@ class Presenter:
             "seed": seed,
             "convention": "Definitive Screening Design with orthogonal main effects and foldover structure (Jones & Nachtsheim 2011).",
         }
-        return self._record("Definitive Screening Design", result)
+        entry = self._record("Definitive Screening Design", result)
+        self._push_project_undo("create_definitive_screening_design", before_state, before_rev)
+        return entry
 
     def analyze_definitive_screening_design(self, response_index, factor_indices=None, selection='stepwise', alpha_enter=0.10, alpha_leave=0.05, confidence=95.0, show_pareto=True):
         from .dsd_analysis import analyze_definitive_screening_design
@@ -5850,6 +6173,9 @@ class Presenter:
     def create_optimal_design(self, factors, n_runs, model_order='interactions', randomize=True, seed=42, name='Custom D-Optimal Design'):
         from .optimal_design import create_optimal_design_worksheet
         from .optimal_report import format_optimal_design_report, get_optimal_structured_tables
+        before_state = self._capture_project_state()
+        before_rev = self._revision
+        saved_undo = list(self._undo_stack)
 
         worksheet, result = create_optimal_design_worksheet(
             factors=factors,
@@ -5860,16 +6186,19 @@ class Presenter:
             name=name,
         )
         self.new()
+        self._undo_stack = saved_undo
         self.worksheet = worksheet
         self.dirty = True
 
         result["tables"] = get_optimal_structured_tables(result)
         result["session_text"] = format_optimal_design_report({"result": result})
 
-        return self._record(
+        entry = self._record(
             f"Custom D-Optimal Design — {n_runs} Runs",
             result,
         )
+        self._push_project_undo("create_optimal_design", before_state, before_rev)
+        return entry
 
     def evaluate_design(self, factor_indices, model_order='interactions'):
         import numpy as np
@@ -6420,11 +6749,11 @@ class Presenter:
         return self._record("Stem-and-Leaf — " + column.name, result, recipe={"action":"stem_and_leaf", "parameters":{
             "index":index}})
 
-    def normality(self, index):
+    def normality(self, index, method="anderson_darling"):
         from .normality import normality
         column=self._selected_numeric([index])[0]
-        return self._record("Normality Test — "+column.name, {"variable":column.name, **normality(column.numeric_values(True))},
-                            recipe={"action":"normality", "parameters":{"index":index}})
+        return self._record("Normality Test — "+column.name, {"variable":column.name, **normality(column.numeric_values(True), method=method)},
+                            recipe={"action":"normality", "parameters":{"index":index, "method":method}})
 
     def correlation(self, indices, method="Pearson", missing="Pairwise", confidence=.95):
         from .basic_stats import correlation
@@ -7055,13 +7384,10 @@ class Presenter:
         if not 0 <= index < len(self.worksheet.columns):
             raise ValueError("Select an existing column.")
         from .formulas import recalculate
-        from .calculator import _preprocess_expression, parse_expression
-        parse_expression(_preprocess_expression(expression, self.worksheet))
         col = self.worksheet.columns[index]
-        col.kind = "number"
         col.metadata["formula"] = expression.strip()
         col.metadata.pop("auto_type", None)
-        recalculate(self.worksheet,targets={index})
+        recalculate(self.worksheet, targets={index})
         self.dirty = True
         return self._record("Assign Formula — " + col.name, {"column": "C" + str(index + 1), "name": col.name, "expression": expression.strip(), "rows": len(col.values)})
 
@@ -7170,6 +7496,73 @@ class Presenter:
         for i, val in enumerate(new_values):
             col.values[target_start + i] = val
         self.dirty = True
+
+    @undoable
+    def autofill_range(self, src_top, src_bottom, src_left, src_right, dst_top, dst_bottom, dst_left, dst_right):
+        from .autofill_engine import autofill_sequence
+        ncols = len(self.worksheet.columns)
+        if not (0 <= src_left <= src_right < ncols and 0 <= dst_left <= dst_right < ncols):
+            raise ValueError("Select valid columns to autofill.")
+        if src_top < 0 or src_bottom < src_top or dst_top < 0 or dst_bottom < dst_top:
+            raise ValueError("Select valid rows to autofill.")
+
+        if dst_bottom > src_bottom:
+            count = dst_bottom - src_bottom
+            for c in range(src_left, src_right + 1):
+                col = self.worksheet.columns[c]
+                sample = [col.values[r] if r < len(col.values) else None for r in range(src_top, src_bottom + 1)]
+                generated = autofill_sequence(sample, count)
+                while len(col.values) <= dst_bottom:
+                    col.values.append(None)
+                for i, val in enumerate(generated):
+                    col.values[src_bottom + 1 + i] = self._coerce_fill_value(col, val)
+        elif dst_top < src_top:
+            count = src_top - dst_top
+            for c in range(src_left, src_right + 1):
+                col = self.worksheet.columns[c]
+                sample = [col.values[r] if r < len(col.values) else None for r in reversed(range(src_top, src_bottom + 1))]
+                generated = autofill_sequence(sample, count)
+                for i, val in enumerate(generated):
+                    col.values[src_top - 1 - i] = self._coerce_fill_value(col, val)
+        elif dst_right > src_right:
+            count = dst_right - src_right
+            for r in range(src_top, src_bottom + 1):
+                sample = [
+                    self.worksheet.columns[c].values[r] if r < len(self.worksheet.columns[c].values) else None
+                    for c in range(src_left, src_right + 1)
+                ]
+                generated = autofill_sequence(sample, count)
+                for i, val in enumerate(generated):
+                    tcol = self.worksheet.columns[src_right + 1 + i]
+                    while len(tcol.values) <= r:
+                        tcol.values.append(None)
+                    tcol.values[r] = self._coerce_fill_value(tcol, val)
+        elif dst_left < src_left:
+            count = src_left - dst_left
+            for r in range(src_top, src_bottom + 1):
+                sample = [
+                    self.worksheet.columns[c].values[r] if r < len(self.worksheet.columns[c].values) else None
+                    for c in reversed(range(src_left, src_right + 1))
+                ]
+                generated = autofill_sequence(sample, count)
+                for i, val in enumerate(generated):
+                    tcol = self.worksheet.columns[src_left - 1 - i]
+                    while len(tcol.values) <= r:
+                        tcol.values.append(None)
+                    tcol.values[r] = self._coerce_fill_value(tcol, val)
+        self.dirty = True
+
+    def _coerce_fill_value(self, col, val):
+        if val is None:
+            return None
+        if col.kind == "number":
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return float(val)
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return str(val) if col.kind == "text" else val
 
     @undoable
     def replace_cells(self, query, replacement, match_case=False, whole_word=False, replace_all=True, start_row=0, start_col=0):
@@ -7346,6 +7739,8 @@ class Presenter:
         self.auto_calculate_formulas=enabled
 
     def subset_worksheet(self, name=None, mode="include", row_indices=()):
+        before_state = self._capture_project_state()
+        before_rev = self._revision
         source = self.worksheet
         total_rows = source.row_count
         row_set = {int(r) for r in row_indices if 0 <= int(r) < total_rows}
@@ -7353,7 +7748,7 @@ class Presenter:
             keep_rows = [r for r in range(total_rows) if r not in row_set]
         else:
             keep_rows = sorted(row_set)
-        new_sheet = self.add_worksheet(name)
+        new_sheet = self.add_worksheet(name, _reset_undo=False)
         new_cols = []
         for col in source.columns:
             vals = [col.values[r] if r < len(col.values) else None for r in keep_rows]
@@ -7371,6 +7766,7 @@ class Presenter:
             ensure_worksheet_identities(new_sheet)
         except Exception:
             pass
+        self._push_project_undo("subset_worksheet", before_state, before_rev)
         self.dirty = True
         return new_sheet
 
@@ -7819,29 +8215,39 @@ def format_entry(entry):
         return title+text_report(result)
     if isinstance(result, dict) and "coefficients" in result and "adjusted_r_squared" in result:
         resp_name = result.get("response_name", "Y")
+        res_opts = (result.get("options") or {}).get("results") or {}
+        show_eq = res_opts.get("equation", True)
+        show_sum = res_opts.get("summary", True)
+        show_anova = res_opts.get("anova", True)
+        show_unusual = res_opts.get("unusual", True)
         lines = []
-        if result.get("regression_equation"):
-            lines += ["Regression Equation", result["regression_equation"], ""]
-        else:
-            lines += ["Response: " + resp_name, ""]
+        if show_eq:
+            if result.get("regression_equation"):
+                lines += ["Regression Equation", result["regression_equation"], ""]
+            else:
+                lines += ["Response: " + resp_name, ""]
+        if show_sum:
+            lines += [
+                "Model Summary",
+                "N       N*      S             R-sq          R-sq(adj)     R-sq(pred)",
+                _display(result.get("count")).ljust(8) + _display(result.get("missing")).ljust(8) +
+                _display(result.get("residual_stdev")).ljust(14) + (_display(100 * result["r_squared"]) + "%").ljust(14) +
+                (_display(100 * result["adjusted_r_squared"]) + "%").ljust(14) +
+                (_display(100 * result.get("predicted_r_squared", 0.0)) + "%"), "",
+            ]
         lines += [
-            "Model Summary",
-            "N       N*      S             R-sq          R-sq(adj)     R-sq(pred)",
-            _display(result.get("count")).ljust(8) + _display(result.get("missing")).ljust(8) +
-            _display(result.get("residual_stdev")).ljust(14) + (_display(100 * result["r_squared"]) + "%").ljust(14) +
-            (_display(100 * result["adjusted_r_squared"]) + "%").ljust(14) +
-            (_display(100 * result.get("predicted_r_squared", 0.0)) + "%"), "",
             "Coefficients  (" + _display(result.get("confidence", .95) * 100) + "% confidence intervals)",
             "Term                 Coef          SE Coef       T             P             Lower CI      Upper CI      VIF"]
         for row in result["coefficients"]:
             fields = [row.get(k) for k in ("estimate", "standard_error", "t", "p_value", "ci_low", "ci_high", "vif")]
             lines.append(row["name"].ljust(21) + "".join(_display(v).ljust(14) for v in fields))
-        lines += ["", "Analysis of Variance", "Source           DF        Adj SS        Adj MS        F             P",
-            "Regression       " + _display(result["df_regression"]).ljust(10) + _display(result["ss_regression"]).ljust(14) +
-            _display(result["ms_regression"]).ljust(14) + _display(result.get("f")).ljust(14) + _display(result.get("p_value")),
-            "Error            " + _display(result["df_error"]).ljust(10) + _display(result["ss_error"]).ljust(14) + _display(result["ms_error"]),
-            "Total            " + _display(result["df_total"]).ljust(10) + _display(result["ss_total"])]
-        if result.get("unusual_observations"):
+        if show_anova:
+            lines += ["", "Analysis of Variance", "Source           DF        Adj SS        Adj MS        F             P",
+                "Regression       " + _display(result["df_regression"]).ljust(10) + _display(result["ss_regression"]).ljust(14) +
+                _display(result["ms_regression"]).ljust(14) + _display(result.get("f")).ljust(14) + _display(result.get("p_value")),
+                "Error            " + _display(result["df_error"]).ljust(10) + _display(result["ss_error"]).ljust(14) + _display(result["ms_error"]),
+                "Total            " + _display(result["df_total"]).ljust(10) + _display(result["ss_total"])]
+        if show_unusual and result.get("unusual_observations"):
             lines += ["", "Fits and Diagnostics for Unusual Observations",
                       "Obs      " + resp_name.ljust(14) + "Fit           Resid         Std Resid     Leverage      Symbol"]
             for obs in result["unusual_observations"]:

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 INK = "#1e293b"
 MUTED = "#64748b"
@@ -110,7 +111,7 @@ class ControlChartBuilderWidget(GraphInteractionMixin, QWidget):
         self.update()
 
     def paintEvent(self, event) -> None:
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
@@ -334,6 +335,7 @@ class ControlChartBuilderWidget(GraphInteractionMixin, QWidget):
             else:
                 path.lineTo(sx, sy)
 
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(QColor(LINE_COLOR), 1.5))
         p.drawPath(path)
 

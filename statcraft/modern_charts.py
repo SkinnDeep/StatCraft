@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QSizePolicy
 from .graph_hover import point_info,histogram_info,summary_info
 from .graph_interaction import GraphInteractionMixin,style_pen,style_color,draw_marker
 from .spatial_view import DEFAULT_VIEW, view_state
+from .chart_theme import chart_painter
 
 BLUE='#3e739b'; RED='#bb4147'; GREEN='#51846b'; INK='#263440'; MUTED='#697884'
 
@@ -97,7 +98,7 @@ def supported(entry):
     if isinstance(r,dict) and r.get('analysis')=='response_optimizer':return bool(r.get('options',{}).get('optimization_plot',True))
     if isinstance(r,dict) and r.get('analysis')=='binary_logistic':return r.get('options',{}).get('graphs')=='four'
     if isinstance(r,dict) and r.get('plot_residuals') is False: return False
-    return isinstance(r,dict) and (r.get('graph') in ('categorical_points','dotplot_graphs','boxplot_graphs','histogram_graphs','panel_graph','graph_layout','expanded','histogram','scatter','boxplot','normal_probability') or
+    return isinstance(r,dict) and (r.get('graph') in ('categorical_points','dotplot_graphs','boxplot_graphs','histogram_graphs','descriptive_graphs','panel_graph','graph_layout','expanded','histogram','scatter','boxplot','normal_probability') or
         r.get('analysis')=='gage_rr' or any(k in r for k in ('xbar_center','i_center','within_stdev')) or
         r.get('chart') in ('P','U') or ('fitted' in r and 'residuals' in r))
 
@@ -126,6 +127,13 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         self._drag_moved = False
         self._is_dragging = False
         self.active_cad_card = None
+        self._zoom2d_limits = {}
+        self._zoom2d_meta = {}
+        self._zoom2d_pan_start = None
+        self._zoom2d_pan_panel = None
+        self._reset_zoom_rect = None
+        self._hidden_legend_series = set()
+        self._legend_hit_rects = {}
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
         self.setMinimumSize(520,350)
         self.setFont(QFont('Segoe UI',10))
@@ -258,6 +266,15 @@ class ChartWidget(GraphInteractionMixin,QWidget):
             validate_result(r);self.panels=copy.deepcopy(r['panels']);self.note=r.get('convention','')
             self.setMinimumWidth(max(520,max(len(panel['items']) for panel in self.panels)*90+180))
             self.setMinimumHeight(len(self.panels)*330+36);return
+        if graph=='descriptive_graphs':
+            from copy import deepcopy
+            self.panels = deepcopy(r.get('descriptive_graphs', []))
+            self.panel_columns = 2 if len(self.panels) > 1 else 1
+            self.note = 'Descriptive statistics graphs'
+            rows = max(1, math.ceil(len(self.panels) / self.panel_columns))
+            self.setMinimumHeight(rows * 300 + 40)
+            self.setMinimumWidth(760 if self.panel_columns > 1 else 540)
+            return
         if graph=='histogram_graphs':
             import copy
             from .histogram_graphs import validate_result
@@ -291,7 +308,9 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 raise ValueError('Normal probability plot coordinates must be paired and finite.')
             self.panels=[dict(kind='normal_probability',title='Normal probability plot',xlabel=str(r.get('variable','Value')),
                               ylabel='Percent',x=xs,y=ys,reference_x=rx,reference_y=ry)]
-            self.note='AD '+_fmt(r['anderson_darling'])+'   ·   P '+(_fmt(r['p_value']) if r.get('p_value') is not None else 'outside approximation range')
+            stat_lbl = r.get('statistic_name') or 'AD'
+            stat_val = r.get('statistic', r.get('anderson_darling'))
+            self.note = stat_lbl + ' ' + _fmt(stat_val) + '   ·   P ' + (_fmt(r['p_value']) if r.get('p_value') is not None else 'outside approximation range')
             return
         if graph in ('histogram','scatter','boxplot'):
             data=r.get('graph_data',r.get('data'))
@@ -359,6 +378,9 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         labels=getattr(self,'annotation_axes',{});positions=getattr(self,'annotation_positions',{})
         limits=getattr(self,'annotation_limits',{})
         limits=dict(limits,**getattr(self,'panel_annotation_limits',{}).get(self._panel_index,{}))
+        zlimits=getattr(self,'_zoom2d_limits',{}).get(self._panel_index,{})
+        if zlimits:
+            limits.update(zlimits)
         xb=limits.get('x',xb);yb=limits.get('y',yb)
         xlabel=labels.get('x',xlabel);ylabel=labels.get('y',ylabel)
         if nice_ticks:
@@ -370,6 +392,15 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         plot=QRectF(area.left()+left_margin,area.top()+28,max(20,area.width()-left_margin-105),max(20,area.height()-92-extra))
         x_log = bool(getattr(self, 'annotation_x_log', False)) and not categories and not box and xb[0] > 0 and xb[1] > 0
         y_log = bool(getattr(self, 'annotation_y_log', False)) and not y_categories and not probability and yb[0] > 0 and yb[1] > 0
+        if hasattr(self, '_zoom2d_meta'):
+            self._zoom2d_meta[self._panel_index] = {
+                'plot': QRectF(plot),
+                'xb': (float(xb[0]), float(xb[1])),
+                'yb': (float(yb[0]), float(yb[1])),
+                'x_log': x_log,
+                'y_log': y_log,
+                'interactive': (not categories) and (not y_categories) and (not box) and (not probability) and (xb[1] > xb[0]) and (yb[1] > yb[0]),
+            }
         if x_log:
             _lx0, _lx1 = math.log10(xb[0]), math.log10(xb[1])
             _xspan = max(1e-12, _lx1 - _lx0)
@@ -515,7 +546,7 @@ class ChartWidget(GraphInteractionMixin,QWidget):
             for index,series in enumerate(d['series']):
                 color=colors[index%len(colors)]
                 name='s'+str(index);style=self.graph_style(name,color=color)
-                if not style.get('visible',True):continue
+                if not style.get('visible',True) or self.is_series_legend_hidden(self._panel_index,index):continue
                 if series['connect']: self._path(p,series['x'],series['y'],x,y,color,1.5,style=style,target=name)
                 if series['fit']: self._path(p,series['fit']['x'],series['fit']['y'],x,y,color,1.7,style=self.graph_style('fit'+str(index),color=color),target='fit'+str(index))
                 for point_index,(a,b) in enumerate(zip(series['x'],series['y'])):
@@ -561,17 +592,28 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 self._marker(p,QPointF(x(a),y(b)),color,0,self.graph_style('s0',color=color),'s0',row,point_info(a,shown_y,d['xlabel'],d['ylabel'],row=row),label_val=_fmt(shown_y))
         self._draw_reference_overlays(p, plot, x, y, d)
         p.restore();p.setFont(QFont('Segoe UI',9))
-        if kind=='multi_scatter' and d['legend_title']:
-            self._text(p,QRectF(plot.right()+10,plot.top()-24,94,24),p.fontMetrics().elidedText(d['legend_title'],Qt.TextElideMode.ElideRight,90),INK)
+        if kind=='multi_scatter' and (d['legend_title'] or len(d['series']) > 1):
+            if d['legend_title']:
+                self._text(p,QRectF(plot.right()+10,plot.top()-24,94,24),p.fontMetrics().elidedText(d['legend_title'],Qt.TextElideMode.ElideRight,90),INK)
             colors=['#3e739b','#b46e39','#53856e','#9266a5','#b6485a','#628d9a','#858446','#766459']
             for index,series in enumerate(d['series']):
                 style=self.graph_style('s'+str(index))
                 if not style.get('legend_visible',True):continue
                 yy=plot.top()+12+index*25; color=colors[index%len(colors)]
-                self._marker(p,QPointF(plot.right()+18,yy),color,index,style)
-                self.remember_rect('s'+str(index),QRectF(plot.right()+10,yy-11,98,22))
+                leg_rect=QRectF(plot.right()+10,yy-11,98,22)
+                self._legend_hit_rects[(self._panel_index, index)] = leg_rect
+                hidden=self.is_series_legend_hidden(self._panel_index, index)
+                marker_style=dict(style, opacity=(style.get('opacity', 1.0) * 0.3)) if hidden else style
+                self._marker(p,QPointF(plot.right()+18,yy),color,index,marker_style)
+                self.remember_rect('s'+str(index),leg_rect)
                 text=p.fontMetrics().elidedText(series['label'],Qt.TextElideMode.ElideRight,76)
-                self._text(p,QRectF(plot.right()+28,yy-11,76,22),text,INK,Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+                if hidden:
+                    p.save()
+                    f=QFont(p.font()); f.setStrikeOut(True); p.setFont(f)
+                    self._text(p,QRectF(plot.right()+28,yy-11,76,22),text,MUTED,Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+                    p.restore()
+                else:
+                    self._text(p,QRectF(plot.right()+28,yy-11,76,22),text,INK,Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
         elif kind=='line':
             for i,(label,ys,color) in enumerate(d['lines']):
                 style=self.graph_style('ref'+str(i),color=color)
@@ -750,9 +792,125 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                     self.update()
                     return
 
+    def is_series_legend_hidden(self, panel_idx, series_idx):
+        return (int(panel_idx), int(series_idx)) in getattr(self, '_hidden_legend_series', set())
+
+    def _has_2d_zoom(self):
+        return bool(getattr(self, '_zoom2d_limits', None))
+
+    def _has_2d_zoomable_panel(self):
+        return any(m.get('interactive') for m in getattr(self, '_zoom2d_meta', {}).values())
+
+    def reset_2d_zoom(self):
+        self._zoom2d_limits = {}
+        self._zoom2d_pan_start = None
+        self._zoom2d_pan_panel = None
+        self.update()
+
+    def _zoom2d_panel_at(self, pos):
+        for idx, meta in getattr(self, '_zoom2d_meta', {}).items():
+            if meta.get('interactive') and meta.get('plot') and meta['plot'].contains(pos):
+                return idx
+        return None
+
+    def _apply_2d_wheel_zoom(self, pos, steps):
+        idx = self._zoom2d_panel_at(pos)
+        if idx is None:
+            interactive_keys = [k for k, m in getattr(self, '_zoom2d_meta', {}).items() if m.get('interactive')]
+            if len(interactive_keys) == 1:
+                idx = interactive_keys[0]
+            else:
+                return False
+        meta = self._zoom2d_meta.get(idx)
+        if not meta or not meta.get('interactive'):
+            return False
+        plot = meta['plot']
+        xb = self._zoom2d_limits.get(idx, {}).get('x', meta['xb'])
+        yb = self._zoom2d_limits.get(idx, {}).get('y', meta['yb'])
+        scale = max(0.2, min(5.0, 0.85 ** float(steps)))
+        fx = max(0.0, min(1.0, (pos.x() - plot.left()) / max(1e-9, plot.width())))
+        fy = max(0.0, min(1.0, (plot.bottom() - pos.y()) / max(1e-9, plot.height())))
+
+        def _zoom_axis(bounds, frac, is_log):
+            lo, hi = float(bounds[0]), float(bounds[1])
+            if hi <= lo:
+                return bounds
+            if is_log and lo > 0 and hi > 0:
+                llo, lhi = math.log10(lo), math.log10(hi)
+                lspan = max(1e-12, lhi - llo)
+                anchor = llo + frac * lspan
+                new_span = max(1e-6, lspan * scale)
+                nlo = anchor - frac * new_span
+                nhi = nlo + new_span
+                return (10 ** nlo, 10 ** nhi)
+            span = max(1e-12, hi - lo)
+            anchor = lo + frac * span
+            new_span = max(1e-9, span * scale)
+            nlo = anchor - frac * new_span
+            nhi = nlo + new_span
+            return (nlo, nhi)
+
+        nx = _zoom_axis(xb, fx, meta.get('x_log', False))
+        ny = _zoom_axis(yb, fy, meta.get('y_log', False))
+        self._zoom2d_limits[idx] = {'x': nx, 'y': ny}
+        self.update()
+        return True
+
+    def _pan_2d_panel(self, panel_idx, dx_px, dy_px):
+        meta = getattr(self, '_zoom2d_meta', {}).get(panel_idx)
+        if not meta or not meta.get('interactive'):
+            return False
+        plot = meta['plot']
+        xb = self._zoom2d_limits.get(panel_idx, {}).get('x', meta['xb'])
+        yb = self._zoom2d_limits.get(panel_idx, {}).get('y', meta['yb'])
+        dfx = -float(dx_px) / max(1e-9, plot.width())
+        dfy = float(dy_px) / max(1e-9, plot.height())
+
+        def _shift(bounds, df, is_log):
+            lo, hi = float(bounds[0]), float(bounds[1])
+            if is_log and lo > 0 and hi > 0:
+                llo, lhi = math.log10(lo), math.log10(hi)
+                shift = df * (lhi - llo)
+                return (10 ** (llo + shift), 10 ** (lhi + shift))
+            shift = df * (hi - lo)
+            return (lo + shift, hi + shift)
+
+        self._zoom2d_limits[panel_idx] = {
+            'x': _shift(xb, dfx, meta.get('x_log', False)),
+            'y': _shift(yb, dfy, meta.get('y_log', False)),
+        }
+        self.update()
+        return True
+
     def mousePressEvent(self, event):
         self._hide_hover()
         pos = event.position()
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._reset_zoom_rect is not None and self._reset_zoom_rect.contains(pos):
+                self.reset_2d_zoom()
+                event.accept()
+                return
+            for (p_idx, s_idx), lrect in list(getattr(self, '_legend_hit_rects', {}).items()):
+                if lrect.contains(pos):
+                    key = (p_idx, s_idx)
+                    if key in self._hidden_legend_series:
+                        self._hidden_legend_series.remove(key)
+                    else:
+                        self._hidden_legend_series.add(key)
+                    self.update()
+                    event.accept()
+                    return
+        if not self._has_3d_panel() and (
+            event.button() == Qt.MouseButton.MiddleButton
+            or (event.button() == Qt.MouseButton.LeftButton and bool(event.modifiers() & Qt.KeyboardModifier.AltModifier))
+        ):
+            p_idx = self._zoom2d_panel_at(pos)
+            if p_idx is not None:
+                self._zoom2d_pan_start = pos
+                self._zoom2d_pan_panel = p_idx
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         target = self.object_at(pos)
 
         if target and target.startswith('viewcube_'):
@@ -839,6 +997,13 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if getattr(self, '_zoom2d_pan_start', None) is not None and getattr(self, '_zoom2d_pan_panel', None) is not None:
+            pos = event.position()
+            delta = pos - self._zoom2d_pan_start
+            self._zoom2d_pan_start = pos
+            self._pan_2d_panel(self._zoom2d_pan_panel, delta.x(), delta.y())
+            event.accept()
+            return
         pos = event.position()
         if getattr(self, '_viewcube_drag_start', None) is not None:
             dx = pos.x() - self._viewcube_drag_start.x()
@@ -878,6 +1043,12 @@ class ChartWidget(GraphInteractionMixin,QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, '_zoom2d_pan_start', None) is not None:
+            self._zoom2d_pan_start = None
+            self._zoom2d_pan_panel = None
+            self.unsetCursor()
+            event.accept()
+            return
         pos = event.position()
         if getattr(self, '_viewcube_drag_start', None) is not None:
             target = self._viewcube_target
@@ -917,6 +1088,11 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 self.zoom_cad_view(steps)
                 event.accept()
                 return
+        elif self._has_2d_zoomable_panel() and not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            steps = event.angleDelta().y() / 120.0
+            if steps and self._apply_2d_wheel_zoom(event.position(), steps):
+                event.accept()
+                return
         super().wheelEvent(event)
 
     def contextMenuEvent(self, event):
@@ -930,13 +1106,20 @@ class ChartWidget(GraphInteractionMixin,QWidget):
             self.reset_cad_view()
             event.accept()
             return
+        if self._has_2d_zoom() and self._zoom2d_panel_at(event.position()) is not None and self.object_at(event.position()) in (None, 'grid'):
+            self.reset_2d_zoom()
+            event.accept()
+            return
         super().mouseDoubleClickEvent(event)
 
     def paintEvent(self,event):
         self.reset_hover_regions()
         self.hit_regions=[]
         self.brush_regions=[]
-        p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._zoom2d_meta = {}
+        self._legend_hit_rects = {}
+        self._reset_zoom_rect = None
+        p=chart_painter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(),QColor('white'))
         p.setFont(QFont('Segoe UI',13,QFont.Weight.DemiBold))
         title=p.fontMetrics().elidedText(self.title,Qt.TextElideMode.ElideRight,max(80,self.width()-44))
@@ -948,6 +1131,16 @@ class ChartWidget(GraphInteractionMixin,QWidget):
                 for i,(d,area) in enumerate(zip(self.panels,self.panel_areas())):
                     self._panel_index=i;self._draw_panel(p,area,d)
                 self.draw_selection(p)
+                if self._has_2d_zoom() and not getattr(self, '_exporting', False):
+                    btn = QRectF(max(24.0, self.width() - 106.0), 16.0, 84.0, 22.0)
+                    self._reset_zoom_rect = btn
+                    p.save()
+                    p.setPen(QPen(QColor('#94a3b8'), 1))
+                    p.setBrush(QColor('#f1f5f9'))
+                    p.drawRoundedRect(btn, 4, 4)
+                    p.setFont(QFont('Segoe UI', 8, QFont.Weight.DemiBold))
+                    self._text(p, btn, 'Reset Zoom', INK)
+                    p.restore()
                 p.setFont(QFont('Segoe UI',9))
                 note=p.fontMetrics().elidedText(self.note,Qt.TextElideMode.ElideRight,max(80,self.width()-44))
                 self._text(p,QRectF(22,self.height()-29,self.width()-44,21),note)

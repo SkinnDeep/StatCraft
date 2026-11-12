@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from .chart_theme import chart_painter
 
 
 class AttributeGageCanvas(QWidget):
@@ -64,7 +65,7 @@ class AttributeGageCanvas(QWidget):
             self.update()
 
     def paintEvent(self, _event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 

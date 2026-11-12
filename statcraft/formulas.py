@@ -38,14 +38,19 @@ def recalculate(worksheet,targets=None):
     if not ordered:return 0
     candidate=copy.deepcopy(worksheet)
     for index in ordered:
-        column=candidate.columns[index];column.kind='number'
+        column=candidate.columns[index]
         try:
-            column.values=[None if v is None else engine.normalize_numeric(v)
-                for v in calculator.evaluate_advanced(column.metadata['formula'],candidate)]
+            raw_values = calculator.evaluate_advanced(column.metadata['formula'], candidate)
+            if any(isinstance(v, str) for v in raw_values):
+                column.kind = 'text'
+                column.values = [None if v is None else str(v) for v in raw_values]
+            else:
+                column.kind = 'number'
+                column.values = [None if v is None else engine.normalize_numeric(v) for v in raw_values]
         except ValueError as exc:
             raise ValueError('Formula in C'+str(index+1)+': '+str(exc)) from exc
     for index in ordered:
-        worksheet.columns[index].kind='number'
+        worksheet.columns[index].kind=candidate.columns[index].kind
         worksheet.columns[index].values=candidate.columns[index].values
     return len(ordered)
 

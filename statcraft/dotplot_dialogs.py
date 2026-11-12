@@ -6,15 +6,16 @@ from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QGroupBox,QToolBu
     QDialogButtonBox,QCheckBox,QComboBox,QPushButton,QLabel,QFormLayout,QSpinBox,QLineEdit)
 from .histogram_dialogs import HistogramDialog
 from .boxplot_dialogs import BoxplotDialog
+from .dialog_theme import dialog_stylesheet, gallery_button_stylesheet, is_dark_active
 from .dotplot_graphs import validate_parameters,build_dotplots,VARIANTS
 from .variable_dialogs import resolve_variables,format_variable_reference
 
 TITLES={'one':'Simple','one_groups':'With Groups','one_stack_groups':'Stack Groups','multiple':'Simple','multiple_stack':'Stack Y’s','multiple_groups':'With Groups','multiple_stack_groups':'Stack Groups'}
 
 
-def dot_icon(mode):
-    pix=QPixmap(240,160);pix.setDevicePixelRatio(2);pix.fill(QColor('white'));p=QPainter(pix);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor('#64717c'),1));p.drawLine(10,70,113,70)
+def dot_icon(mode, dark=False):
+    pix=QPixmap(240,160);pix.setDevicePixelRatio(2);pix.fill(QColor('#18181b' if dark else 'white'));p=QPainter(pix);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor('#a1a1aa' if dark else '#64717c'),1));p.drawLine(10,70,113,70)
     stacked='_stack' in mode;count=1 if mode=='one' else 2
     for s in range(count):
         color=QColor('#3e739b' if s==0 else '#b46e39');p.setPen(QPen(color,1));p.setBrush(color)
@@ -27,13 +28,15 @@ def dot_icon(mode):
 class DotplotTypeDialog(QDialog):
     def __init__(self,parent=None):
         super().__init__(parent);self.setWindowTitle('Dotplots');self.mode='one';self.mode_buttons={};self.buttons=QButtonGroup(self);outer=QVBoxLayout(self)
+        dark = is_dark_active(parent or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         self.setSizeGripEnabled(True)
         for title,keys in (('One Y',VARIANTS[:3]),('Multiple Y’s',VARIANTS[3:])):
             group=QGroupBox(title);row=QHBoxLayout(group)
             for key in keys:
-                button=QToolButton();button.setText(TITLES[key]);button.setIcon(dot_icon(key));button.setIconSize(QSize(120,80));button.setMinimumSize(145,125)
+                button=QToolButton();button.setText(TITLES[key]);button.setIcon(dot_icon(key, dark=dark));button.setIconSize(QSize(120,80));button.setMinimumSize(145,125)
                 button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon);button.setCheckable(True);button.setChecked(key=='one')
-                button.setStyleSheet('QToolButton{border:1px solid #bfc5cb;padding:8px;background:white;}QToolButton:checked{border:2px solid #205b92;background:#eaf1f8;}')
+                button.setStyleSheet(gallery_button_stylesheet(dark))
                 button.clicked.connect(lambda checked=False,key=key:setattr(self,'mode',key));self.buttons.addButton(button);self.mode_buttons[key]=button;row.addWidget(button)
             if title=='One Y':row.addStretch()
             outer.addWidget(group)

@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor,QFont,QPainter,QPen,QPainterPath
 from .snapshot_chart import SnapshotChartWidget
 from .graph_hover import point_info
 from .plot_ticks import tick_values
+from .chart_theme import chart_painter
 
 
 def _fmt(v):return '*' if v is None else format(v,'.5g')
@@ -16,7 +17,7 @@ class MixtureJointChart(SnapshotChartWidget):
         self.panels=[{'kind':'joint_profiles'}];self.setMinimumSize(880,max(510,150+math.ceil(len(self.result['profiles'])/3)*240));self.setFont(QFont('Segoe UI',9))
     def sizeHint(self):return QSize(1100,self.minimumHeight())
     def paintEvent(self,event):
-        self.reset_hover_regions();p=QPainter(self)
+        self.reset_hover_regions();p=chart_painter(self)
         try:
             p.setRenderHint(QPainter.RenderHint.Antialiasing);p.fillRect(self.rect(),QColor('white'));r=self.result;prediction=r['prediction']
             p.setPen(QColor('#263440'));p.setFont(QFont('Segoe UI',11,QFont.Weight.DemiBold));p.drawText(QRectF(15,5,self.width()-30,28),Qt.AlignmentFlag.AlignCenter,'Predicted '+r['response_name']+' = '+_fmt(prediction['fit']))

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from .chart_theme import chart_painter
 
 
 class SingleANOMCanvas(QWidget):
@@ -44,7 +45,7 @@ class SingleANOMCanvas(QWidget):
         self.setMinimumSize(480, 360)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
+        painter = chart_painter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()

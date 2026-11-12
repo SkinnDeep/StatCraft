@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF, QSize
 from PySide6.QtGui import QPainter, QColor, QFont, QPen, QBrush
 from PySide6.QtWidgets import QWidget, QSizePolicy
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 
 def _fmt(val, dec=2):
@@ -31,7 +32,7 @@ class MultiVariChartWidget(GraphInteractionMixin, QWidget):
         return QSize(860, 560)
 
     def paintEvent(self, event):
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor('#ffffff'))
 

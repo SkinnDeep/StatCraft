@@ -7,6 +7,7 @@ from PySide6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QPainterPath
 from PySide6.QtWidgets import QWidget, QSizePolicy
 from .snapshot_chart import SnapshotChartWidget
 from .graph_interaction import GraphInteractionMixin
+from .chart_theme import chart_painter
 
 
 def _fmt(val, dec=4):
@@ -29,7 +30,7 @@ class GraphicalSummaryChartWidget(GraphInteractionMixin, QWidget):
         return QSize(820, 560)
 
     def paintEvent(self, event):
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor('#ffffff'))
 

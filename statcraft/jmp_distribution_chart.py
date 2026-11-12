@@ -11,6 +11,7 @@ from .jmp_panel import get_jmp_icon
 
 
 from .snapshot_chart import SnapshotChartWidget
+from .chart_theme import chart_painter
 
 
 class SingleVariableDistributionCanvas(QWidget):
@@ -23,7 +24,7 @@ class SingleVariableDistributionCanvas(QWidget):
         self.setFont(QFont("Segoe UI", 9))
 
     def paintEvent(self, event):
-        p = QPainter(self)
+        p = chart_painter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()

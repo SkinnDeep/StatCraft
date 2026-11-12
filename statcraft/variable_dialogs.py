@@ -1,16 +1,9 @@
-def _is_dark_active(widget=None) -> bool:
-    if widget is not None:
-        try:
-            win = widget.window()
-            if win and hasattr(win, "_dark_mode"):
-                return bool(win._dark_mode)
-        except Exception:
-            pass
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance()
-    if app:
-        return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
-    return False
+from .dialog_theme import (
+    dialog_stylesheet,
+    gallery_button_stylesheet,
+    is_dark_active as _is_dark_active,
+    subtle_label_style,
+)
 
 """Original worksheet-variable selectors with explicit roles and column identities."""
 import re
@@ -56,6 +49,17 @@ def _variable_tokens(text):
     return tokens
 
 
+def _require_eligible_column(worksheet, index: int, token: str, kinds) -> None:
+    if index < 0 or index >= len(worksheet.columns):
+        raise ValueError('Unknown column: ' + token)
+    col = worksheet.columns[index]
+    if col.kind not in kinds:
+        expected = '/'.join('numeric' if k == 'number' else str(k) for k in kinds)
+        raise ValueError(
+            f"Column C{index + 1} ('{col.name}') is not eligible for this field ({col.kind} given; requires {expected} columns)."
+        )
+
+
 def resolve_variables(text, worksheet, kinds=('number',)):
     tokens=_variable_tokens(text)
     indices=[]
@@ -74,8 +78,7 @@ def resolve_variables(text, worksheet, kinds=('number',)):
                         position += 2
                         step = 1 if end >= start else -1
                         for idx in range(start, end + step, step):
-                            if idx < 0 or idx >= len(worksheet.columns) or worksheet.columns[idx].kind not in kinds:
-                                raise ValueError(f"Choose an eligible column: C{idx+1}")
+                            _require_eligible_column(worksheet, idx, f"C{idx+1}", kinds)
                             if idx not in indices:
                                 indices.append(idx)
                         continue
@@ -84,8 +87,7 @@ def resolve_variables(text, worksheet, kinds=('number',)):
                 end = int(m_range.group(2)) - 1
                 step = 1 if end >= start else -1
                 for idx in range(start, end + step, step):
-                    if idx < 0 or idx >= len(worksheet.columns) or worksheet.columns[idx].kind not in kinds:
-                        raise ValueError(f"Choose an eligible column: C{idx+1}")
+                    _require_eligible_column(worksheet, idx, f"C{idx+1}", kinds)
                     if idx not in indices:
                         indices.append(idx)
                 continue
@@ -101,8 +103,7 @@ def resolve_variables(text, worksheet, kinds=('number',)):
             matches=[i for i,c in enumerate(worksheet.columns) if c.name==token]
             if len(matches)!=1: raise ValueError('Unknown or ambiguous column: '+token+'. Use its C number.')
             index=matches[0]
-        if index<0 or index>=len(worksheet.columns) or worksheet.columns[index].kind not in kinds:
-            raise ValueError('Choose an eligible column: '+token)
+        _require_eligible_column(worksheet, index, token, kinds)
         if reference and reference.group(2) and worksheet.columns[index].kind != {'t':'text','d':'date'}[reference.group(2).lower()]:
             raise ValueError('The column type does not match its address: '+token)
         if index in indices: raise ValueError('A variable is selected more than once: '+token)
@@ -377,6 +378,24 @@ class ProcedureDialog(QDialog):
                         ctrl.setChecked(bool(val))
                     elif isinstance(ctrl, QLineEdit):
                         ctrl.setText(str(val))
+        elif self.selectors:
+            selected_cols = sorted(
+                i for i in getattr(parent, '_selected_columns', ())
+                if isinstance(i, int) and 0 <= i < len(self.worksheet.columns)
+            )
+            if selected_cols:
+                for spec in self.selectors:
+                    key = spec['key']
+                    ctrl = self.controls.get(key)
+                    if ctrl is None or ctrl.text().strip():
+                        continue
+                    kinds = spec.get('kinds', ('number',))
+                    eligible = [i for i in selected_cols if self.worksheet.columns[i].kind in kinds]
+                    if eligible:
+                        is_multi = bool(spec.get('multiple') or spec.get('multi') or spec.get('maximum', 1) > 1)
+                        picked = eligible if is_multi else [eligible[0]]
+                        ctrl.setText(' '.join(format_variable_reference(i, self.worksheet) for i in picked))
+                        break
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F3:
@@ -439,7 +458,25 @@ class ProcedureDialog(QDialog):
         refs=[format_variable_reference(item.data(Qt.ItemDataRole.UserRole),self.worksheet) for item in selected]
         is_multi = bool(spec.get('multiple') or spec.get('multi'))
         if is_multi:
-            existing=control.text().strip(); control.setText((existing+' ' if existing else '')+' '.join(refs))
+            sel_indices = [item.data(Qt.ItemDataRole.UserRole) for item in selected]
+            existing = control.text().strip()
+            existing_indices = []
+            if existing:
+                try:
+                    existing_indices = resolve_variables(
+                        existing, self.worksheet, spec.get('kinds', ('number',))
+                    )
+                except ValueError:
+                    existing_indices = [int(m[0]) - 1 for m in _REFERENCE.findall(existing)]
+            added_refs = []
+            seen_idx = set(existing_indices)
+            for idx in sel_indices:
+                if idx not in seen_idx:
+                    seen_idx.add(idx)
+                    added_refs.append(format_variable_reference(idx, self.worksheet))
+            if added_refs:
+                joined = ' '.join(added_refs)
+                control.setText(f"{existing} {joined}".strip() if existing else joined)
             control.setFocus()
         else:
             control.setText(refs[0])
@@ -530,17 +567,40 @@ class ProcedureDialog(QDialog):
         self._LAST_DIALOG_STATE[state_key] = saved
 
 
+def _dialog_state_key(worksheet, key_name: str):
+    ws_name = getattr(worksheet, 'name', '')
+    col_sig = tuple((c.name, c.kind) for c in getattr(worksheet, 'columns', []))
+    return (id(worksheet), ws_name, key_name, col_sig)
+
+
+def save_dialog_state(worksheet, key_name: str, state: dict) -> None:
+    if worksheet is None or not isinstance(state, dict):
+        return
+    import copy
+    ProcedureDialog._LAST_DIALOG_STATE[_dialog_state_key(worksheet, key_name)] = copy.deepcopy(state)
+
+
+def load_dialog_state(worksheet, key_name: str) -> dict | None:
+    if worksheet is None:
+        return None
+    import copy
+    saved = ProcedureDialog._LAST_DIALOG_STATE.get(_dialog_state_key(worksheet, key_name))
+    return copy.deepcopy(saved) if saved is not None else None
+
+
 class ScatterTypeDialog(QDialog):
-    def __init__(self,parent):
+    def __init__(self,parent,default_mode=None):
         from .scatter import MODES
-        super().__init__(parent); self.setSizeGripEnabled(True); self.setWindowTitle('Scatterplots'); self.mode='simple'
+        initial_mode = default_mode if default_mode in MODES else 'simple'
+        super().__init__(parent); self.setSizeGripEnabled(True); self.setWindowTitle('Scatterplots'); self.mode=initial_mode
+        dark=_is_dark_active(parent or self); self.setStyleSheet(dialog_stylesheet(dark))
         layout=QVBoxLayout(self); grid=QGridLayout(); self.buttons=QButtonGroup(self); self.mode_buttons={}
         for index,(mode,title) in enumerate(MODES.items()):
             button=QToolButton(); button.setText(title.replace(' and ',' and\n'))
-            button.setCheckable(True); button.setChecked(index==0); button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-            pix=QPixmap(240,160); pix.setDevicePixelRatio(2); pix.fill(QColor('white'))
+            button.setCheckable(True); button.setChecked(mode==initial_mode); button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            pix=QPixmap(240,160); pix.setDevicePixelRatio(2); pix.fill(QColor('#18181b' if _is_dark_active(parent or self) else 'white'))
             painter=QPainter(pix); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(QPen(QColor('#6e7f8f'),1)); painter.drawLine(12,68,111,68); painter.drawLine(12,68,12,8)
+            painter.setPen(QPen(QColor('#a1a1aa' if _is_dark_active(parent or self) else '#6e7f8f'),1)); painter.drawLine(12,68,111,68); painter.drawLine(12,68,12,8)
             grouped=mode in ('groups','regression_groups','connect_groups')
             for group in range(2 if grouped else 1):
                 color=QColor('#b97743' if group else '#3e739b'); painter.setPen(QPen(color,1.4)); painter.setBrush(color)
@@ -550,7 +610,7 @@ class ScatterTypeDialog(QDialog):
                 if mode in ('regression','regression_groups'): painter.drawLine(QPointF(20,62-group*12),QPointF(102,22-group*12))
                 for point in points: painter.drawEllipse(point,2.5,2.5)
             painter.end(); button.setIcon(QIcon(pix)); button.setIconSize(QSize(120,80)); button.setMinimumSize(155,132)
-            button.setStyleSheet('QToolButton { border:1px solid #cbd5df; padding:8px; background:#fff; } QToolButton:checked { border:2px solid #205b92; background:#eaf1f8; }')
+            button.setStyleSheet(gallery_button_stylesheet(_is_dark_active(parent or self)))
             button.clicked.connect(lambda checked=False,mode=mode:setattr(self,'mode',mode))
             self.buttons.addButton(button); self.mode_buttons[mode]=button
             grid.addWidget(button,index//4,index%4)
@@ -573,77 +633,12 @@ class ScatterDialog(QDialog):
         self.active='pairs'; self.labels={'title':'','x_label':'','y_label':''}
         self.settings=None
         self.worksheet=worksheet; self.pairs=None
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #f8fafc;
-                color: #0f172a;
-                font-family: 'Segoe UI', -apple-system, sans-serif;
-            }
-            QLabel {
-                color: #0f172a;
-                font-size: 9pt;
-            }
-            QLabel#error {
-                color: #b91c1c;
-                background-color: #fef2f2;
-                border: 1px solid #fca5a5;
-                border-radius: 4px;
-                padding: 6px 10px;
-                font-size: 8.5pt;
-                font-weight: 500;
-            }
-            QListWidget, QTableWidget {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                font-family: 'Segoe UI', -apple-system, sans-serif;
-                font-size: 8.5pt;
-            }
-            QHeaderView::section {
-                background-color: #f1f5f9;
-                color: #475569;
-                border: none;
-                border-right: 1px solid #e2e8f0;
-                border-bottom: 1px solid #cbd5e1;
-                padding: 4px 6px;
-                font-weight: 600;
-            }
-            QLineEdit, QComboBox {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 5px;
-                padding: 5px 8px;
-                font-size: 9pt;
-            }
-            QLineEdit:focus, QComboBox:focus {
-                border: 1.5px solid #0078d7;
-            }
-            QPushButton {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 5px;
-                padding: 5px 14px;
-                font-size: 9pt;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #f1f5f9;
-                border-color: #94a3b8;
-            }
-            QDialogButtonBox QPushButton[text="&OK"], QDialogButtonBox QPushButton[text="OK"] {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0078d7, stop:1 #005a9e);
-                color: #ffffff;
-                border: 1px solid #005a9e;
-                font-weight: 600;
-            }
-            QDialogButtonBox QPushButton[text="&OK"]:hover, QDialogButtonBox QPushButton[text="OK"]:hover {
-                background: #005a9e;
-            }
-        """)
+        dark = _is_dark_active(parent or self)
+        self.setStyleSheet(dialog_stylesheet(dark))
         layout=QVBoxLayout(self); body=QHBoxLayout(); left=QVBoxLayout()
+        left.addWidget(QLabel('Available variables'))
+        self.var_filter=QLineEdit(); self.var_filter.setPlaceholderText('Filter variables...'); self.var_filter.setClearButtonEnabled(True)
+        self.var_filter.textChanged.connect(self._filter_available_variables); left.addWidget(self.var_filter)
         self.available=QListWidget(); self.available.setMinimumWidth(210)
         for i,c in enumerate(worksheet.columns):
             if c.kind=='number':
@@ -663,13 +658,76 @@ class ScatterDialog(QDialog):
         right.addLayout(form)
         labels=QPushButton('Labels…'); labels.setAutoDefault(False); labels.clicked.connect(self.edit_labels); right.addWidget(labels)
         hint=QLabel('Click a Y or X cell, then double-click an available variable or click Select.\nEach completed row creates one scatterplot. You can also type C numbers or quoted column names.')
-        hint.setWordWrap(True); hint.setStyleSheet("color: #64748b; font-size: 8pt;"); right.addWidget(hint); body.addLayout(right,2); layout.addLayout(body)
+        hint.setWordWrap(True); hint.setStyleSheet(subtle_label_style(dark, font_size="8pt")); right.addWidget(hint); body.addLayout(right,2); layout.addLayout(body)
         self.error=_AutoErrorLabel(); self.error.setObjectName('error'); self.error.setWordWrap(True); self.error.setVisible(False); layout.addWidget(self.error)
-        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Reset)
+        reset_btn = buttons.button(QDialogButtonBox.StandardButton.Reset)
+        if reset_btn:
+            reset_btn.clicked.connect(self.reset_dialog)
         buttons.accepted.connect(self.validate); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
+        self._restore_dialog_state()
+
+    def _filter_available_variables(self, text):
+        query = text.strip().lower()
+        for i in range(self.available.count()):
+            item = self.available.item(i)
+            item.setHidden(bool(query and query not in item.text().lower()))
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F3:
+            self.reset_dialog()
+            return
+        super().keyPressEvent(event)
+
+    def reset_dialog(self):
+        self.roles.clearContents()
+        self.roles.setCurrentCell(0, 0)
+        self.group_entry.clear()
+        self.order.setCurrentIndex(0)
+        self.labels = {'title': '', 'x_label': '', 'y_label': ''}
+        self.error.setVisible(False)
+        self.activate('pairs')
+
+    def _restore_dialog_state(self):
+        saved = load_dialog_state(self.worksheet, f"ScatterDialog:{self.mode}")
+        if not saved:
+            return
+        for row, (y_txt, x_txt) in enumerate(saved.get('pairs', ())):
+            if row >= self.roles.rowCount():
+                break
+            if y_txt:
+                self.roles.setItem(row, 0, QTableWidgetItem(str(y_txt)))
+            if x_txt:
+                self.roles.setItem(row, 1, QTableWidgetItem(str(x_txt)))
+        if 'group' in saved:
+            self.group_entry.setText(str(saved['group']))
+        if 'order' in saved:
+            self.order.setCurrentText(str(saved['order']))
+        if isinstance(saved.get('labels'), dict):
+            self.labels = {k: str(saved['labels'].get(k, '')) for k in ('title', 'x_label', 'y_label')}
+
+    def _save_dialog_state(self):
+        saved_pairs = []
+        for row in range(self.roles.rowCount()):
+            y_txt = self.roles.item(row, 0).text() if self.roles.item(row, 0) else ''
+            x_txt = self.roles.item(row, 1).text() if self.roles.item(row, 1) else ''
+            if y_txt or x_txt:
+                saved_pairs.append((y_txt, x_txt))
+        save_dialog_state(
+            self.worksheet,
+            f"ScatterDialog:{self.mode}",
+            {
+                'pairs': saved_pairs,
+                'group': self.group_entry.text(),
+                'order': self.order.currentText(),
+                'labels': dict(self.labels),
+            },
+        )
 
     def edit_labels(self):
-        dialog=QDialog(self); dialog.setWindowTitle('Scatterplot Labels'); layout=QVBoxLayout(dialog); form=QFormLayout(); edits={}
+        dialog=QDialog(self); dialog.setWindowTitle('Scatterplot Labels')
+        dialog.setStyleSheet(dialog_stylesheet(_is_dark_active(self)))
+        layout=QVBoxLayout(dialog); form=QFormLayout(); edits={}
         for key,title in (('title','Title'),('x_label','X-axis label'),('y_label','Y-axis label')):
             edit=QLineEdit(self.labels[key]); edit.setMaxLength(256); edit.setPlaceholderText('Use default'); edits[key]=edit; form.addRow(title,edit)
         layout.addLayout(form); buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
@@ -683,6 +741,8 @@ class ScatterDialog(QDialog):
             if column.kind=='number' or role=='group' and column.kind=='text':
                 label=format_variable_reference(i,self.worksheet); item=QListWidgetItem(label); item.setToolTip(label)
                 item.setData(Qt.ItemDataRole.UserRole,i); self.available.addItem(item)
+        if hasattr(self, 'var_filter') and self.var_filter.text().strip():
+            self._filter_available_variables(self.var_filter.text())
 
     def transfer(self):
         item=self.available.currentItem()
@@ -721,4 +781,5 @@ class ScatterDialog(QDialog):
             self.error.setText(str(exc))
             self.error.setVisible(True)
             return
+        self._save_dialog_state()
         self.accept()

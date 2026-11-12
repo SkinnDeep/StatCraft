@@ -20,43 +20,69 @@ from .executive_summary import generate_executive_summary
 
 
 def export_widget_to_svg_bytes(widget: QWidget) -> bytes:
-    """Render any QWidget vector chart directly to SVG bytes in memory."""
+    """Render any QWidget (including full titled GraphFrame) directly to SVG bytes."""
     from PySide6.QtCore import QPoint, QSize
 
-    target = getattr(widget, "chart", widget) if type(widget).__name__ == "GraphFrame" else widget
-    if not isinstance(target, QWidget):
-        target = widget
+    is_frame = type(widget).__name__ == "GraphFrame" or (
+        hasattr(widget, "chart") and hasattr(widget, "export_hidden")
+    )
+    target = widget
+    hidden_items = []
+    chart = getattr(widget, "chart", None) if is_frame else None
+    saved_state = None
+    if is_frame and chart is not None:
+        hidden_items = [w for w in getattr(widget, "export_hidden", ()) if not w.isHidden()]
+        saved_state = (
+            getattr(chart, "_exporting", False),
+            getattr(chart, "selected_object", None),
+            getattr(chart, "brushed_rows", set()),
+        )
+        chart._exporting = True
+        chart.selected_object = None
+        chart.brushed_rows = set()
+        for w in hidden_items:
+            w.hide()
 
-    target.ensurePolished()
-    w_size = target.size()
-    if w_size.width() <= 0 or w_size.height() <= 0:
-        hint = target.sizeHint()
-        if hint.width() <= 0 or hint.height() <= 0:
-            hint = target.minimumSizeHint()
-        w_size = QSize(max(320, hint.width()), max(200, hint.height()))
-        target.resize(w_size)
-
-    buf = QBuffer()
-    buf.open(QBuffer.OpenModeFlag.WriteOnly)
-
-    generator = QSvgGenerator()
-    generator.setOutputDevice(buf)
-    generator.setSize(w_size)
-    generator.setViewBox(QRect(0, 0, max(1, w_size.width()), max(1, w_size.height())))
-    generator.setTitle("StatCraft Vector Plot")
-    generator.setDescription("Rendered by StatCraft Desktop")
-
-    painter = QPainter(generator)
     try:
-        if painter.isActive():
-            target.render(painter, QPoint(0, 0))
-    finally:
-        if painter.isActive():
-            painter.end()
-        del painter
-        buf.close()
+        target.ensurePolished()
+        if target.layout() is not None:
+            target.layout().activate()
+        w_size = target.size()
+        if w_size.width() <= 0 or w_size.height() <= 0:
+            hint = target.sizeHint()
+            if hint.width() <= 0 or hint.height() <= 0:
+                hint = target.minimumSizeHint()
+            w_size = QSize(max(320, hint.width()), max(200, hint.height()))
+            target.resize(w_size)
+            if target.layout() is not None:
+                target.layout().activate()
 
-    return bytes(buf.data())
+        buf = QBuffer()
+        buf.open(QBuffer.OpenModeFlag.WriteOnly)
+
+        generator = QSvgGenerator()
+        generator.setOutputDevice(buf)
+        generator.setSize(w_size)
+        generator.setViewBox(QRect(0, 0, max(1, w_size.width()), max(1, w_size.height())))
+        generator.setTitle("StatCraft Vector Plot")
+        generator.setDescription("Rendered by StatCraft Desktop")
+
+        painter = QPainter(generator)
+        try:
+            if painter.isActive():
+                target.render(painter, QPoint(0, 0))
+        finally:
+            if painter.isActive():
+                painter.end()
+            del painter
+            buf.close()
+
+        return bytes(buf.data())
+    finally:
+        if is_frame and chart is not None and saved_state is not None:
+            chart._exporting, chart.selected_object, chart.brushed_rows = saved_state
+            for w in hidden_items:
+                w.show()
 
 
 def copy_widget_svg_to_clipboard(widget: QWidget) -> bool:
@@ -175,7 +201,7 @@ def export_session_to_html(
     <div class="container">
         <header>
             <h1>StatCraft Statistical Session Report</h1>
-            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v117.0.0</div>
+            <div class="meta">Worksheet: <strong>{html.escape(worksheet_name)}</strong> · Generated: {now_str} · StatCraft v118.0.0</div>
         </header>
         <main>
             {body_content}
@@ -203,7 +229,7 @@ def export_session_to_markdown(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: List[str] = [
         f"# StatCraft Session Report — {worksheet_name}",
-        f"*Generated locally: {now_str} · StatCraft v117.0.0*",
+        f"*Generated locally: {now_str} · StatCraft v118.0.0*",
         "",
         "## Table of Contents",
     ]

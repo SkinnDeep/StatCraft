@@ -5,8 +5,9 @@ from PySide6.QtCore import Qt,QMimeData,QTimer,QSize
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QListWidget,QListWidgetItem,
     QLineEdit,QPushButton,QGroupBox,QSplitter,QWidget,QScrollArea,QDialogButtonBox,QCheckBox,QSpinBox,QDoubleSpinBox,QComboBox,QAbstractItemView)
+from .dialog_theme import is_dark_active, error_label_style
 from .graph_builder import TYPES,ALL_TYPES,DEFAULTS,validate_mapping,compute_builder
-from .variable_dialogs import format_variable_reference
+from .variable_dialogs import format_variable_reference, load_dialog_state, save_dialog_state
 from .modern_icons import tool_icon
 
 MIME='application/x-statcraft-columns'
@@ -53,7 +54,12 @@ class GraphBuilderDialog(QDialog):
     def __init__(self,parent,worksheet,parameters=None,lock_variables=False):
         super().__init__(parent);self.worksheet=worksheet;self.lock_variables=lock_variables;self.setWindowTitle('Graph Builder');self.resize(1180,740)
         self.setSizeGripEnabled(True)
-        p=copy.deepcopy(parameters or {});self.graph_type=p.get('graph_type','histogram');self.mapping={key:list(p.get(key,[])) for key in ('response_indices','group_indices')};self.mapping['x_index']=[] if p.get('x_index') is None else [p['x_index']]
+        p=copy.deepcopy(parameters or {})
+        if parameters is None:
+            saved = load_dialog_state(worksheet, 'GraphBuilderDialog')
+            if saved:
+                p = saved
+        self.graph_type=p.get('graph_type','histogram');self.mapping={key:list(p.get(key,[])) for key in ('response_indices','group_indices')};self.mapping['x_index']=[] if p.get('x_index') is None else [p['x_index']]
         self.active_role='response_indices';self.parameters=None;self.preview_entry=None;self.preview_chart=None;self.preview_frame=None;self._loading=True
         outer=QVBoxLayout(self);split=QSplitter();outer.addWidget(split,1)
         left=QWidget();ll=QVBoxLayout(left);ll.setContentsMargins(0,0,0,0);ll.addWidget(QLabel('Worksheet columns'))
@@ -95,7 +101,11 @@ class GraphBuilderDialog(QDialog):
         self.title.textChanged.connect(self.schedule_preview)
         self.error=QLabel();self.error.setWordWrap(True);outer.addWidget(self.error)
         bottom=QHBoxLayout();self.reset_button=QPushButton('Clear mappings');self.reset_button.clicked.connect(self.clear_mappings);bottom.addWidget(self.reset_button);bottom.addStretch()
-        self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Create');self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject);bottom.addWidget(self.buttons);outer.addLayout(bottom)
+        self.buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Reset);self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Create');self.buttons.accepted.connect(self.validate);self.buttons.rejected.connect(self.reject)
+        gb_reset = self.buttons.button(QDialogButtonBox.StandardButton.Reset)
+        if gb_reset:
+            gb_reset.clicked.connect(self.reset_dialog)
+        bottom.addWidget(self.buttons);outer.addLayout(bottom)
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(180);self.timer.timeout.connect(self.update_preview)
         self._loading=False;self.configure_type();self.refresh_roles();self.update_preview()
         if self.graph_type not in TYPES and self.graph_type in ALL_TYPES:
@@ -121,7 +131,7 @@ class GraphBuilderDialog(QDialog):
         self.available.clearSelection()
         for i in range(self.available.count()):self.available.item(i).setHidden(text.casefold() not in self.available.item(i).text().casefold())
 
-    def show_error(self,message):self.error.setText(message);self.error.setStyleSheet('color:#b3261e;')
+    def show_error(self,message):self.error.setText(message);self.error.setStyleSheet(error_label_style(is_dark_active(self)))
 
     def allowed_kinds(self,role):
         return ('number','text') if role=='group_indices' or role=='response_indices' and self.graph_type in ('bar_chart','pie_chart') else ('number','date') if role=='x_index' and self.graph_type=='time_series' else ('number',)
@@ -156,6 +166,30 @@ class GraphBuilderDialog(QDialog):
     def clear_mappings(self):
         if self.lock_variables:return
         self.mapping=dict(response_indices=[],x_index=[],group_indices=[]);self.refresh_roles();self.schedule_preview()
+
+    def reset_dialog(self):
+        if self.lock_variables:return
+        self._loading = True
+        self.mapping = dict(response_indices=[], x_index=[], group_indices=[])
+        self.title.setText(DEFAULTS['title'])
+        self.bins.setValue(DEFAULTS['bins'])
+        self.fit.setChecked(DEFAULTS['fit'])
+        self.stack.setChecked(DEFAULTS['stack'])
+        self.order.setCurrentIndex(self.order.findData(DEFAULTS['variable_position']))
+        self.arrangement.setCurrentIndex(self.arrangement.findData(DEFAULTS['layout']))
+        self.confidence.setValue(DEFAULTS['confidence'] * 100)
+        self.pooled.setChecked(DEFAULTS['pooled'])
+        self.bonferroni.setChecked(DEFAULTS['bonferroni'])
+        self.error.clear()
+        self._loading = False
+        self.refresh_roles()
+        self.schedule_preview()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F3:
+            self.reset_dialog()
+            return
+        super().keyPressEvent(event)
 
     def refresh_roles(self):
         for key,widget in self.roles.items():
@@ -221,5 +255,28 @@ class GraphBuilderDialog(QDialog):
     def settings(self):return copy.deepcopy(self.parameters if self.parameters is not None else self.values())
 
     def validate(self):
-        if self.update_preview():self.accept();return True
+        if self.update_preview():
+            if not self.lock_variables:
+                save_dialog_state(
+                    self.worksheet,
+                    'GraphBuilderDialog',
+                    {
+                        'graph_type': self.graph_type,
+                        'response_indices': list(self.mapping['response_indices']),
+                        'group_indices': list(self.mapping['group_indices']),
+                        'x_index': self.mapping['x_index'][0] if self.mapping['x_index'] else None,
+                        'options': dict(
+                            title=self.title.text(),
+                            bins=self.bins.value(),
+                            fit=self.fit.isChecked(),
+                            stack=self.stack.isChecked(),
+                            variable_position=self.order.currentData(),
+                            layout=self.arrangement.currentData(),
+                            confidence=self.confidence.value() / 100,
+                            pooled=self.pooled.isChecked(),
+                            bonferroni=self.bonferroni.isChecked(),
+                        ),
+                    },
+                )
+            self.accept();return True
         return False

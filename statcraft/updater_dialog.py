@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QProgressBar, QMessageBox, QFrame, QWidget, QApplication
 )
 
+from .dialog_theme import is_dark_active
 from .updater import (
     STATCRAFT_VERSION, check_for_updates, download_file, get_default_install_dir,
     read_install_metadata, DEFAULT_GITHUB_REPO
@@ -76,60 +77,115 @@ class CheckForUpdatesDialog(QDialog):
         self.auto_download = auto_download
         self.download_worker: UpdateDownloadWorker | None = None
 
-        # Dark Slate modern styling matching setup wizard
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #0f172a;
-                color: #f8fafc;
-                font-family: 'Segoe UI', system-ui, sans-serif;
-            }
-            QLabel {
-                color: #f8fafc;
-            }
-            QProgressBar {
-                border: 1px solid #334155;
-                border-radius: 4px;
-                background-color: #1e293b;
-                height: 8px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #3b82f6;
-                border-radius: 3px;
-            }
-            QTextEdit {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                color: #e2e8f0;
-                padding: 10px;
-                font-size: 9pt;
-            }
-            QPushButton#btnAction {
-                background-color: #2563eb;
-                color: #ffffff;
-                font-weight: 600;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 18px;
-                font-size: 9pt;
-            }
-            QPushButton#btnAction:hover {
-                background-color: #1d4ed8;
-            }
-            QPushButton#btnClose {
-                background-color: #1e293b;
-                color: #e2e8f0;
-                font-weight: 500;
-                border: 1px solid #475569;
-                border-radius: 6px;
-                padding: 8px 18px;
-                font-size: 9pt;
-            }
-            QPushButton#btnClose:hover {
-                background-color: #334155;
-            }
-        """)
+        dark = is_dark_active(parent or self)
+        if dark:
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #0f172a;
+                    color: #f8fafc;
+                    font-family: 'Segoe UI', system-ui, sans-serif;
+                }
+                QLabel {
+                    color: #f8fafc;
+                }
+                QProgressBar {
+                    border: 1px solid #334155;
+                    border-radius: 4px;
+                    background-color: #1e293b;
+                    height: 8px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #3b82f6;
+                    border-radius: 3px;
+                }
+                QTextEdit {
+                    background-color: #1e293b;
+                    border: 1px solid #334155;
+                    border-radius: 6px;
+                    color: #e2e8f0;
+                    padding: 10px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnAction {
+                    background-color: #2563eb;
+                    color: #ffffff;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 18px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnAction:hover {
+                    background-color: #1d4ed8;
+                }
+                QPushButton#btnClose {
+                    background-color: #1e293b;
+                    color: #e2e8f0;
+                    font-weight: 500;
+                    border: 1px solid #475569;
+                    border-radius: 6px;
+                    padding: 8px 18px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnClose:hover {
+                    background-color: #334155;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #ffffff;
+                    color: #111827;
+                    font-family: 'Segoe UI', system-ui, sans-serif;
+                }
+                QLabel {
+                    color: #111827;
+                }
+                QProgressBar {
+                    border: 1px solid #cbd5e1;
+                    border-radius: 4px;
+                    background-color: #f1f5f9;
+                    height: 8px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #2563eb;
+                    border-radius: 3px;
+                }
+                QTextEdit {
+                    background-color: #f8fafc;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    color: #1e293b;
+                    padding: 10px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnAction {
+                    background-color: #2563eb;
+                    color: #ffffff;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 18px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnAction:hover {
+                    background-color: #1d4ed8;
+                }
+                QPushButton#btnClose {
+                    background-color: #ffffff;
+                    color: #1f2937;
+                    font-weight: 500;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    padding: 8px 18px;
+                    font-size: 9pt;
+                }
+                QPushButton#btnClose:hover {
+                    background-color: #f1f5f9;
+                }
+            """)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
@@ -137,27 +193,31 @@ class CheckForUpdatesDialog(QDialog):
 
         # Header Card
         header_card = QFrame()
-        header_card.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 8px;")
+        header_card.setStyleSheet(
+            "background-color: #1e293b; border: 1px solid #334155; border-radius: 8px;"
+            if dark
+            else "background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;"
+        )
         h_layout = QVBoxLayout(header_card)
         h_layout.setContentsMargins(18, 14, 18, 14)
         h_layout.setSpacing(4)
 
         title_lbl = QLabel("StatCraft Software Updates")
         title_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #ffffff;")
+        title_lbl.setStyleSheet("color: #ffffff;" if dark else "color: #0f172a;")
         h_layout.addWidget(title_lbl)
 
         installed = read_install_metadata()
         cur_v = installed.get("version", STATCRAFT_VERSION)
         ver_lbl = QLabel(f"Current Installed Version: v{cur_v}")
-        ver_lbl.setStyleSheet("color: #94a3b8; font-size: 9pt;")
+        ver_lbl.setStyleSheet("color: #94a3b8; font-size: 9pt;" if dark else "color: #475569; font-size: 9pt;")
         h_layout.addWidget(ver_lbl)
         layout.addWidget(header_card)
 
         # Status text
         self.status_lbl = QLabel("Checking for available updates...")
         self.status_lbl.setFont(QFont("Segoe UI", 9.5))
-        self.status_lbl.setStyleSheet("color: #94a3b8;")
+        self.status_lbl.setStyleSheet("color: #94a3b8;" if dark else "color: #475569;")
         layout.addWidget(self.status_lbl)
 
         # Progress bar (indeterminate while checking, determined 0-100 during download)
