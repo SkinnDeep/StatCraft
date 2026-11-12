@@ -681,6 +681,15 @@ class ModernWindow(QMainWindow):
         self.selected_entry = None
         self._refreshing = False
         self._last_dialog_action = None
+        from .micro_innovations import (
+            ConditionalFormatCache,
+            PinnedProceduresManager,
+            SheetVersionTracker,
+        )
+        self._cf_cache = ConditionalFormatCache()
+        self._sheet_versions = SheetVersionTracker()
+        self._pinned_procedures = PinnedProceduresManager()
+        self._last_paste_meta = None
         self._find_state = {"query": "", "match_case": False, "whole_word": False, "direction": "down"}
         self._navigator_group_by_sheet = True
         self._navigator_sort_mode = "oldest"  # 'newest', 'oldest', 'name'
@@ -967,6 +976,14 @@ class ModernWindow(QMainWindow):
         self.command_editor.setMaximumHeight(95)
         self.command_editor.setFont(QFont("Consolas", 9))
         cmd_layout.addWidget(self.command_editor)
+        self.command_hint_label = QLabel("Tip: Tab/Enter accepts completion • ';' adds subcommands")
+        self.command_hint_label.setWordWrap(True)
+        self.command_hint_label.setStyleSheet("color: #64748b; font-size: 8pt;")
+        cmd_layout.addWidget(self.command_hint_label)
+        from .micro_innovations import CommandLineAssistant
+        self._cmd_assistant = CommandLineAssistant(
+            self.command_editor, self.command_hint_label, lambda: self.presenter.worksheet
+        )
         cmd_layout.addWidget(label("History", "sectionHeading"))
         self.command_history_view = QPlainTextEdit(); self.command_history_view.setReadOnly(True)
         self.command_history_view.setFont(QFont("Consolas", 8.5))
@@ -985,6 +1002,10 @@ class ModernWindow(QMainWindow):
         # Bottom right: Edge-to-edge Worksheet pane
         self.worksheet_pane = QWidget(); sheet_layout = QVBoxLayout(self.worksheet_pane)
         sheet_layout.setContentsMargins(0, 0, 0, 0); sheet_layout.setSpacing(0)
+        from .micro_innovations import FormulaBarWidget, PasteToastBar, ComputeProgressToast, BackgroundComputeManager
+        self.formula_bar = FormulaBarWidget(self.worksheet_pane)
+        self.formula_bar.commitValue.connect(self._commit_formula_bar)
+        sheet_layout.addWidget(self.formula_bar)
         self.worksheet_selector = QComboBox(self.worksheet_pane); self.worksheet_selector.hide()
         self.worksheet_selector.currentIndexChanged.connect(self._select_sheet)
 
@@ -1058,6 +1079,16 @@ class ModernWindow(QMainWindow):
         self.table.currentCellChanged.connect(lambda r, c, pr, pc: (self._update_corner_arrow(), self._sync_selection_highlights()))
         self.table.fillHandleDragged.connect(self._on_fill_handle_dragged)
         sheet_layout.addWidget(self.table, 1)
+        self.paste_toast = PasteToastBar(self.worksheet_pane)
+        self.paste_toast.promoteHeadersRequested.connect(self._promote_last_paste_headers)
+        self.paste_toast.undoRequested.connect(self.undo)
+        sheet_layout.addWidget(self.paste_toast)
+        self.compute_toast = ComputeProgressToast(self.worksheet_pane)
+        sheet_layout.addWidget(self.compute_toast)
+        self.compute_manager = BackgroundComputeManager(self.compute_toast, self)
+        from PySide6.QtGui import QShortcut as _QShortcut
+        self.filter_shortcut = _QShortcut(QKeySequence("Ctrl+Shift+L"), self)
+        self.filter_shortcut.activated.connect(lambda: self.open_column_filter_popover(max(0, self.table.currentColumn())))
 
         # Bottom worksheet chrome bar (`⊞`, `|<`, `<`, `>`, `>|`, `+`, `#worksheetTabs`, page/row counts)
         chrome_bar = QWidget(); chrome_bar.setObjectName("sheetChromeBar"); chrome_bar.setFixedHeight(25)
@@ -1253,6 +1284,7 @@ class ModernWindow(QMainWindow):
         self._action(file, "Export Current Report…", self.export_report)
         self._action(file, "Export to Word…", self.send_output_to_word)
         self._action(file, "Export to PowerPoint…", self.send_output_to_powerpoint)
+        self._action(file, "Export Executive Slide Deck (PowerPoint)…", self.export_executive_slide_deck, None, "export")
         file.addSeparator()
         self._action(file, "Export Session as Clean &HTML Report…", self.export_session_html_dialog, None, "export")
         self._action(file, "Export Session as &Markdown Report (.md)…", self.export_session_markdown_dialog, None, "export")
@@ -1833,6 +1865,12 @@ class ModernWindow(QMainWindow):
         toolbar.addAction(self.next_brushed_action)
         toolbar.addSeparator()
         toolbar.addAction(self.clear_action)
+        toolbar.addSeparator()
+        self.pinned_btn = QToolButton(toolbar)
+        self.pinned_btn.setText("★ Pinned")
+        self.pinned_btn.setToolTip("Pin last procedure or replay favorite analyses")
+        self.pinned_btn.clicked.connect(self._show_pinned_menu)
+        toolbar.addWidget(self.pinned_btn)
 
         # Right-aligned R Code Translator Buttons & Dark Mode Toggle
         spacer = QWidget()
@@ -2102,7 +2140,15 @@ class ModernWindow(QMainWindow):
     def _call(self, callback, result=False):
         try:
             notices_before = len(getattr(self.presenter, "notices", []))
+            sheet = getattr(self.presenter, "worksheet", None)
             value = callback()
+            if not result and sheet is not None and hasattr(self, "_sheet_versions"):
+                self._sheet_versions.bump(sheet)
+            if result and isinstance(value, dict) and sheet is not None and hasattr(self, "_sheet_versions"):
+                value.setdefault("_sheet_id", id(sheet))
+                value.setdefault("_sheet_version", self._sheet_versions.version(sheet))
+                if getattr(self, "_last_dialog_action", None) is not None:
+                    value.setdefault("_rerun_action", self._last_dialog_action)
             self.refresh()
             if result and value is not None: self.show_result(value)
             notices = getattr(self.presenter, "notices", [])
@@ -2333,10 +2379,19 @@ class ModernWindow(QMainWindow):
                 symbol = "▲ " if mt == "continuous" else "▮ " if mt == "nominal" else "📶 "
                 address = symbol + address
             headers.append(address)
-            item = QTableWidgetItem(column.name if column.name != "C" + str(i + 1) else "")
+            col_name_text = column.name if column.name != "C" + str(i + 1) else ""
             formula_note = ("  [Formula: " + column.metadata["formula"] + "]") if column.metadata.get("formula") else ""
-            item.setToolTip("Name for " + address + formula_note + " — edit directly here")
-            self.column_names.setItem(0, i, item)
+            col_tip = "Name for " + address + formula_note + " — edit directly here"
+            item = self.column_names.item(0, i)
+            if item is None:
+                item = QTableWidgetItem(col_name_text)
+                item.setToolTip(col_tip)
+                self.column_names.setItem(0, i, item)
+            else:
+                if item.text() != col_name_text:
+                    item.setText(col_name_text)
+                if item.toolTip() != col_tip:
+                    item.setToolTip(col_tip)
             self.column_names.setColumnWidth(i, self.table.columnWidth(i))
         self.table.setHorizontalHeaderLabels(headers)
         self._displayed_date_columns = {i for i, c in enumerate(sheet.columns) if c.kind == 'date'}
@@ -2371,11 +2426,10 @@ class ModernWindow(QMainWindow):
         requested = getattr(self, '_navigation_row', -1)
         if start <= requested < start + self.PAGE_SIZE: visible = max(visible, requested - start + 1)
         self.table.setRowCount(visible)
-        from .conditional_formatting import effective_highlights
         conditional_colors={}
         for index,column in enumerate(sheet.columns):
             if column.metadata.get('conditional_rules'):
-                try:conditional_colors[index]=effective_highlights(column,sheet.row_count)
+                try:conditional_colors[index]=self._cf_cache.get_highlights(column,sheet.row_count)
                 except ValueError as exc:
                     self.statusBar().showMessage('Conditional formatting in C'+str(index+1)+': '+str(exc),12000)
         self.table.setVerticalHeaderLabels([str(start + i + 1) for i in range(visible)])
@@ -2403,20 +2457,35 @@ class ModernWindow(QMainWindow):
                         text = f"{float(value):.{decimals}f}"
                 else:
                     text = str(value)
-                item = QTableWidgetItem(text)
+                item = self.table.item(row, col)
+                if item is None:
+                    item = QTableWidgetItem(text)
+                    self.table.setItem(row, col, item)
+                elif item.text() != text:
+                    item.setText(text)
                 highlights = column.metadata.get("cell_highlights", {})
                 comments = column.metadata.get("cell_comments", {})
                 bg_hex = conditional_colors.get(col,{}).get(str(source_row),highlights.get(str(source_row)))
                 if bg_hex:
                     item.setData(Qt.ItemDataRole.BackgroundRole, QColor(bg_hex))
+                elif item.data(Qt.ItemDataRole.BackgroundRole) is not None:
+                    item.setData(Qt.ItemDataRole.BackgroundRole, None)
                 comment_str = comments.get(str(source_row))
                 if comment_str:
                     item.setData(Qt.ItemDataRole.UserRole + 2, comment_str)
                     item.setToolTip("Comment: " + comment_str)
                 elif column.kind == 'date':
+                    if item.data(Qt.ItemDataRole.UserRole + 2) is not None:
+                        item.setData(Qt.ItemDataRole.UserRole + 2, None)
                     item.setToolTip('Enter a date (2026-10-15) or date and time (2026-10-15 14:30:00).')
-                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter if column.kind != "text" else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(row, col, item)
+                else:
+                    if item.data(Qt.ItemDataRole.UserRole + 2) is not None:
+                        item.setData(Qt.ItemDataRole.UserRole + 2, None)
+                    if item.toolTip():
+                        item.setToolTip("")
+                align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter if column.kind != "text" else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                if item.textAlignment() != int(align):
+                    item.setTextAlignment(align)
         for col_idx in range(len(sheet.columns)):
             is_hidden = col_idx in self._hidden_columns
             self.table.setColumnHidden(col_idx, is_hidden)
@@ -3054,7 +3123,14 @@ class ModernWindow(QMainWindow):
         self._commit_editor()
         row, col = self.table.currentRow(), self.table.currentColumn()
         if row < 0 or col < 0: row, col = 0, 0
-        self._call(lambda: self.presenter.paste(self.page * self.PAGE_SIZE + row, col, raw_text, pad_ragged=True))
+        g_row = self.page * self.PAGE_SIZE + row
+        self._call(lambda: self.presenter.paste(g_row, col, raw_text, pad_ragged=True))
+        lines = [ln for ln in raw_text.split("\n") if ln != ""]
+        if len(lines) >= 2 or "\t" in raw_text:
+            ncols = max((len(ln.split("\t")) for ln in lines), default=1)
+            self._last_paste_meta = {"row": g_row, "col": col, "rows": len(lines), "cols": ncols, "raw": raw_text}
+            if hasattr(self, "paste_toast"):
+                self.paste_toast.show_paste(len(lines), ncols, allow_header_promote=(g_row == 0 and len(lines) >= 2))
 
     def clear_cells(self):
         focused = QApplication.focusWidget()
@@ -6967,6 +7043,19 @@ class ModernWindow(QMainWindow):
             refit.setToolTip('Fit the saved model setup to the current source worksheet using StatCraft.')
             refit.clicked.connect(lambda checked=False,e=entry:self.refit_native_model(e));badge_row.addWidget(refit)
         layout.addLayout(badge_row)
+        cur_sheet = getattr(self.presenter, "worksheet", None)
+        if (
+            isinstance(entry, dict)
+            and cur_sheet is not None
+            and entry.get("_sheet_id") == id(cur_sheet)
+            and entry.get("_sheet_version") is not None
+            and entry.get("_sheet_version") != self._sheet_versions.version(cur_sheet)
+        ):
+            from .micro_innovations import StaleOutputBanner
+            stale_banner = StaleOutputBanner(content)
+            rerun_cb = entry.get("_rerun_action") or self._last_dialog_action
+            stale_banner.rerunRequested.connect(lambda cb=rerun_cb: cb() if callable(cb) else self.edit_last_dialog())
+            layout.addWidget(stale_banner)
         layout.addWidget(label(entry.get("title", "Result"), "pageHeading"))
 
         # --- Clean StatCraft Connect Header Action ---
@@ -7795,14 +7884,18 @@ class ModernWindow(QMainWindow):
             return
         vals = []
         nonempty_count = 0
+        missing_count = 0
         first_nonempty = None
 
         def _record_value(raw):
-            nonlocal nonempty_count, first_nonempty
+            nonlocal nonempty_count, missing_count, first_nonempty
             if raw is None:
+                missing_count += 1
                 return
             txt = str(raw).strip()
             if not txt or txt == "*":
+                if txt == "*":
+                    missing_count += 1
                 return
             nonempty_count += 1
             if first_nonempty is None:
@@ -7844,24 +7937,10 @@ class ModernWindow(QMainWindow):
                             if item:
                                 _record_value(item.text())
 
-        if len(vals) >= 2:
-            s_sum = sum(vals)
-            s_mean = s_sum / len(vals)
-            s_min = min(vals)
-            s_max = max(vals)
-            total_cnt = max(len(vals), nonempty_count)
-            self.status_selection_summary.setText(
-                f"Count: {total_cnt} | Sum: {s_sum:g} | Mean: {s_mean:g} | Min: {s_min:g} | Max: {s_max:g}"
-            )
-        elif len(vals) == 1:
-            total_cnt = max(1, nonempty_count)
-            self.status_selection_summary.setText(f"Count: {total_cnt} | Value: {vals[0]:g}")
-        elif nonempty_count == 1:
-            self.status_selection_summary.setText(f"Count: 1 | Value: {first_nonempty}")
-        elif nonempty_count >= 2:
-            self.status_selection_summary.setText(f"Count: {nonempty_count}")
-        else:
-            self.status_selection_summary.setText("")
+        from .micro_innovations import format_selection_summary
+        self.status_selection_summary.setText(
+            format_selection_summary(vals, nonempty_count, missing_count, first_nonempty)
+        )
 
     def _sync_selection_highlights(self):
         if self._refreshing:
@@ -7905,6 +7984,12 @@ class ModernWindow(QMainWindow):
         self.column_names.viewport().update()
         self.table.viewport().update()
         self._update_selection_summary()
+        if hasattr(self, "formula_bar") and 0 <= cur_c < len(sheet.columns) and cur_r >= 0:
+            g_r = start + cur_r
+            col_obj = sheet.columns[cur_c]
+            raw_val = col_obj.values[g_r] if g_r < len(col_obj.values) else None
+            val_txt = "" if raw_val is None else str(raw_val)
+            self.formula_bar.sync(cur_c, g_r, col_obj.name, val_txt, col_obj.metadata.get("formula"))
 
     # --- Worksheet Right-Click Context Menu (`RT_MENU 9839`) ---
 
@@ -7947,6 +8032,7 @@ class ModernWindow(QMainWindow):
             del_act.triggered.connect(self.delete_selected_rows)
         if col_mode:
             menu.addAction(tool_icon("rename_sheet"), "Rename Column…", self.rename_column)
+        menu.addAction(tool_icon("find"), f"Filter & Quick Sort C{cur_col + 1}…", lambda c=cur_col: self.open_column_filter_popover(c))
         copy_act = menu.addAction(tool_icon("copy"), "Copy Cells\tCtrl+C")
         copy_act.triggered.connect(self.copy_cells)
         copy_hdr_act = menu.addAction("Copy with Column Names\tCtrl+Shift+C", self.copy_with_column_names)
@@ -8787,6 +8873,133 @@ class ModernWindow(QMainWindow):
             6000
         )
 
+    def _commit_formula_bar(self, text):
+        sheet = self.presenter.worksheet
+        row = self.table.currentRow()
+        col = self.table.currentColumn()
+        if col < 0 or col >= len(sheet.columns):
+            return
+        stripped = (text or "").strip()
+        if stripped.startswith("=") and len(stripped) > 1:
+            expr = stripped[1:].strip()
+            self._call(lambda: self.presenter.assign_formula(col, expr))
+            return
+        if row < 0:
+            row = 0
+        g_row = self.page * self.PAGE_SIZE + row
+        self._call(lambda: self.presenter.set_cell(g_row, col, text))
+
+    def _promote_last_paste_headers(self):
+        meta = getattr(self, "_last_paste_meta", None)
+        if not isinstance(meta, dict):
+            return
+        import csv as _csv, io as _io
+        parsed = [r for r in _csv.reader(_io.StringIO(meta.get("raw", "")), delimiter="\t") if r]
+        if len(parsed) < 2:
+            return
+        start_col = int(meta.get("col", 0))
+        header_row = parsed[0]
+        body_text = "\n".join("\t".join(r) for r in parsed[1:])
+        def _apply():
+            self.undo()
+            self.presenter.rename_columns(start_col, header_row)
+            if body_text:
+                self.presenter.paste(0, start_col, body_text, pad_ragged=True)
+        self._call(_apply)
+        if hasattr(self, "paste_toast"):
+            self.paste_toast.hide()
+
+    def open_column_filter_popover(self, col_index):
+        sheet = self.presenter.worksheet
+        if not (0 <= col_index < len(sheet.columns)):
+            return
+        from .micro_innovations import ColumnFilterPopover
+        col = sheet.columns[col_index]
+        dlg = ColumnFilterPopover(col, col_index, self)
+        if not dlg.exec() or not dlg.chosen_action:
+            return
+        action = dlg.chosen_action
+        if action == "sort_asc":
+            self._call(lambda: self.presenter.sort_columns([col_index], descending=False))
+        elif action == "sort_desc":
+            self._call(lambda: self.presenter.sort_columns([col_index], descending=True))
+        elif action == "highlight_outliers":
+            import statistics as _stats
+            nums = [(i, float(v)) for i, v in enumerate(col.values) if isinstance(v, (int, float))]
+            if len(nums) >= 3:
+                mean = sum(v for _, v in nums) / len(nums)
+                sd = _stats.stdev(v for _, v in nums)
+                if sd > 0:
+                    hl = col.metadata.setdefault("cell_highlights", {})
+                    cnt = 0
+                    for idx_r, val in nums:
+                        if abs(val - mean) > 3.0 * sd:
+                            hl[str(idx_r)] = "#fecaca"
+                            cnt += 1
+                    self._sheet_versions.bump(sheet)
+                    self.refresh()
+                    self.statusBar().showMessage(f"Highlighted {cnt} outlier(s) (> 3 SD) in C{col_index + 1}.", 5000)
+        elif action == "subset":
+            allowed = dlg.selected_values
+            row_indices = [
+                i for i, v in enumerate(col.values)
+                if ("*" if v is None else str(v)) in allowed
+            ]
+            if row_indices:
+                self._call(lambda: self.presenter.subset_worksheet_rows(row_indices, name=f"{sheet.name}_filtered"))
+
+    def _populate_pinned_menu(self, menu):
+        menu.clear()
+        last_cb = getattr(self, "_last_dialog_action", None)
+        pin_act = menu.addAction("📌 Pin Last Procedure" if last_cb else "📌 Pin Last Procedure (none yet)")
+        pin_act.setEnabled(callable(last_cb))
+        if callable(last_cb):
+            def _pin_last():
+                label_txt = getattr(last_cb, "__name__", "Analysis").replace("_", " ").title()
+                self._pinned_procedures.pin(label_txt, last_cb)
+                self.statusBar().showMessage(f"Pinned '{label_txt}' to toolbar.", 3500)
+            pin_act.triggered.connect(_pin_last)
+        items = self._pinned_procedures.list_items()
+        if items:
+            menu.addSeparator()
+            for lbl, cb in items:
+                menu.addAction(f"▶ {lbl}", cb)
+
+    def _show_pinned_menu(self):
+        menu = QMenu(self)
+        self._populate_pinned_menu(menu)
+        menu.exec(self.pinned_btn.mapToGlobal(self.pinned_btn.rect().bottomLeft()))
+
+    def export_executive_slide_deck(self):
+        history = list(getattr(self.presenter, "history", []) or [])
+        if not history:
+            QMessageBox.information(self, "Executive Slide Deck", "Run at least one analysis first.")
+            return
+        from .micro_innovations import ExecutiveSlideDeckDialog, build_executive_pptx
+        dlg = ExecutiveSlideDeckDialog(history, self)
+        if not dlg.exec():
+            return
+        chosen = dlg.selected_entries()
+        if not chosen:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Executive Slide Deck", "StatCraft_Deck.pptx", "PowerPoint (*.pptx)")
+        if not path:
+            return
+        try:
+            saved = build_executive_pptx(chosen, path)
+            self.statusBar().showMessage(f"Exported {len(chosen)} slide(s) to {saved.name}", 6000)
+        except Exception as exc:
+            QMessageBox.warning(self, "Executive Slide Deck", str(exc))
+
+    def run_async(self, title, fn, on_success=None):
+        def _ok(res):
+            if on_success:
+                on_success(res)
+        def _err(msg):
+            self.statusBar().showMessage(msg, 10000)
+            QMessageBox.warning(self, "StatCraft", msg)
+        self.compute_manager.submit(title, fn, _ok, _err)
+
     def _setup_graph_frame(self, graph_frame, chart, entry):
         self._active_graph_frame = graph_frame
         id_idx = entry.get("id_column_index") if isinstance(entry, dict) else None
@@ -8803,6 +9016,10 @@ class ModernWindow(QMainWindow):
                 graph_frame.btn_indicator.clicked.connect(lambda: self.create_indicator_from_brushed_dialog())
             graph_frame.btn_r.clicked.connect(lambda: self.open_brushed_selection_in_r())
             graph_frame.btn_clear.clicked.connect(lambda: self.clear_brushed_selection())
+        if hasattr(graph_frame, 'header'):
+            from .micro_innovations import build_chart_quick_bar
+            qbar = build_chart_quick_bar(graph_frame, chart, entry, self)
+            graph_frame.header.addWidget(qbar)
 
     def create_indicator_from_brushed_dialog(self, rows=None, name=None):
         target_rows = rows if rows is not None else getattr(self, "_brushed_rows", [])

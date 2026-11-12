@@ -333,6 +333,23 @@ class ProcedureDialog(QDialog):
         self.var_filter.setClearButtonEnabled(True)
         self.var_filter.textChanged.connect(self._filter_available_variables)
         left.addWidget(self.var_filter)
+        from .micro_innovations import global_mru_columns
+        mru_refs = global_mru_columns().items(3)
+        if mru_refs and self.selectors:
+            mru_row = QHBoxLayout()
+            mru_row.setSpacing(4)
+            mru_lbl = QLabel("Recent:")
+            mru_lbl.setStyleSheet("font-size: 8pt; color: #64748b;")
+            mru_row.addWidget(mru_lbl)
+            for ref in mru_refs:
+                chip = QPushButton(ref.split(":")[0])
+                chip.setAutoDefault(False)
+                chip.setToolTip(f"Insert {ref}")
+                chip.setStyleSheet("font-size: 7.8pt; padding: 1px 6px;")
+                chip.clicked.connect(lambda checked=False, r=ref: self._insert_mru_ref(r))
+                mru_row.addWidget(chip)
+            mru_row.addStretch()
+            left.addLayout(mru_row)
         left.addWidget(self.available)
         self.select_button=QPushButton('Select'); self.select_button.setAutoDefault(False)
         self.select_button.clicked.connect(self.transfer); left.addWidget(self.select_button)
@@ -530,10 +547,33 @@ class ProcedureDialog(QDialog):
             values[spec['key']]=value
         return values
 
+    def _insert_mru_ref(self, ref):
+        if self.active_key is None or self.active_key not in self.controls:
+            return
+        ctrl = self.controls[self.active_key]
+        cur = ctrl.text().strip()
+        spec = next((s for s in self.selectors if s['key'] == self.active_key), {})
+        if (spec.get('multiple') or spec.get('multi')) and cur:
+            ctrl.setText(f"{cur} {ref}")
+        else:
+            ctrl.setText(ref)
+
     def validate(self):
         try:
             self.parameters=self.values()
             self.error.setVisible(False)
+            from .micro_innovations import global_mru_columns
+            used = []
+            for spec in self.selectors:
+                val = self.parameters.get(spec['key'])
+                if isinstance(val, int) and 0 <= val < len(self.worksheet.columns):
+                    used.append(format_variable_reference(val, self.worksheet))
+                elif isinstance(val, list):
+                    for idx in val:
+                        if isinstance(idx, int) and 0 <= idx < len(self.worksheet.columns):
+                            used.append(format_variable_reference(idx, self.worksheet))
+            if used:
+                global_mru_columns().record(used)
         except (ValueError,TypeError,OverflowError) as exc:
             msg = str(exc)
             self.error.setText(msg)
